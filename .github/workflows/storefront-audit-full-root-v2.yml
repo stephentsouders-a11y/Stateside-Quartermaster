@@ -1,0 +1,87 @@
+name: Storefront audit - full roots v2
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-audit-full-root-v2.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - {slug: home, path: /}
+          - {slug: accessories, path: /collections/accessories-gifts-collectibles}
+          - {slug: airsoft, path: /collections/airsoft-milsim}
+          - {slug: apparel, path: /collections/apparel}
+          - {slug: afg, path: /collections/armed-forces-gear}
+          - {slug: art, path: /collections/art}
+          - {slug: armor, path: /collections/body-armor-ballistic-protection}
+          - {slug: literature, path: /collections/literature}
+          - {slug: child-safety, path: /collections/child-safety-shop}
+          - {slug: dive, path: /collections/dive-scuba}
+          - {slug: firearm-accessories, path: /collections/firearm-accessories}
+          - {slug: fire-ems-sar, path: /collections/firefighting-ems-search-rescue}
+          - {slug: first-aid, path: /collections/first-aid-medical-ifak}
+          - {slug: flags, path: /collections/flags-patriotic-decor}
+          - {slug: flashlights, path: /collections/flashlights-lighting}
+          - {slug: footwear, path: /collections/footwear-gloves-eyewear}
+          - {slug: k9, path: /collections/k9-dog-gear}
+          - {slug: knives, path: /collections/knives-axes-cutlery}
+          - {slug: law, path: /collections/law-enforcement-corrections}
+          - {slug: morale, path: /collections/morale-patches-tactical-id}
+          - {slug: outdoor, path: /collections/outdoor-preparedness-gear}
+          - {slug: patriotic, path: /collections/patriotic-american-heritage}
+          - {slug: safety, path: /collections/safety-rescue-climbing}
+          - {slug: stabrite, path: /collections/sta-brite-insignia}
+          - {slug: tactical, path: /collections/tactical-gear}
+          - {slug: thin-line, path: /collections/thin-line}
+          - {slug: uniforms, path: /collections/uniforms}
+          - {slug: watches, path: /collections/watches}
+          - {slug: arng, path: /collections/army-national-guard-series}
+          - {slug: ang, path: /collections/air-national-guard-series}
+          - {slug: state-guard, path: /collections/state-guard-series}
+          - {slug: army, path: /collections/products-built-for-the-line-u-s-army}
+          - {slug: navy, path: /collections/products-built-for-the-line-u-s-navy}
+          - {slug: air-force, path: /collections/products-built-for-the-line-u-s-air-force}
+          - {slug: marines, path: /collections/products-built-for-the-line-u-s-marine-corps}
+          - {slug: coast-guard, path: /collections/products-built-for-the-line-u-s-coast-guard}
+          - {slug: space-force, path: /collections/products-built-for-the-line-u-s-space-force}
+          - {slug: rotc, path: /collections/rotc-series}
+          - {slug: jrotc, path: /collections/jrotc-series}
+          - {slug: msa, path: /collections/military-schools-academies}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Render and inspect root
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          SLUG: ${{ matrix.slug }}
+          PATHNAME: ${{ matrix.path }}
+        run: |
+          cat > audit.mjs <<'EOF'
+          import {chromium} from 'playwright';import fs from 'fs';
+          const b=await chromium.launch({headless:true});const c=await b.newContext({viewport:{width:1440,height:1100}});const p=await c.newPage();p.setDefaultNavigationTimeout(60000);
+          const u=new URL(process.env.PATHNAME,process.env.BASE);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',process.env.THEME);
+          let status=null,error=null;try{const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null;await p.waitForTimeout(process.env.SLUG==='army'||process.env.SLUG==='arng'||process.env.SLUG==='navy'||process.env.SLUG==='air-force'||process.env.SLUG==='ang'?25000:12000)}catch(e){error=String(e)}
+          await p.addStyleTag({content:'html,body{height:auto!important;min-height:100%!important;overflow:visible!important}.page-wrapper{height:auto!important;min-height:100vh!important;overflow:visible!important;max-height:none!important}'}).catch(()=>{});
+          const data=await p.evaluate(()=>{const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0,tx=e=>(e?.textContent||'').replace(/\s+/g,' ').trim(),rr=e=>e?(()=>{const r=e.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}})():null;const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-global-refine-sidebar'),layout=main?.querySelector('.sq-global-refine-layout'),primary=main?.querySelector('.sq-global-refine-main');const horiz=[...(main?.querySelectorAll('.sq-facet-browser,.sq-maker-browser,[data-sq-facet-browser],.sqsg-facet')||[])].filter(vis);const cards=[...(primary?.querySelectorAll('.sq-subcategory-card,.sq-third-level__type,.sqbfl-card,.sqsg-card,.sg-entity,.product-card,.product-grid__item,.sqbfl-product,.sqsg-product,.sq-custom-color-product')||[])].filter(vis);const headings=[...(main?.querySelectorAll('h1,h2,h3')||[])].filter(vis).slice(0,60).map(tx);const body=tx(main);const imgs=[...(main?.querySelectorAll('img')||[])];const broken=imgs.filter(i=>i.complete&&i.naturalWidth===0).slice(0,30).map(i=>({alt:i.alt,src:i.currentSrc||i.src}));const availability=[...(main?.querySelectorAll('a[href]')||[])].filter(a=>(a.getAttribute('href')||'').includes('filter.v.availability')).map(a=>a.getAttribute('href')).slice(0,30);const sidebarItems=side?[...side.querySelectorAll('details')].map(d=>({summary:tx(d.querySelector('summary')),items:[...d.querySelectorAll('a')].slice(0,100).map(a=>tx(a))})):[];const first=cards.slice(0,3).map(rr);const sameRow=first.length===3&&Math.max(...first.map(r=>r.y))-Math.min(...first.map(r=>r.y))<5;const widths=first.map(r=>r.w);const colGate=side&&first.length>=3?Math.abs(side.getBoundingClientRect().width-first[0].w)<=20&&sameRow:null;return{title:document.title,finalUrl:location.href,height:document.documentElement.scrollHeight,errorPage:/something went wrong|internal server error|there was a problem/i.test(body)||/something went wrong/i.test(document.title),loading:/loading available items|loading items|building the customer-facing product tree/i.test(body),loadingText:(body.match(/(?:loading available items|loading items|building the customer-facing product tree)[^.!]{0,100}/i)||[])[0]||'',headings,globalSidebarCount:[...(main?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis).length,sidebarRect:rr(side),layoutRect:rr(layout),mainRect:rr(primary),sidebarDetails:sidebarItems,visibleHorizontalFacetCount:horiz.length,availabilityLinks:availability,cardCount:cards.length,firstThreeRects:first,firstThreeSameRow:sameRow,fourColumnGate:colGate,brokenImages:broken,sortGridControls:[...(main?.querySelectorAll('select[name="sort_by"],.facets-vertical-sort,.facet-filters,.product-count,.product-grid-container,[data-view-mode]')||[])].filter(vis).length,bodyTextSample:body.slice(0,1600)}});
+          fs.mkdirSync('audit-out',{recursive:true});fs.writeFileSync('audit-out/report.json',JSON.stringify({slug:process.env.SLUG,status,error,...data},null,2));await p.screenshot({path:'audit-out/desktop.png',fullPage:true});
+          await p.setViewportSize({width:390,height:844});try{await p.goto(u.toString(),{waitUntil:'domcontentloaded'});await p.waitForTimeout(7000)}catch{}const mobile=await p.evaluate(()=>{const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0,tx=e=>(e?.textContent||'').replace(/\s+/g,' ').trim();const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-global-refine-sidebar');return{title:document.title,url:location.href,errorPage:/something went wrong|there was a problem/i.test(tx(main))||/something went wrong/i.test(document.title),sidebarVisible:vis(side),sidebarDetails:side?[...side.querySelectorAll('summary')].map(tx):[],horizontalFacets:[...(main?.querySelectorAll('.sq-facet-browser,.sq-maker-browser,[data-sq-facet-browser],.sqsg-facet')||[])].filter(vis).length,overflowX:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,availabilityLinks:[...(main?.querySelectorAll('a[href]')||[])].filter(a=>(a.getAttribute('href')||'').includes('filter.v.availability')).length}});fs.writeFileSync('audit-out/mobile-report.json',JSON.stringify(mobile,null,2));await p.screenshot({path:'audit-out/mobile.png',fullPage:true});await b.close();
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: root-v2-${{ matrix.slug }}
+          path: audit-out
+          retention-days: 7
