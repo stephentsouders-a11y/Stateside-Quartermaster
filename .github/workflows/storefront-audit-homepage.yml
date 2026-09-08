@@ -1,0 +1,40 @@
+name: Storefront audit - homepage
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-audit-homepage.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Render homepage only
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > audit.mjs <<'EOF'
+          import {chromium} from 'playwright';import fs from 'fs';
+          const b=await chromium.launch({headless:true}),c=await b.newContext({viewport:{width:1440,height:1100}}),p=await c.newPage();
+          const u=new URL('/',process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);
+          const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});await p.waitForTimeout(6500);
+          await p.addStyleTag({content:'html,body{height:auto!important;min-height:100%!important;overflow:visible!important}.page-wrapper{height:auto!important;min-height:100vh!important;overflow:visible!important;max-height:none!important}'}).catch(()=>{});
+          const data=await p.evaluate(()=>{const t=e=>(e?.textContent||'').replace(/\s+/g,' ').trim();const links=[...document.querySelectorAll('#MainContent a[href*="/collections/"]')].map(a=>({text:t(a),href:a.getAttribute('href')}));const cards=[...document.querySelectorAll('#MainContent .sqhc-card,#MainContent .sqhc-series-card')].map(e=>{const r=e.getBoundingClientRect(),im=e.querySelector('img');return{text:t(e).slice(0,180),rect:{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)},img:im?.currentSrc||im?.src||'',imgComplete:!!im?.complete,naturalWidth:im?.naturalWidth||0}});return{title:document.title,url:location.href,height:document.documentElement.scrollHeight,availabilityLinks:links.filter(x=>(x.href||'').includes('filter.v.availability')).length,links,cards};});
+          fs.mkdirSync('audit-out',{recursive:true});fs.writeFileSync('audit-out/report.json',JSON.stringify({status:r?.status(),...data},null,2));await p.screenshot({path:'audit-out/homepage.png',fullPage:true});await b.close();
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storefront-audit-homepage
+          path: audit-out
+          retention-days: 7
