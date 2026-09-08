@@ -1,0 +1,80 @@
+{% liquid
+  assign sq_maker_active = false
+  assign sq_maker_count = 0
+  if request.page_type == 'collection' and collection != blank
+    assign sq_maker_count = collection.all_vendors.size
+    if sq_maker_count > 0
+      assign sq_maker_active = true
+    endif
+  endif
+  assign sq_maker_path = request.path | default: collection.url
+  assign sq_makers = collection.all_vendors | sort_natural
+%}
+
+{% if sq_maker_active %}
+<section class="sq-maker-browser" data-sq-maker-browser aria-labelledby="sq-maker-title-{{ section.id }}">
+  <div class="sq-maker-browser__wrap">
+    <p class="sq-maker-browser__kicker">Stateside Quartermaster</p>
+    <h2 id="sq-maker-title-{{ section.id }}">Shop by Manufacturer</h2>
+    <p class="sq-maker-browser__intro">Choose a manufacturer to narrow this collection without leaving the current category or series.</p>
+
+    <div class="sq-maker-browser__search-wrap">
+      <label class="sq-maker-browser__label" for="sq-maker-search-{{ section.id }}">Search manufacturer</label>
+      <div class="sq-maker-browser__search-row">
+        <input id="sq-maker-search-{{ section.id }}" class="sq-maker-browser__search" type="search" placeholder="Search manufacturer..." autocomplete="off" data-sq-maker-search>
+        <span class="sq-maker-browser__count" data-sq-maker-count>{{ sq_maker_count }} manufacturer{% unless sq_maker_count == 1 %}s{% endunless %}</span>
+      </div>
+    </div>
+
+    <div class="sq-maker-browser__grid" data-sq-maker-grid>
+      {% for maker in sq_makers %}
+        {% if maker != blank %}
+          <details class="sq-maker-browser__card" data-sq-maker-card data-maker="{{ maker | escape }}">
+            <summary class="sq-maker-browser__summary">
+              <span class="sq-maker-browser__name">{{ maker }}</span>
+              <span class="sq-maker-browser__plus" aria-hidden="true"></span>
+            </summary>
+            <div class="sq-maker-browser__body">
+              <a class="sq-maker-browser__view" href="{{ sq_maker_path }}?filter.v.availability=1&amp;filter.p.vendor={{ maker | url_encode }}">View all {{ maker }} products</a>
+            </div>
+          </details>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <p class="sq-maker-browser__empty" hidden data-sq-maker-empty>No manufacturers match your search.</p>
+  </div>
+</section>
+{% endif %}
+
+{% stylesheet %}
+.sq-maker-browser{padding:0 20px 48px;background:#f4f5f3;color:#071d2d}.sq-maker-browser__wrap{max-width:1280px;margin:0 auto}.sq-maker-browser__kicker{margin:0 0 6px;color:#a91827;font-size:12px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}.sq-maker-browser h2{margin:0;font-size:clamp(26px,3vw,40px);line-height:1.08}.sq-maker-browser__intro{max-width:820px;margin:10px 0 22px;color:#41505b;font-size:16px;line-height:1.55}.sq-maker-browser__search-wrap{max-width:760px;margin:0 0 20px}.sq-maker-browser__label{display:block;margin:0 0 8px;font-size:12px;font-weight:850;letter-spacing:.04em;text-transform:uppercase}.sq-maker-browser__search-row{display:flex;align-items:center;gap:14px}.sq-maker-browser__search{width:min(100%,650px);min-height:52px;padding:0 15px;border:1px solid rgba(20,20,20,.25);border-radius:9px;background:#fff;color:#111;font:inherit;box-shadow:none}.sq-maker-browser__search:focus-visible{outline:3px solid #d5ab4b;outline-offset:3px;border-color:#071d2d}.sq-maker-browser__count{white-space:nowrap;font-size:12px;font-weight:750;opacity:.72}.sq-maker-browser__grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.sq-maker-browser__card{border:1px solid rgba(20,20,20,.18);border-radius:10px;background:rgba(255,255,255,.7);overflow:hidden}.sq-maker-browser__card[hidden]{display:none}.sq-maker-browser__summary{cursor:pointer;list-style:none;min-height:58px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;font-weight:850}.sq-maker-browser__summary::-webkit-details-marker{display:none}.sq-maker-browser__summary:focus-visible{outline:3px solid #d5ab4b;outline-offset:-3px}.sq-maker-browser__name{min-width:0;overflow-wrap:anywhere}.sq-maker-browser__plus{width:18px;height:18px;position:relative;flex:0 0 18px}.sq-maker-browser__plus:before,.sq-maker-browser__plus:after{content:'';position:absolute;left:50%;top:50%;width:10px;height:2px;background:currentColor;transform:translate(-50%,-50%)}.sq-maker-browser__plus:after{transform:translate(-50%,-50%) rotate(90deg);transition:opacity .15s ease}.sq-maker-browser__card[open] .sq-maker-browser__plus:after{opacity:0}.sq-maker-browser__body{padding:0 14px 14px}.sq-maker-browser__view{display:inline-flex;align-items:center;min-height:38px;padding:8px 12px;border-radius:7px;background:#071d2d;color:#fff;text-decoration:none;font-size:12px;font-weight:800}.sq-maker-browser__view:hover{text-decoration:underline;text-underline-offset:2px}.sq-maker-browser__view:focus-visible{outline:3px solid #d5ab4b;outline-offset:3px}.sq-maker-browser__empty{margin:20px 0 0;font-weight:700;opacity:.7}@media(max-width:900px){.sq-maker-browser__grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.sq-maker-browser{padding:0 14px 36px}.sq-maker-browser__search-row{align-items:flex-start;flex-direction:column;gap:7px}.sq-maker-browser__search{width:100%}.sq-maker-browser__grid{grid-template-columns:1fr}}
+{% endstylesheet %}
+
+{% javascript %}
+(() => {
+  document.querySelectorAll('[data-sq-maker-browser]').forEach((root) => {
+    if (root.dataset.ready === 'true') return;
+    root.dataset.ready = 'true';
+    const input = root.querySelector('[data-sq-maker-search]');
+    const cards = Array.from(root.querySelectorAll('[data-sq-maker-card]'));
+    const count = root.querySelector('[data-sq-maker-count]');
+    const empty = root.querySelector('[data-sq-maker-empty]');
+    if (!input) return;
+    input.addEventListener('input', () => {
+      const term = input.value.trim().toLowerCase();
+      let visible = 0;
+      cards.forEach((card) => {
+        const match = !term || (card.dataset.maker || '').toLowerCase().includes(term);
+        card.hidden = !match;
+        if (match) visible += 1;
+      });
+      if (count) count.textContent = `${visible} manufacturer${visible === 1 ? '' : 's'}`;
+      if (empty) empty.hidden = visible !== 0;
+    });
+  });
+})();
+{% endjavascript %}
+
+{% schema %}
+{"name":"Collection manufacturers","settings":[],"presets":[{"name":"Collection manufacturers"}]}
+{% endschema %}
