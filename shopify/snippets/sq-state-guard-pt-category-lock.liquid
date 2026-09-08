@@ -8,7 +8,7 @@
   var NOT_COLD={'m-tac-carbon-performance-sneakers':1,'pt-lo-cut-cushioned-running-socks':1,'reflective-pt-belt-random-color':1,'state-guard-hi-vis-vest':1,'casio-g-shock-mod-oak-black':1,'casio-g-shock-mod-oak-all-black':1,'casio-g-shock-mod-oversized-full-black':1,'casio-g-shock-mod-grand-digit-black':1,'casio-g-shock-mod-countdown-black':1,'casio-g-shock-mod-the-king-xl-all-black-white-backlight':1};
   window.__sqStateGuardPtProductPromises=window.__sqStateGuardPtProductPromises||{};
   function root(){var r=(window.Shopify&&Shopify.routes&&Shopify.routes.root)||'/';return r.slice(-1)==='/'?r:r+'/'}
-  function esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]})}
+  function esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function baseHandle(a){var raw=a&&a.getAttribute?a.getAttribute('href')||'':'';var m=raw.match(/^\/products\/([^?]+)/);if(!m)return'';try{return decodeURIComponent(m[1])}catch(e){return m[1]}}
   function loadProduct(h){var map=window.__sqStateGuardPtProductPromises;if(map[h])return map[h];map[h]=window.fetch(root()+'products/'+encodeURIComponent(h)+'.js',{credentials:'same-origin'}).then(function(r){return r&&r.ok?r.json():null}).catch(function(){return null});return map[h]}
   function blackVariants(p){return (p&&Array.isArray(p.variants)?p.variants:[]).filter(function(v){return v&&/\bblack\b/i.test(String(v.title||''))})}
