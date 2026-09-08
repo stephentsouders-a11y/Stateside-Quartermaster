@@ -9,6 +9,7 @@ const armyFinal = read('sq-army-uniform-final-authority-v1.liquid');
 const armyIntegrity = read('sq-army-uniform-integrity-hotfix.liquid');
 const parity = read('sq-army-arng-visual-parity-v1.liquid');
 const normalizer = read('sq-navigation-legacy-normalizer.liquid');
+const stateGuardPt = read('sq-state-guard-pt-category-lock.liquid');
 
 test('Fire/EMS admits strong medical products before generic relevance rejection', () => {
   assert.match(tree, /cfg\.mode==='fire'&&publicSafetyMedical\(p\)\)return true/);
@@ -57,4 +58,19 @@ test('late render order preserves final Army authority and visual locks', () => 
   const finalAuthority = normalizer.indexOf("render 'sq-army-uniform-final-authority-v1'");
   const visual = normalizer.indexOf("render 'sq-army-arng-visual-parity-v1'");
   assert.ok(shared >= 0 && headToToe > shared && finalAuthority > headToToe && visual > finalAuthority);
+});
+
+test('State Guard PT footwear is isolated to the approved black M-Tac shoe', () => {
+  assert.match(stateGuardPt, /SHOE='m-tac-carbon-performance-sneakers'/);
+  assert.match(stateGuardPt, /stockedBlack/);
+  assert.match(stateGuardPt, /if\(baseHandle\(card\)!==SHOE\)removeCard\(card\)/);
+  assert.match(stateGuardPt, /M-Tac Carbon Performance Sneakers - Black/);
+});
+
+test('State Guard Cold Weather PT rejects footwear, belts, hi-vis and G-Shock leakage', () => {
+  assert.match(stateGuardPt, /NOT_COLD/);
+  assert.match(stateGuardPt, /state-guard-hi-vis-vest/);
+  assert.match(stateGuardPt, /reflective-pt-belt-random-color/);
+  assert.match(stateGuardPt, /g-shock/);
+  assert.match(stateGuardPt, /cold weather pt/);
 });
