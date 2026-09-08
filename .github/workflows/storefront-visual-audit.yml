@@ -1,0 +1,134 @@
+name: Storefront visual audit
+
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-visual-audit.yml'
+      - 'audit-trigger.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Capture storefront preview
+        env:
+          PREVIEW_THEME_ID: '158561894555'
+          STORE_BASE: 'https://www.statesideqm.com'
+        run: |
+          cat > audit-storefront.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          import path from 'path';
+
+          const base = process.env.STORE_BASE;
+          const previewThemeId = process.env.PREVIEW_THEME_ID;
+          const outDir = 'visual-audit';
+          fs.mkdirSync(outDir, { recursive: true });
+
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext({ viewport: { width: 1440, height: 1100 }, deviceScaleFactor: 1 });
+          const page = await context.newPage();
+          page.setDefaultNavigationTimeout(45000);
+
+          const report = { generatedAt: new Date().toISOString(), previewThemeId, pages: [] };
+          const slug = (s) => s.toLowerCase().replace(/^https?:\/\//,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,120) || 'page';
+          const previewUrl = (raw) => {
+            const u = new URL(raw, base);
+            u.searchParams.set('preview_theme_id', previewThemeId);
+            return u.toString();
+          };
+
+          async function inspect(rawUrl, label, index) {
+            const url = previewUrl(rawUrl);
+            const errors = [];
+            const onConsole = (msg) => { if (msg.type() === 'error') errors.push(msg.text().slice(0,500)); };
+            page.on('console', onConsole);
+            let status = null;
+            let navError = null;
+            try {
+              const response = await page.goto(url, { waitUntil: 'domcontentloaded' });
+              status = response?.status() ?? null;
+              await page.waitForTimeout(4500);
+            } catch (e) {
+              navError = String(e);
+            }
+            const finalUrl = page.url();
+            const title = await page.title().catch(()=> '');
+            const meta = await page.evaluate(() => {
+              const text = (el) => (el?.textContent || '').replace(/\s+/g,' ').trim();
+              const headings = [...document.querySelectorAll('#MainContent h1,#MainContent h2,#MainContent h3')].slice(0,25).map(text).filter(Boolean);
+              const productCards = [...document.querySelectorAll('#MainContent .product-grid__item,#MainContent .sqsg-product,#MainContent .sqbfl-product,#MainContent .sq-custom-color-product')];
+              const collectionLinks = [...document.querySelectorAll('#MainContent a[href*="/collections/"]')].map(a => ({ href: a.href, text: text(a) })).filter(x => x.href);
+              const buttons = [...document.querySelectorAll('#MainContent a[href*="/collections/"]')].slice(0,250).map(a => ({ text: text(a).slice(0,180), href: a.href }));
+              const sidebar = document.querySelector('#MainContent .sq-collection-sidebar');
+              const maker = document.querySelector('#MainContent [data-sq-sidebar-facet="manufacturer"],#MainContent [data-sq-facet-browser="manufacturer"],#MainContent .sq-maker-browser');
+              const color = document.querySelector('#MainContent [data-sq-sidebar-facet="color-pattern"],#MainContent [data-sq-facet-browser="color-pattern"]');
+              const grid = document.querySelector('#MainContent collection-component,#MainContent .sq-custom-color-products,#MainContent .sqbfl-products,#MainContent .sqsg-products');
+              const rect = (el) => el ? ({ top: Math.round(el.getBoundingClientRect().top + scrollY), left: Math.round(el.getBoundingClientRect().left + scrollX), width: Math.round(el.getBoundingClientRect().width), height: Math.round(el.getBoundingClientRect().height) }) : null;
+              return {
+                headings,
+                productCardCount: productCards.length,
+                collectionLinkCount: collectionLinks.length,
+                buttons,
+                hasSidebar: !!sidebar,
+                hasManufacturer: !!maker,
+                hasColorPattern: !!color,
+                sidebarRect: rect(sidebar),
+                productGridRect: rect(grid),
+                bodyHeight: document.documentElement.scrollHeight
+              };
+            }).catch(()=>({}));
+            const file = `${String(index).padStart(3,'0')}-${slug(label || finalUrl)}.png`;
+            await page.screenshot({ path: path.join(outDir,file), fullPage: true }).catch(()=>{});
+            report.pages.push({ label, requestedUrl: rawUrl, previewUrl: url, finalUrl, status, title, screenshot: file, navError, consoleErrors: errors.slice(0,20), ...meta });
+            page.off('console', onConsole);
+          }
+
+          await inspect(base + '/', 'homepage', 0);
+          const home = report.pages[0];
+          const seen = new Set();
+          const topLinks = [];
+          for (const item of (home.buttons || [])) {
+            try {
+              const u = new URL(item.href);
+              if (u.origin !== new URL(base).origin) continue;
+              if (!u.pathname.startsWith('/collections/')) continue;
+              const key = u.pathname + u.search;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              topLinks.push({ href: key, text: item.text || u.pathname });
+            } catch {}
+          }
+          // Always include the user's reported tumbler route in this first pass.
+          const tumbler = '/collections/drinkware-gifts/sq-type-tumblers?filter.v.availability=1';
+          if (!seen.has(tumbler)) topLinks.unshift({ href: tumbler, text: 'Drinkware Gifts / Tumblers' });
+
+          let i = 1;
+          for (const item of topLinks.slice(0, 60)) {
+            await inspect(base + item.href, item.text, i++);
+          }
+
+          fs.writeFileSync(path.join(outDir,'report.json'), JSON.stringify(report,null,2));
+          fs.writeFileSync(path.join(outDir,'home-links.json'), JSON.stringify(topLinks,null,2));
+          await browser.close();
+          EOF
+          node audit-storefront.mjs
+      - name: Upload visual audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: storefront-visual-audit
+          path: visual-audit
+          retention-days: 7
