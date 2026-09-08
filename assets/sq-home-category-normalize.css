@@ -1,0 +1,93 @@
+/* Homepage Shop by Category image normalization. */
+.sqhc-grid .sqhc-card{
+  height:327px;
+  padding:11px 12px 9px;
+  gap:7px;
+  box-sizing:border-box;
+  border:1px solid #ffffffb8;
+  background:#071d2d;
+  box-shadow:0 8px 22px #0003,inset 0 0 0 1px #0003;
+}
+.sqhc-grid .sqhc-card:after{display:none}
+.sqhc-grid .sqhc-media{
+  display:flex;
+  height:196px;
+  flex:0 0 196px;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  padding:10px;
+  box-sizing:border-box;
+  border:0;
+  border-radius:8px;
+  background:#fff;
+}
+.sqhc-grid .sqhc-media img{
+  display:block;
+  width:auto;
+  height:auto;
+  max-width:100%;
+  max-height:100%;
+  padding:0;
+  object-fit:contain;
+  object-position:center;
+}
+.sqhc-grid .sqhc-copy{
+  min-height:0;
+  flex:1;
+  align-items:center;
+  justify-content:center;
+  padding:2px 6px 0;
+  background:transparent;
+  text-align:center;
+}
+.sqhc-grid .sqhc-title{
+  display:flex;
+  width:100%;
+  min-width:0;
+  flex:1;
+  align-items:center;
+  justify-content:center;
+  overflow-wrap:anywhere;
+  color:#fff;
+  font-size:15px;
+  font-weight:900;
+  line-height:1.12;
+  text-align:center;
+  text-transform:uppercase;
+}
+.sqhc-grid .sqhc-count{
+  display:flex;
+  width:100%;
+  min-height:28px;
+  margin-top:auto;
+  padding-top:5px;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  color:#d5ab4b;
+  font-size:13px;
+  font-weight:800;
+  letter-spacing:.03em;
+  line-height:1.2;
+  text-align:center;
+}
+.sqhc-grid .sqhc-count:before,
+.sqhc-grid .sqhc-count:after{
+  content:"";
+  display:block;
+  width:34px;
+  height:1px;
+  flex:0 0 34px;
+  background:#d5ab4b;
+  opacity:.95;
+}
+.sqhc-grid .sqhc-arrow{display:none}
+@media(max-width:649px){
+  .sqhc-grid .sqhc-card{height:254px;padding:8px;gap:5px}
+  .sqhc-grid .sqhc-media{height:134px;flex-basis:134px;padding:7px}
+  .sqhc-grid .sqhc-copy{padding:2px 4px 0}
+  .sqhc-grid .sqhc-title{font-size:13px;line-height:1.1}
+  .sqhc-grid .sqhc-count{min-height:18px;padding-top:2px;gap:6px;font-size:11px}
+  .sqhc-grid .sqhc-count:before,.sqhc-grid .sqhc-count:after{width:24px;flex-basis:24px}
+}
