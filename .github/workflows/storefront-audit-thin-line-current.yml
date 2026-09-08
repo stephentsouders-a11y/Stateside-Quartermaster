@@ -1,0 +1,35 @@
+name: Storefront audit - Thin Line current
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-audit-thin-line-current.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Render current unpublished theme
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > audit.mjs <<'EOF'
+          import {chromium} from 'playwright'; import fs from 'fs';
+          const routes=[['thin-line','/collections/thin-line'],['thin-yellow','/collections/thin-line-shop-thin-yellow-line']];
+          const b=await chromium.launch({headless:true});fs.mkdirSync('out',{recursive:true});
+          for(const [slug,path] of routes){const c=await b.newContext({viewport:{width:1440,height:1100}});const p=await c.newPage();const u=new URL(path,process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);let status=null,error=null;try{const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});status=r?.status();await p.waitForTimeout(18000)}catch(e){error=String(e)}const report=await p.evaluate(()=>{const m=document.querySelector('#MainContent'),text=(m?.innerText||'').replace(/\s+/g,' ').trim(),vis=e=>!!e&&getComputedStyle(e).display!=='none'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;return{title:document.title,url:location.href,challenge:/just a moment/i.test(document.title),bodyText:text.slice(0,12000),availabilityLinks:[...(m?.querySelectorAll('a[href]')||[])].filter(a=>(a.getAttribute('href')||'').includes('filter.v.availability')).map(a=>a.getAttribute('href')),sidebarCount:[...(m?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis).length,brokenImages:[...(m?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).map(i=>({alt:i.alt,src:i.currentSrc||i.src})),productLinks:[...(m?.querySelectorAll('a[href*="/products/"]')||[])].filter(vis).map(a=>({href:a.getAttribute('href'),text:(a.innerText||a.textContent||'').replace(/\s+/g,' ').trim()})).slice(0,200),thinYellowVisible:text.includes('Thin Yellow Line American Flag Patch')}});fs.mkdirSync('out/'+slug,{recursive:true});fs.writeFileSync('out/'+slug+'/report.json',JSON.stringify({slug,path,status,error,...report},null,2));await p.screenshot({path:'out/'+slug+'/desktop.png',fullPage:true});await c.close();await new Promise(r=>setTimeout(r,4000))}await b.close();
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thin-line-current-audit
+          path: out
+          retention-days: 7
