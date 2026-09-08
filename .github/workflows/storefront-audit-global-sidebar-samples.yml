@@ -1,0 +1,54 @@
+name: Storefront audit - global sidebar samples
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-audit-global-sidebar-samples.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: apparel
+            path: /collections/apparel
+          - key: tumblers
+            path: /collections/drinkware-gifts/sq-type-tumblers
+          - key: army
+            path: /collections/products-built-for-the-line-u-s-army
+          - key: state-guard
+            path: /collections/state-guard-series
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Verify route
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          PATH_TO_TEST: ${{ matrix.path }}
+          KEY: ${{ matrix.key }}
+        run: |
+          cat > audit.mjs <<'EOF'
+          import {chromium} from 'playwright';import fs from 'fs';
+          const b=await chromium.launch({headless:true});const c=await b.newContext({viewport:{width:1440,height:1100}});const p=await c.newPage();
+          const u=new URL(process.env.PATH_TO_TEST,process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);
+          const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});await p.waitForTimeout(10000);
+          await p.addStyleTag({content:'html,body{height:auto!important;min-height:100%!important;overflow:visible!important}.page-wrapper{height:auto!important;min-height:100vh!important;overflow:visible!important;max-height:none!important}'}).catch(()=>{});
+          const d=await p.evaluate(()=>{const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;const tx=e=>(e?.textContent||'').replace(/\s+/g,' ').trim();const rect=e=>e?(()=>{const r=e.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}})():null;const side=document.querySelector('#MainContent .sq-global-refine-sidebar');const main=document.querySelector('#MainContent .sq-global-refine-main');const horiz=[...document.querySelectorAll('#MainContent .sq-facet-browser,#MainContent .sq-maker-browser,#MainContent [data-sq-facet-browser],#MainContent .sqsg-facet')].filter(vis);const productCards=[...document.querySelectorAll('#MainContent .sq-global-refine-main .product-card,#MainContent .sq-global-refine-main .sq-custom-color-product,#MainContent .sq-global-refine-main .sqbfl-product,#MainContent .sq-global-refine-main .sqsg-product,#MainContent .sq-global-refine-main [data-product-id]')].filter(vis);const catCards=[...document.querySelectorAll('#MainContent .sq-global-refine-main .sq-subcategory-card')].filter(vis);return{url:location.href,title:document.title,height:document.documentElement.scrollHeight,globalSidebarCount:[...document.querySelectorAll('#MainContent .sq-global-refine-sidebar')].filter(vis).length,sidebar:rect(side),main:rect(main),sidebarDetails:side?[...side.querySelectorAll('summary')].map(tx):[],sidebarText:tx(side).slice(0,1500),visibleHorizontalFacetCount:horiz.length,availabilityLinks:[...document.querySelectorAll('#MainContent a[href]')].filter(a=>(a.getAttribute('href')||'').includes('filter.v.availability')).length,productCardCount:productCards.length,categoryCardCount:catCards.length,firstCategoryRects:catCards.slice(0,3).map(rect),firstProductRects:productCards.slice(0,3).map(rect),brokenImages:[...document.querySelectorAll('#MainContent img')].filter(i=>i.complete&&i.naturalWidth===0).slice(0,20).map(i=>({alt:i.alt,src:i.currentSrc||i.src}))};});
+          fs.mkdirSync('audit-out',{recursive:true});fs.writeFileSync('audit-out/report.json',JSON.stringify({status:r?.status(),...d},null,2));await p.screenshot({path:`audit-out/${process.env.KEY}.png`,fullPage:true});await b.close();
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sidebar-${{ matrix.key }}
+          path: audit-out
+          retention-days: 7
