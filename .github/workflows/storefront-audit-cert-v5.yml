@@ -1,0 +1,119 @@
+name: Storefront audit - certification v5
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-audit-cert-v5.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Render current unpublished theme
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > cert-v5.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const routes = [
+            ['army','/collections/products-built-for-the-line-u-s-army',45000],
+            ['arng','/collections/army-national-guard-series',45000],
+            ['air-force','/collections/products-built-for-the-line-u-s-air-force',40000],
+            ['ang','/collections/air-national-guard-series',40000],
+            ['navy','/collections/products-built-for-the-line-u-s-navy',40000],
+            ['marines','/collections/products-built-for-the-line-u-s-marine-corps',35000],
+            ['coast-guard','/collections/products-built-for-the-line-u-s-coast-guard',35000],
+            ['space-force','/collections/products-built-for-the-line-u-s-space-force',30000],
+            ['state-guard','/collections/state-guard-series',30000],
+            ['afg','/collections/armed-forces-gear',25000],
+            ['rotc','/collections/rotc-series',30000],
+            ['jrotc','/collections/jrotc-series',30000],
+            ['msa','/collections/military-schools-academies',30000],
+            ['law','/collections/law-enforcement-corrections',30000],
+            ['fire-ems-sar','/collections/firefighting-ems-search-rescue',30000],
+            ['thin-line','/collections/thin-line-series',25000],
+            ['sta-brite','/collections/sta-brite-insignia',25000]
+          ];
+          const visible = e => !!e && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden' && e.getBoundingClientRect().width > 0 && e.getBoundingClientRect().height > 0;
+          const urlFor = path => { const u = new URL(path, process.env.BASE); u.searchParams.delete('filter.v.availability'); u.searchParams.set('preview_theme_id', process.env.THEME); return u.toString(); };
+          const inspect = async page => page.evaluate(() => {
+            const vis = e => !!e && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden' && e.getBoundingClientRect().width > 0 && e.getBoundingClientRect().height > 0;
+            const tx = e => (e?.textContent || '').replace(/\s+/g,' ').trim();
+            const rr = e => e ? (() => { const r=e.getBoundingClientRect(); return {x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}; })() : null;
+            const main=document.querySelector('#MainContent');
+            const side=main?.querySelector('.sq-global-refine-sidebar');
+            const primary=main?.querySelector('.sq-global-refine-main');
+            const body=tx(main);
+            const details=side?[...side.querySelectorAll('details')].map(d=>({summary:tx(d.querySelector('summary')),items:[...d.querySelectorAll('a[href]')].map(a=>tx(a.querySelector('span')||a)).slice(0,400)})):[];
+            const selector='.sq-subcategory-card,.sq-afg-branch-card,.sq-line-series-categories__card,.sqbfl-card,.sg-entity,.product-card,.product-grid__item,.sqbfl-product,.sqsg-product,.sq-custom-color-product,.vac-series-card';
+            const cards=[...(primary?.querySelectorAll(selector)||[])].filter(vis);
+            const r3=cards.slice(0,3).map(rr);
+            const badColor=details.flatMap(d=>/color\s*\/\s*pattern/i.test(d.summary)?d.items:[]).filter(x=>/other color|service branch|^sq\b|mcguire army navy|black ocp|multicam black|black multicam/i.test(x));
+            const loadNode=main?.querySelector('[data-sqbfl-load-state]');
+            return {
+              title:document.title,url:location.href,
+              errorPage:/something went wrong|internal server error|there was a problem/i.test(document.title+' '+body),
+              challenge:/just a moment/i.test(document.title),
+              loadState:loadNode?.getAttribute('data-sqbfl-load-state')||null,
+              loading:/loading available items|loading items|building the customer-facing product tree/i.test(body),
+              availableWording:/available items|currently available/i.test(body),
+              sidebarCount:[...(main?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis).length,
+              sidebarRect:rr(side),mainRect:rr(primary),details,badColorLabels:badColor,
+              horizontalFacets:[...(main?.querySelectorAll('.sq-facet-browser,.sq-maker-browser,[data-sq-facet-browser],.sqsg-facet')||[])].filter(vis).length,
+              availabilityLinks:[...(main?.querySelectorAll('a[href]')||[])].filter(a=>(a.getAttribute('href')||'').includes('filter.v.availability')).map(a=>a.getAttribute('href')).slice(0,50),
+              cardCount:cards.length,firstThree:r3,
+              sameRow:r3.length===3&&Math.max(...r3.map(x=>x.y))-Math.min(...r3.map(x=>x.y))<5,
+              fourColumnGate:side&&r3.length===3?Math.abs(side.getBoundingClientRect().width-r3[0].w)<=20&&Math.max(...r3.map(x=>x.y))-Math.min(...r3.map(x=>x.y))<5:null,
+              brokenImages:[...(main?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).slice(0,50).map(i=>({alt:i.alt,src:i.currentSrc||i.src})),
+              sortGridControls:[...(main?.querySelectorAll('select[name="sort_by"],.facets-vertical-sort,.facet-filters,.product-count,.product-grid-container,[data-view-mode],.sq-pbtl-result-controls')||[])].filter(vis).length,
+              overflowX:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,
+              bodyText:body.slice(0,5000)
+            };
+          });
+          async function settle(page,maxMs){
+            const start=Date.now();
+            let stable=0,last='';
+            while(Date.now()-start<maxMs){
+              const s=await page.evaluate(()=>{const m=document.querySelector('#MainContent');const n=m?.querySelector('[data-sqbfl-load-state]');const t=(m?.textContent||'').replace(/\s+/g,' ');return (n?.getAttribute('data-sqbfl-load-state')||'')+'|'+(/Loading items|Building the customer-facing product tree/i.test(t)?'loading':'clear')+'|'+(document.querySelectorAll('.sqbfl-card,.sq-subcategory-card,.sg-entity,.sq-afg-branch-card').length);}).catch(()=> 'error');
+              if(/ready\|clear/.test(s)||(!/loading/.test(s)&&!/\|0$/.test(s))){stable++;if(stable>=3)return Date.now()-start;} else stable=0;
+              if(s===last&&stable===0){} last=s;
+              await page.waitForTimeout(1000);
+            }
+            return Date.now()-start;
+          }
+          const browser=await chromium.launch({headless:true});
+          fs.mkdirSync('out',{recursive:true});
+          const all=[];
+          for(const [slug,path,maxWait] of routes){
+            const dir='out/'+slug;fs.mkdirSync(dir,{recursive:true});
+            const result={slug,path};
+            for(const [kind,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
+              const context=await browser.newContext({viewport});const page=await context.newPage();page.setDefaultNavigationTimeout(60000);
+              let status=null,error=null,settleMs=null;
+              try{const r=await page.goto(urlFor(path),{waitUntil:'domcontentloaded'});status=r?.status();settleMs=await settle(page,kind==='desktop'?maxWait:Math.min(maxWait,22000));}catch(e){error=String(e)}
+              const data=await inspect(page).catch(e=>({extractError:String(e),url:page.url()}));
+              await page.screenshot({path:`${dir}/${kind}.png`,fullPage:true}).catch(()=>{});
+              result[kind]={status,error,settleMs,...data};
+              await context.close();
+              await new Promise(r=>setTimeout(r,2500));
+            }
+            fs.writeFileSync(`${dir}/report.json`,JSON.stringify(result,null,2));all.push(result);
+          }
+          fs.writeFileSync('out/summary.json',JSON.stringify(all,null,2));
+          await browser.close();
+          EOF
+          node cert-v5.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storefront-cert-v5-all
+          path: out
+          retention-days: 7
