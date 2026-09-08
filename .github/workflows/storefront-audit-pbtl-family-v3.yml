@@ -1,0 +1,58 @@
+name: Storefront audit - PBTL family v3
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-audit-pbtl-family-v3.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - {slug: apparel, path: /collections/apparel, wait: 16000}
+          - {slug: army, path: /collections/products-built-for-the-line-u-s-army, wait: 30000}
+          - {slug: arng, path: /collections/army-national-guard-series, wait: 30000}
+          - {slug: air-force, path: /collections/products-built-for-the-line-u-s-air-force, wait: 30000}
+          - {slug: ang, path: /collections/air-national-guard-series, wait: 30000}
+          - {slug: navy, path: /collections/products-built-for-the-line-u-s-navy, wait: 30000}
+          - {slug: marines, path: /collections/products-built-for-the-line-u-s-marine-corps, wait: 30000}
+          - {slug: coast-guard, path: /collections/products-built-for-the-line-u-s-coast-guard, wait: 30000}
+          - {slug: space-force, path: /collections/products-built-for-the-line-u-s-space-force, wait: 30000}
+          - {slug: state-guard, path: /collections/state-guard-series, wait: 18000}
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Audit desktop and mobile in separate sessions
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          SLUG: ${{ matrix.slug }}
+          PATHNAME: ${{ matrix.path }}
+          WAIT: ${{ matrix.wait }}
+        run: |
+          cat > audit.mjs <<'EOF'
+          import {chromium} from 'playwright';import fs from 'fs';
+          const target=()=>{const u=new URL(process.env.PATHNAME,process.env.BASE);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',process.env.THEME);return u.toString()};
+          const extract=async p=>p.evaluate(()=>{const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0,tx=e=>(e?.textContent||'').replace(/\s+/g,' ').trim(),rr=e=>e?(()=>{const r=e.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}})():null;const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-global-refine-sidebar'),primary=main?.querySelector('.sq-global-refine-main'),body=tx(main);const details=side?[...side.querySelectorAll('details')].map(d=>({summary:tx(d.querySelector('summary')),items:[...d.querySelectorAll('a')].map(a=>{const s=a.querySelector('span');return tx(s||a)}).slice(0,250)})):[];const cards=[...(primary?.querySelectorAll('.sq-subcategory-card,.sq-line-series-categories__card,.sqbfl-card,.sg-entity,.product-card,.product-grid__item,.sqbfl-product,.sqsg-product,.sq-custom-color-product')||[])].filter(vis);const rects=cards.slice(0,3).map(rr);return{title:document.title,url:location.href,errorPage:/something went wrong|there was a problem|internal server error/i.test(document.title+' '+body),challenge:/just a moment/i.test(document.title),loading:/loading available items|loading items|building the customer-facing product tree/i.test(body),loadingMatches:(body.match(/(?:loading available items|loading items|building the customer-facing product tree)[^.!]{0,160}/ig)||[]),sidebarCount:[...(main?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis).length,sidebarRect:rr(side),mainRect:rr(primary),details,horizontalFacets:[...(main?.querySelectorAll('.sq-facet-browser,.sq-maker-browser,[data-sq-facet-browser],.sqsg-facet')||[])].filter(vis).length,availabilityLinks:[...(main?.querySelectorAll('a[href]')||[])].filter(a=>(a.getAttribute('href')||'').includes('filter.v.availability')).map(a=>a.getAttribute('href')).slice(0,30),cards:cards.length,firstThree:rects,sameRow:rects.length===3&&Math.max(...rects.map(x=>x.y))-Math.min(...rects.map(x=>x.y))<5,fourColumnGate:side&&rects.length===3?Math.abs(side.getBoundingClientRect().width-rects[0].w)<=20&&Math.max(...rects.map(x=>x.y))-Math.min(...rects.map(x=>x.y))<5:null,brokenImages:[...(main?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).slice(0,20).map(i=>({alt:i.alt,src:i.currentSrc||i.src})),sortGridControls:[...(main?.querySelectorAll('select[name="sort_by"],.facets-vertical-sort,.facet-filters,.product-count,.product-grid-container,[data-view-mode]')||[])].filter(vis).length,overflowX:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,bodyText:body.slice(0,2600)}});
+          fs.mkdirSync('audit-out',{recursive:true});
+          const b=await chromium.launch({headless:true});
+          async function run(view,path,wait){const c=await b.newContext({viewport:view});const p=await c.newPage();p.setDefaultNavigationTimeout(60000);let status=null,error=null;try{const r=await p.goto(target(),{waitUntil:'domcontentloaded'});status=r?.status();await p.waitForTimeout(wait)}catch(e){error=String(e)}const data=await extract(p).catch(e=>({extractError:String(e),title:await p.title().catch(()=>''),url:p.url()}));await p.screenshot({path,fullPage:true}).catch(()=>{});await c.close();return{status,error,...data}}
+          const desktop=await run({width:1440,height:1100},'audit-out/desktop.png',+process.env.WAIT);
+          const mobile=await run({width:390,height:844},'audit-out/mobile.png',Math.max(10000,Math.min(+process.env.WAIT,18000)));
+          fs.writeFileSync('audit-out/report.json',JSON.stringify({slug:process.env.SLUG,desktop,mobile},null,2));await b.close();
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pbtl-v3-${{ matrix.slug }}
+          path: audit-out
+          retention-days: 7
