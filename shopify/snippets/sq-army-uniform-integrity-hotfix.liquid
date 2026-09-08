@@ -1,0 +1,56 @@
+{% if request.page_type == 'collection' %}
+{% if collection.handle == 'products-built-for-the-line-u-s-army' or collection.handle == 'army-national-guard-series' %}
+<script data-sq-army-uniform-integrity-v5>
+(function(){
+if(window.__sqArmyUniformIntegrityV5)return;window.__sqArmyUniformIntegrityV5=true;
+var priorFetch=window.fetch.bind(window);
+function info(input){try{var raw=typeof input==='string'?input:(input&&input.url)||'',u=new URL(raw,location.origin);return u}catch(e){return null}}
+window.fetch=async function(input,init){
+  var u=info(input),r=await priorFetch(input,init);
+  if(!u||!r||!r.ok||u.origin!==location.origin||u.pathname!=='/collections/products-built-for-the-line-u-s-army/products.json'||String(u.searchParams.get('page')||'1')!=='1')return r;
+  try{
+    var j=await r.clone().json();if(!j||!Array.isArray(j.products))return r;
+    var pr=await priorFetch('/collections/bfl-army-uniform-pt-uniforms/products.json?limit=250&sort_by=title-ascending&page=1&sq_uniform_integrity=5',{credentials:'same-origin',cache:'no-store'});
+    if(pr&&pr.ok){var pj=await pr.json(),pa=Array.isArray(pj&&pj.products)?pj.products:[],seen={};j.products.forEach(function(p){if(p&&p.handle)seen[p.handle]=1});pa.forEach(function(p){if(p&&p.handle&&!seen[p.handle]){seen[p.handle]=1;j.products.push(p)}})}
+    var h=new Headers(r.headers);h.set('content-type','application/json; charset=utf-8');h.set('x-sq-army-uniform-integrity','v5');return new Response(JSON.stringify(j),{status:r.status,statusText:r.statusText,headers:h});
+  }catch(e){return r}
+};
+function norm(x){return String(x||'').replace(/[\u200b\u200c\u200d\ufeff]/g,'').trim().toLowerCase().replace(/\s+/g,' ')}
+function tags(p){return Array.isArray(p&&p.tags)?p.tags:[]}
+function val(p,pre){var a=tags(p);for(var i=0;i<a.length;i++){var s=String(a[i]||'');if(s.indexOf(pre)===0)return s.slice(pre.length).trim()}return''}
+function blob(p){return norm([p&&p.title,p&&p.product_type,p&&p.productType,tags(p).join(' ')].join(' '))}
+function typeOf(p){return norm(val(p,'SQ Type:')||(p&&p.product_type)||(p&&p.productType)||'')}
+function systemFor(p){
+  var h=norm(p&&p.handle),sys=norm(val(p,'SQ Army Uniform System:')),b=blob(p),t=typeOf(p);
+  if(h==='new-army-ocp-scorpion-w2-multicam-top-medium-short-uniform-coat-flame-resistant')return'OCP / Combat & Field Uniform';
+  if(sys==='pt')return'Army PT / Physical Fitness Uniform';
+  if(sys==='cold weather')return'Cold Weather & Outerwear';
+  if(sys==='ihwcu'||sys==='ocp'||sys==='acu')return'OCP / Combat & Field Uniform';
+  if(sys==='agsu')return'AGSU / Green Service Uniform';
+  if(sys==='asu')return'ASU / Blue Service Uniform';
+  if(/\b(ihwcu|improved hot weather|hot weather combat uniform)\b/.test(b))return'OCP / Combat & Field Uniform';
+  if(/\b(agsu|army green service|green service uniform|heritage green|heritage taupe|heritage tan|heritage shirt|heritage trousers)\b/.test(b))return'AGSU / Green Service Uniform';
+  if(/\b(asu|army service uniform|army blue|blue service uniform|dress blue)\b/.test(b))return'ASU / Blue Service Uniform';
+  if(/\b(apfu|army pt|physical fitness|physical training|pt uniform|running shorts?|pt shorts?|pt shirts?)\b/.test(b))return'Army PT / Physical Fitness Uniform';
+  if(/\b(ecwcs|cold weather|polartec|fleece|parka|field jacket|soft shell|softshell|base layer|thermal|watch cap|neck gaiter|outerwear)\b/.test(b))return'Cold Weather & Outerwear';
+  if(/\b(combat shirts?|combat uniform coat|combat uniform trousers?|combat uniform pants?|operational camouflage uniform|fracu|uniform coat|uniform blouse|ocp blouse|ocp top|tan 499|boot socks?)\b/.test(b))return'OCP / Combat & Field Uniform';
+  if(/\b(patrol caps?)\b/.test(t)||/\bpatrol cap\b/.test(b))return'OCP / Combat & Field Uniform';
+  if(/\b(boot blousers?|military boots?|tactical & military boots?|socks \/ hosiery)\b/.test(t))return'OCP / Combat & Field Uniform';
+  if(/\b(dog tag accessories|combat shirts?)\b/.test(t))return'OCP / Combat & Field Uniform';
+  if(/\b(bow ties?|clip-on ties?|service uniform shirts?|uniform ties?|uniform braid & trim|fourragere cords?|shoulder cords?|uniform buttons & button sets?)\b/.test(t))return'ASU / Blue Service Uniform';
+  if(/\b(name plates?)\b/.test(t))return /\bagsu\b/.test(b)?'AGSU / Green Service Uniform':'ASU / Blue Service Uniform';
+  if(/\b(uniform belts & buckles)\b/.test(t))return /\bagsu\b/.test(b)?'AGSU / Green Service Uniform':'ASU / Blue Service Uniform';
+  if(/\bt-shirts?\b/.test(t)&&/\b(pt|physical fitness|apfu)\b/.test(b))return'Army PT / Physical Fitness Uniform';
+  return'';
+}
+function install(){
+  var cur=window.__sqArmySubOverride;if(cur&&cur.__sqProtectedArmyUniformV5)return;
+  var prior=cur;
+  var wrapped=function(p,cat){if(norm(cat)==='uniforms & uniform accessories'){var s=systemFor(p);if(s)return s}return prior?prior(p,cat):''};
+  wrapped.__sqProtectedArmyUniformV5=true;window.__sqArmySubOverride=wrapped;
+}
+install();[0,25,75,150,350,800,1600,2600,4200,7000].forEach(function(ms){setTimeout(install,ms)});
+})();
+</script>
+{% endif %}
+{% endif %}
