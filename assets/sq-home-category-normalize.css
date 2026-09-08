@@ -1,7 +1,10 @@
-/* Homepage Shop by Category distortion fix. Load after sq-home-canonical.css. */
+/* Homepage Shop by Category card normalization.
+   Final override loaded after sq-home-canonical.css. */
 .sqhc-grid{align-items:stretch}
 .sqhc-grid .sqhc-card{
   position:relative;
+  display:grid;
+  grid-template-rows:180px minmax(0,1fr);
   height:327px;
   min-width:0;
   padding:11px 12px 9px;
@@ -17,13 +20,13 @@
 .sqhc-grid .sqhc-media{
   display:flex;
   width:100%;
-  height:196px;
+  height:auto;
   min-width:0;
-  flex:0 0 196px;
+  min-height:0;
   align-items:center;
   justify-content:center;
   overflow:hidden;
-  padding:10px;
+  padding:4px;
   box-sizing:border-box;
   border:0;
   border-radius:8px;
@@ -42,14 +45,13 @@
   object-position:center;
 }
 .sqhc-grid .sqhc-copy{
-  display:flex;
+  display:grid;
+  grid-template-rows:minmax(0,1fr) 28px;
+  width:100%;
   min-width:0;
   min-height:0;
-  flex:1;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  padding:2px 6px 0;
+  padding:0 6px;
+  box-sizing:border-box;
   background:transparent;
   text-align:center;
 }
@@ -58,13 +60,12 @@
   width:100%;
   min-width:0;
   min-height:0;
-  flex:1;
   align-items:center;
   justify-content:center;
   overflow:hidden;
   padding:0 2px;
   color:#fff;
-  font-size:15px;
+  font-size:16px;
   font-weight:900;
   line-height:1.12;
   text-align:center;
@@ -78,9 +79,8 @@
   width:100%;
   min-width:0;
   min-height:28px;
-  flex:0 0 auto;
-  margin-top:auto;
-  padding-top:5px;
+  margin:0;
+  padding:0;
   transform:none;
   align-items:center;
   justify-content:center;
@@ -106,10 +106,15 @@
 }
 .sqhc-grid .sqhc-arrow{display:none}
 @media(max-width:649px){
-  .sqhc-grid .sqhc-card{height:254px;padding:8px;gap:5px}
-  .sqhc-grid .sqhc-media{height:134px;flex-basis:134px;padding:7px}
-  .sqhc-grid .sqhc-copy{padding:2px 4px 0}
+  .sqhc-grid .sqhc-card{
+    grid-template-rows:124px minmax(0,1fr);
+    height:254px;
+    padding:8px;
+    gap:5px;
+  }
+  .sqhc-grid .sqhc-media{padding:3px}
+  .sqhc-grid .sqhc-copy{grid-template-rows:minmax(0,1fr) 20px;padding:0 4px}
   .sqhc-grid .sqhc-title{font-size:13px;line-height:1.1;padding:0 1px}
-  .sqhc-grid .sqhc-count{min-height:18px;padding-top:2px;gap:6px;font-size:11px}
+  .sqhc-grid .sqhc-count{min-height:20px;gap:6px;font-size:11px}
   .sqhc-grid .sqhc-count:before,.sqhc-grid .sqhc-count:after{width:24px;flex-basis:24px;min-width:8px}
 }
