@@ -1,0 +1,69 @@
+name: Storefront targeted visual audit
+
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-visual-audit-targeted.yml'
+      - 'audit-targeted-trigger.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Capture targeted preview
+        env:
+          PREVIEW_THEME_ID: '158561894555'
+          STORE_BASE: 'https://www.statesideqm.com'
+        run: |
+          cat > audit-targeted.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          import path from 'path';
+          const base=process.env.STORE_BASE, preview=process.env.PREVIEW_THEME_ID, out='targeted-visual-audit';
+          fs.mkdirSync(out,{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1100},deviceScaleFactor:1});
+          const page=await context.newPage();
+          page.setDefaultNavigationTimeout(60000);
+          const targets=[['homepage','/'],['tumblers','/collections/drinkware-gifts/sq-type-tumblers?filter.v.availability=1'],['apparel','/collections/apparel'],['tactical','/collections/tactical-gear'],['army','/collections/products-built-for-the-line-u-s-army']];
+          const report=[];
+          const rect=e=>e?({top:Math.round(e.getBoundingClientRect().top+scrollY),left:Math.round(e.getBoundingClientRect().left+scrollX),width:Math.round(e.getBoundingClientRect().width),height:Math.round(e.getBoundingClientRect().height)}):null;
+          for(let i=0;i<targets.length;i++){
+            const [label,pth]=targets[i],u=new URL(pth,base);u.searchParams.set('preview_theme_id',preview);
+            let status=null,error=null;
+            try{const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null;await page.waitForTimeout(6000)}catch(e){error=String(e)}
+            await page.addStyleTag({content:'html,body{height:auto!important;min-height:100%!important;overflow:visible!important}.page-wrapper{height:auto!important;min-height:100vh!important;overflow:visible!important;max-height:none!important}'}).catch(()=>{});
+            const meta=await page.evaluate(()=>{
+              const side=document.querySelector('#MainContent .sq-collection-sidebar,#MainContent .sq-custom-render-sidebar');
+              const main=document.querySelector('#MainContent .sq-collection-products-column,#MainContent .sq-custom-render-main');
+              const grid=document.querySelector('#MainContent .sq-collection-products-column #product-grid,#MainContent .sq-collection-products-column .product-grid,#MainContent .sq-custom-render-main .sqbfl-products,#MainContent .sq-custom-render-main .sqsg-products');
+              const rr=e=>e?({top:Math.round(e.getBoundingClientRect().top+scrollY),left:Math.round(e.getBoundingClientRect().left+scrollX),width:Math.round(e.getBoundingClientRect().width),height:Math.round(e.getBoundingClientRect().height)}):null;
+              const cs=grid?getComputedStyle(grid):null;
+              return {title:document.title,finalUrl:location.href,bodyHeight:document.documentElement.scrollHeight,sidebar:!!side,sidebarRect:rr(side),mainRect:rr(main),gridRect:rr(grid),gridTemplateColumns:cs?.gridTemplateColumns||'',productCards:document.querySelectorAll('#MainContent .product-grid__item,#MainContent .sqbfl-product,#MainContent .sqsg-product,#MainContent .sq-custom-color-product').length,manufacturer:!!document.querySelector('#MainContent [data-sq-sidebar-facet="manufacturer"],#MainContent .sq-custom-render-sidebar details:nth-of-type(1)'),color:!!document.querySelector('#MainContent [data-sq-sidebar-facet="color-pattern"],#MainContent .sq-custom-render-sidebar details:nth-of-type(2)'),availabilityLinks:document.querySelectorAll('#MainContent a[href*="filter.v.availability"]').length};
+            }).catch(()=>({}));
+            const file=`${String(i).padStart(2,'0')}-${label}.png`;await page.screenshot({path:path.join(out,file),fullPage:true}).catch(()=>{});
+            report.push({label,requested:u.toString(),status,error,...meta,screenshot:file});
+            if(i<targets.length-1)await page.waitForTimeout(14000);
+          }
+          fs.writeFileSync(path.join(out,'report.json'),JSON.stringify(report,null,2));
+          await browser.close();
+          EOF
+          node audit-targeted.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storefront-targeted-visual-audit
+          path: targeted-visual-audit
+          retention-days: 7
