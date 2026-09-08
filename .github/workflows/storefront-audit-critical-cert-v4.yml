@@ -1,0 +1,57 @@
+name: Storefront audit - critical certification v4
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-audit-critical-cert-v4.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - {slug: army, path: /collections/products-built-for-the-line-u-s-army, wait: 30000}
+          - {slug: arng, path: /collections/army-national-guard-series, wait: 30000}
+          - {slug: air-force, path: /collections/products-built-for-the-line-u-s-air-force, wait: 30000}
+          - {slug: ang, path: /collections/air-national-guard-series, wait: 30000}
+          - {slug: navy, path: /collections/products-built-for-the-line-u-s-navy, wait: 30000}
+          - {slug: state-guard, path: /collections/state-guard-series, wait: 22000}
+          - {slug: afg, path: /collections/armed-forces-gear, wait: 18000}
+          - {slug: law, path: /collections/law-enforcement-corrections, wait: 26000}
+          - {slug: fire-ems-sar, path: /collections/firefighting-ems-search-rescue, wait: 26000}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Render current unpublished theme
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          SLUG: ${{ matrix.slug }}
+          PATHNAME: ${{ matrix.path }}
+          WAIT: ${{ matrix.wait }}
+        run: |
+          cat > cert.mjs <<'EOF'
+          import {chromium} from 'playwright'; import fs from 'fs';
+          const url=()=>{const u=new URL(process.env.PATHNAME,process.env.BASE);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',process.env.THEME);return u.toString()};
+          const inspect=async p=>p.evaluate(()=>{const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0,tx=e=>(e?.textContent||'').replace(/\s+/g,' ').trim(),rr=e=>e?(()=>{const r=e.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}})():null;const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-global-refine-sidebar'),primary=main?.querySelector('.sq-global-refine-main'),body=tx(main);const details=side?[...side.querySelectorAll('details')].map(d=>({summary:tx(d.querySelector('summary')),items:[...d.querySelectorAll('a[href]')].map(a=>{const s=a.querySelector('span');return tx(s||a)}).slice(0,300)})):[];const cards=[...(primary?.querySelectorAll('.sq-subcategory-card,.sq-afg-branch-card,.sq-line-series-categories__card,.sqbfl-card,.sg-entity,.product-card,.product-grid__item,.sqbfl-product,.sqsg-product,.sq-custom-color-product')||[])].filter(vis),r3=cards.slice(0,3).map(rr);const badColor=details.flatMap(d=>/color\s*\/\s*pattern/i.test(d.summary)?d.items:[]).filter(x=>/other color|service branch|^sq\b|mcguire army navy|black ocp|multicam black|black multicam/i.test(x));return{title:document.title,url:location.href,errorPage:/something went wrong|internal server error|there was a problem/i.test(document.title+' '+body),challenge:/just a moment/i.test(document.title),loading:/loading available items|loading items|building the customer-facing product tree/i.test(body),availableWording:/available items|currently available/i.test(body),sidebarCount:[...(main?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis).length,sidebarRect:rr(side),mainRect:rr(primary),details,badColorLabels:badColor,horizontalFacets:[...(main?.querySelectorAll('.sq-facet-browser,.sq-maker-browser,[data-sq-facet-browser],.sqsg-facet')||[])].filter(vis).length,availabilityLinks:[...(main?.querySelectorAll('a[href]')||[])].filter(a=>(a.getAttribute('href')||'').includes('filter.v.availability')).map(a=>a.getAttribute('href')).slice(0,30),cardCount:cards.length,firstThree:r3,sameRow:r3.length===3&&Math.max(...r3.map(x=>x.y))-Math.min(...r3.map(x=>x.y))<5,fourColumnGate:side&&r3.length===3?Math.abs(side.getBoundingClientRect().width-r3[0].w)<=20&&Math.max(...r3.map(x=>x.y))-Math.min(...r3.map(x=>x.y))<5:null,brokenImages:[...(main?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).slice(0,30).map(i=>({alt:i.alt,src:i.currentSrc||i.src})),sortGridControls:[...(main?.querySelectorAll('select[name="sort_by"],.facets-vertical-sort,.facet-filters,.product-count,.product-grid-container,[data-view-mode]')||[])].filter(vis).length,overflowX:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,bodyText:body.slice(0,3500)}});
+          const b=await chromium.launch({headless:true});fs.mkdirSync('out',{recursive:true});
+          async function run(view,file,wait){const c=await b.newContext({viewport:view});const p=await c.newPage();p.setDefaultNavigationTimeout(60000);let status=null,error=null;try{const r=await p.goto(url(),{waitUntil:'domcontentloaded'});status=r?.status();await p.waitForTimeout(wait)}catch(e){error=String(e)}let data={};try{data=await inspect(p)}catch(e){data={extractError:String(e),url:p.url()}}await p.screenshot({path:file,fullPage:true}).catch(()=>{});await c.close();return{status,error,...data}}
+          const desktop=await run({width:1440,height:1100},'out/desktop.png',+process.env.WAIT);
+          await new Promise(r=>setTimeout(r,7000));
+          const mobile=await run({width:390,height:844},'out/mobile.png',Math.min(+process.env.WAIT,18000));
+          fs.writeFileSync('out/report.json',JSON.stringify({slug:process.env.SLUG,desktop,mobile},null,2));await b.close();
+          EOF
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: critical-v4-${{ matrix.slug }}
+          path: out
+          retention-days: 7
