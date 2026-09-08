@@ -1,0 +1,48 @@
+name: Storefront audit - critical recheck
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-audit-critical-recheck.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {slug: apparel, path: /collections/apparel, wait: 16000}
+          - {slug: air-force, path: /collections/products-built-for-the-line-u-s-air-force, wait: 30000}
+          - {slug: state-guard, path: /collections/state-guard-series, wait: 16000}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Recheck current unpublished theme
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          SLUG: ${{ matrix.slug }}
+          PATHNAME: ${{ matrix.path }}
+          WAIT: ${{ matrix.wait }}
+        run: |
+          cat > audit.mjs <<'EOF'
+          import {chromium} from 'playwright';import fs from 'fs';
+          const b=await chromium.launch({headless:true});const c=await b.newContext({viewport:{width:1440,height:1100}});const p=await c.newPage();p.setDefaultNavigationTimeout(60000);
+          const u=new URL(process.env.PATHNAME,process.env.BASE);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',process.env.THEME);
+          const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded'});await p.waitForTimeout(+process.env.WAIT);
+          const d=await p.evaluate(()=>{const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0,tx=e=>(e?.textContent||'').replace(/\s+/g,' ').trim(),rr=e=>e?(()=>{const r=e.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}})():null;const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-global-refine-sidebar'),primary=main?.querySelector('.sq-global-refine-main'),body=tx(main);const details=side?[...side.querySelectorAll('details')].map(x=>({summary:tx(x.querySelector('summary')),items:[...x.querySelectorAll('a')].map(tx)})):[];const cards=[...(primary?.querySelectorAll('.sq-subcategory-card,.sqbfl-card,.sg-entity,.product-card,.product-grid__item,.sqbfl-product,.sqsg-product,.sq-custom-color-product')||[])].filter(vis);const rects=cards.slice(0,3).map(rr);return{title:document.title,url:location.href,errorPage:/something went wrong|there was a problem|internal server error/i.test(document.title+' '+body),loading:/loading available items|loading items|building the customer-facing product tree/i.test(body),loadingMatches:(body.match(/(?:loading available items|loading items|building the customer-facing product tree)[^.!]{0,140}/ig)||[]),sidebarCount:[...(main?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis).length,sidebarRect:rr(side),mainRect:rr(primary),details,horizontalFacets:[...(main?.querySelectorAll('.sq-facet-browser,.sq-maker-browser,[data-sq-facet-browser],.sqsg-facet')||[])].filter(vis).length,availabilityLinks:[...(main?.querySelectorAll('a[href]')||[])].filter(a=>(a.getAttribute('href')||'').includes('filter.v.availability')).map(a=>a.getAttribute('href')).slice(0,20),cards:cards.length,firstThree:rects,sameRow:rects.length===3&&Math.max(...rects.map(x=>x.y))-Math.min(...rects.map(x=>x.y))<5,brokenImages:[...(main?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).slice(0,20).map(i=>({alt:i.alt,src:i.currentSrc||i.src})),sortGridControls:[...(main?.querySelectorAll('select[name="sort_by"],.facets-vertical-sort,.facet-filters,.product-count,.product-grid-container,[data-view-mode]')||[])].filter(vis).length,bodyText:body.slice(0,2200)}});
+          fs.mkdirSync('audit-out',{recursive:true});fs.writeFileSync('audit-out/report.json',JSON.stringify({status:r?.status(),...d},null,2));await p.screenshot({path:'audit-out/desktop.png',fullPage:true});
+          await p.setViewportSize({width:390,height:844});await p.goto(u.toString(),{waitUntil:'domcontentloaded'});await p.waitForTimeout(9000);const m=await p.evaluate(()=>{const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0,tx=e=>(e?.textContent||'').replace(/\s+/g,' ').trim(),main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-global-refine-sidebar');return{title:document.title,errorPage:/something went wrong|there was a problem/i.test(document.title+' '+tx(main)),sidebarVisible:vis(side),details:side?[...side.querySelectorAll('summary')].map(tx):[],overflowX:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,horizontalFacets:[...(main?.querySelectorAll('.sq-facet-browser,.sq-maker-browser,[data-sq-facet-browser],.sqsg-facet')||[])].filter(vis).length,availabilityLinks:[...(main?.querySelectorAll('a[href]')||[])].filter(a=>(a.getAttribute('href')||'').includes('filter.v.availability')).length}});fs.writeFileSync('audit-out/mobile.json',JSON.stringify(m,null,2));await p.screenshot({path:'audit-out/mobile.png',fullPage:true});await b.close();
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: critical-${{ matrix.slug }}
+          path: audit-out
+          retention-days: 7
