@@ -1,0 +1,53 @@
+name: Storefront Chromium exhaustive collections
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-chromium-exhaustive-collections.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0 fast-xml-parser@4.5.0
+          npx playwright install --with-deps chromium
+      - name: Crawl and visually audit every collection route in Chromium
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > exhaustive-collections.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import { XMLParser } from 'fast-xml-parser';
+          import fs from 'fs';
+          import crypto from 'crypto';
+
+          const BASE=process.env.BASE;
+          const THEME=process.env.THEME;
+          const parser=new XMLParser({ignoreAttributes:false});
+          const out='out';fs.mkdirSync(out,{recursive:true});fs.mkdirSync(`${out}/screens`,{recursive:true});
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const safe=u=>crypto.createHash('sha1').update(u).digest('hex').slice(0,14);
+          const normalize=(raw)=>{try{const u=new URL(raw,BASE);if(u.origin!==new URL(BASE).origin)return null;if(!u.pathname.startsWith('/collections/'))return null;['preview_theme_id','filter.v.availability','page'].forEach(k=>u.searchParams.delete(k));const keep=new URLSearchParams();for(const [k,v] of u.searchParams){if(k.startsWith('sq_')||k.startsWith('sg_')||k==='filter.p.product_type'||k==='sort_by')keep.append(k,v)}u.search=keep.toString();u.hash='';return u.pathname+(u.search?u.search:'')}catch{return null}};
+          const preview=(path)=>{const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()};
+          async function text(url){const r=await fetch(url);if(!r.ok)throw new Error(`${r.status} ${url}`);return await r.text()}
+          async function sitemapSeeds(){const xml=parser.parse(await text(`${BASE}/sitemap.xml`));let locs=xml?.sitemapindex?.sitemap||[];if(!Array.isArray(locs))locs=[locs];const maps=locs.map(x=>x.loc).filter(Boolean).filter(x=>/sitemap_collections/i.test(x));const seeds=new Set(['/collections/all','/collections/products-built-for-the-line-u-s-army','/collections/army-national-guard-series','/collections/products-built-for-the-line-u-s-air-force','/collections/air-national-guard-series','/collections/products-built-for-the-line-u-s-navy','/collections/products-built-for-the-line-u-s-marine-corps','/collections/products-built-for-the-line-u-s-coast-guard','/collections/products-built-for-the-line-u-s-space-force','/collections/state-guard-series','/collections/armed-forces-gear','/collections/rotc-series','/collections/jrotc-series','/collections/military-schools-academies','/collections/law-enforcement-corrections','/collections/firefighting-ems-search-rescue','/collections/thin-line','/collections/sta-brite-insignia']);for(const sm of maps){const sx=parser.parse(await text(sm));let urls=sx?.urlset?.url||[];if(!Array.isArray(urls))urls=[urls];for(const x of urls){const n=normalize(x.loc);if(n)seeds.add(n)}}return [...seeds]}
+          const browser=await chromium.launch({headless:true});
+          const queue=await sitemapSeeds();const seen=new Set();const results=[];let idx=0;
+          while(idx<queue.length && seen.size<1200){const path=queue[idx++];if(seen.has(path))continue;seen.add(path);const rec={path};for(const [kind,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){const ctx=await browser.newContext({viewport});const page=await ctx.newPage();page.setDefaultNavigationTimeout(45000);const t0=Date.now();let status=null,error=null;try{const res=await page.goto(preview(path),{waitUntil:'domcontentloaded'});status=res?.status()??null;}catch(e){error=String(e)}let usableMs=null;for(let i=0;i<20;i++){const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const txt=(m.textContent||'').replace(/\s+/g,' ');const loading=/loading items|building the customer-facing product tree|checking items|organizing .* products/i.test(txt);const card=[...m.querySelectorAll('.sq-subcategory-card,.sq-afg-branch-card,.sq-line-program-tree__card,.sq-ts-match-card,.sqbfl-card,.sg-entity,.sqsg-card,.product-card,.product-grid__item')].find(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>20&&r.height>20&&s.display!=='none'&&s.visibility!=='hidden'});return !!card&&!loading}).catch(()=>false);if(ok){usableMs=Date.now()-t0;break}await page.waitForTimeout(250)}await page.waitForTimeout(750);const data=await page.evaluate(()=>{const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;const rr=e=>e?(()=>{const r=e.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}})():null;const m=document.querySelector('#MainContent'),body=(m?.textContent||'').replace(/\s+/g,' ').trim(),side=[...(m?.querySelectorAll('.sq-global-refine-sidebar')||[])].find(vis),primary=m?.querySelector('.sq-global-refine-main');const cards=[...(primary?.querySelectorAll('.sq-subcategory-card,.sq-afg-branch-card,.sq-line-program-tree__card,.sq-ts-match-card,.sqbfl-card,.sg-entity,.sqsg-card,.product-card,.product-grid__item')||[])].filter(vis);const r3=cards.slice(0,3).map(rr);const nav=performance.getEntriesByType('navigation')[0];const paints=Object.fromEntries(performance.getEntriesByType('paint').map(x=>[x.name,Math.round(x.startTime)]));return{title:document.title,url:location.href,errorPage:/something went wrong|internal server error|there was a problem/i.test(document.title+' '+body),challenge:/just a moment/i.test(document.title),loading:/loading items|building the customer-facing product tree|checking items|organizing .* products/i.test(body),availableWording:/available items|currently available|in-stock only/i.test(body),sidebarCount:[...(m?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis).length,sidebarRect:rr(side),mainRect:rr(primary),cardCount:cards.length,firstThree:r3,sameRow:r3.length===3&&Math.max(...r3.map(x=>x.y))-Math.min(...r3.map(x=>x.y))<6,fourColumnGate:side&&r3.length===3?Math.abs(side.getBoundingClientRect().width-r3[0].w)<=20&&Math.max(...r3.map(x=>x.y))-Math.min(...r3.map(x=>x.y))<6:null,horizontalFacets:[...(m?.querySelectorAll('.sq-facet-browser,.sq-maker-browser,[data-sq-facet-browser],.sqsg-facet')||[])].filter(vis).length,availabilityLinks:[...(m?.querySelectorAll('a[href]')||[])].filter(a=>(a.getAttribute('href')||'').includes('filter.v.availability')).length,brokenImages:[...(m?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).map(i=>({alt:i.alt,src:i.currentSrc||i.src})).slice(0,25),overflowX:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,dcl:nav?Math.round(nav.domContentLoadedEventEnd):null,load:nav?Math.round(nav.loadEventEnd):null,fcp:paints['first-contentful-paint']??null,bodySample:body.slice(0,1200),links:[...(m?.querySelectorAll('a[href]')||[])].map(a=>a.href).slice(0,2000)}}).catch(e=>({extractError:String(e),links:[]}));for(const href of data.links||[]){const n=normalize(href);if(n&&!seen.has(n)&&!queue.includes(n))queue.push(n)}delete data.links;const file=`${out}/screens/${String(seen.size).padStart(4,'0')}-${kind}-${safe(path)}.png`;await page.screenshot({path:file,fullPage:true}).catch(()=>{});const fail=status!==200||!!error||data.errorPage||data.challenge||data.loading||data.availabilityLinks>0||data.horizontalFacets>0||data.brokenImages?.length>0||data.overflowX||(kind==='desktop'&&data.sidebarCount!==1)||(kind==='desktop'&&data.cardCount>=3&&data.fourColumnGate!==true)||(usableMs==null||usableMs>3500)||(data.fcp!=null&&data.fcp>2500);rec[kind]={status,error,usableMs,...data,fail};await ctx.close();await sleep(800)}results.push(rec);fs.writeFileSync(`${out}/progress.json`,JSON.stringify(results,null,2));}
+          await browser.close();
+          const failures=results.filter(r=>r.desktop?.fail||r.mobile?.fail);const summary={audited:results.length,discovered:queue.length,failures:failures.length,desktopFails:results.filter(r=>r.desktop?.fail).length,mobileFails:results.filter(r=>r.mobile?.fail).length,failedPaths:failures.map(r=>r.path)};fs.writeFileSync(`${out}/summary.json`,JSON.stringify(summary,null,2));fs.writeFileSync(`${out}/results.json`,JSON.stringify(results,null,2));console.log(JSON.stringify(summary,null,2));if(failures.length)process.exitCode=2;
+          EOF
+          node exhaustive-collections.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chromium-exhaustive-collections
+          path: out
+          retention-days: 7
