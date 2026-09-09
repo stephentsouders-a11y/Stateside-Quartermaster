@@ -1,0 +1,98 @@
+name: Storefront targeted Chromium fixes
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-audit-targeted-fixes.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Verify changed routes in Chromium
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > verify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const routes=[
+            ['army','/collections/products-built-for-the-line-u-s-army'],
+            ['state-guard-alabama','/collections/state-guard-series-alabama'],
+            ['afg','/collections/armed-forces-gear'],
+            ['thin-line','/collections/thin-line'],
+            ['thin-yellow','/collections/thin-line-shop-thin-yellow-line'],
+            ['thin-yellow-products','/collections/thin-line-shop-thin-yellow-line?filter.p.product_type=First%20Responder%20Patches&sort_by=title-ascending'],
+            ['sta-brite','/collections/sta-brite-insignia']
+          ];
+          fs.mkdirSync('out',{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          const all=[];
+          const inspect=async page=>page.evaluate(()=>{
+            const main=document.querySelector('#MainContent');
+            const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;
+            const tx=e=>(e?.textContent||'').replace(/\s+/g,' ').trim();
+            const rr=e=>e?(()=>{const r=e.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}})():null;
+            const side=[...(main?.querySelectorAll('.sq-global-refine-sidebar')||[])].find(vis);
+            const primary=main?.querySelector('.sq-global-refine-main');
+            const cards=[...(primary?.querySelectorAll('.sq-subcategory-card,.sq-afg-branch-card,.sq-ts-match-card,.sqbfl-card,.sg-entity,.sqsg-card,.product-card,.product-grid__item,.sqbfl-product,.sqsg-product,.sq-custom-color-product')||[])].filter(vis);
+            const r3=cards.slice(0,3).map(rr);
+            const details=side?[...side.querySelectorAll('details')].map(d=>({summary:tx(d.querySelector('summary')),items:[...d.querySelectorAll('a[href]')].map(a=>tx(a.querySelector('span')||a)).slice(0,300)})):[];
+            const body=tx(main);
+            return {
+              title:document.title,url:location.href,
+              errorPage:/something went wrong|internal server error|there was a problem/i.test(document.title+' '+body),
+              challenge:/just a moment/i.test(document.title),
+              loading:/loading items|building the customer-facing product tree|checking items/i.test(body),
+              availableWording:/available items|currently available|in-stock only/i.test(body),
+              sidebarCount:[...(main?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis).length,
+              sidebarRect:rr(side),mainRect:rr(primary),details,
+              horizontalFacets:[...(main?.querySelectorAll('.sq-facet-browser,.sq-maker-browser,[data-sq-facet-browser],.sqsg-facet')||[])].filter(vis).length,
+              availabilityLinks:[...(main?.querySelectorAll('a[href]')||[])].filter(a=>(a.getAttribute('href')||'').includes('filter.v.availability')).map(a=>a.getAttribute('href')).slice(0,30),
+              cardCount:cards.length,firstThree:r3,
+              sameRow:r3.length===3&&Math.max(...r3.map(x=>x.y))-Math.min(...r3.map(x=>x.y))<6,
+              fourColumnGate:side&&r3.length===3?Math.abs(side.getBoundingClientRect().width-r3[0].w)<=20&&Math.max(...r3.map(x=>x.y))-Math.min(...r3.map(x=>x.y))<6:null,
+              brokenImages:[...(main?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).map(i=>({alt:i.alt,src:i.currentSrc||i.src})).slice(0,30),
+              overflowX:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,
+              bodyText:body.slice(0,5000)
+            };
+          });
+          for(const [slug,path] of routes){
+            const rec={slug,path};
+            for(const [kind,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
+              const ctx=await browser.newContext({viewport});const page=await ctx.newPage();page.setDefaultNavigationTimeout(60000);
+              const u=new URL(path,process.env.BASE);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',process.env.THEME);
+              const t0=Date.now();let status=null,error=null;
+              try{const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null}catch(e){error=String(e)}
+              let usableMs=null;
+              for(let i=0;i<28;i++){
+                const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const t=(m.textContent||'').replace(/\s+/g,' ');if(/loading items|building the customer-facing product tree|checking items/i.test(t))return false;return [...m.querySelectorAll('a,.product-card,.product-grid__item,.sq-ts-match-card,.sqbfl-card,.sg-entity')].some(e=>{const r=e.getBoundingClientRect();return r.width>30&&r.height>20})}).catch(()=>false);
+                if(ok){usableMs=Date.now()-t0;break}await page.waitForTimeout(250)
+              }
+              await page.waitForTimeout(1400);
+              const data=await inspect(page).catch(e=>({extractError:String(e)}));
+              await page.screenshot({path:`out/${slug}-${kind}.png`,fullPage:true}).catch(()=>{});
+              rec[kind]={status,error,usableMs,...data};await ctx.close();
+              await new Promise(r=>setTimeout(r,1500));
+            }
+            all.push(rec);fs.writeFileSync('out/report.json',JSON.stringify(all,null,2));
+          }
+          await browser.close();
+          console.log(JSON.stringify(all.map(r=>({slug:r.slug,desktop:{status:r.desktop.status,usableMs:r.desktop.usableMs,sidebar:r.desktop.sidebarCount,cards:r.desktop.cardCount,gate:r.desktop.fourColumnGate,loading:r.desktop.loading,challenge:r.desktop.challenge,errorPage:r.desktop.errorPage},mobile:{status:r.mobile.status,usableMs:r.mobile.usableMs,challenge:r.mobile.challenge,errorPage:r.mobile.errorPage}})),null,2));
+          EOF
+          node verify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: targeted-current-fixes
+          path: out
+          retention-days: 7
