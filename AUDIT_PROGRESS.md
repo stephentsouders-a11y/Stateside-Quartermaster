@@ -5,69 +5,64 @@ Working theme: `LIVE COPY - FULL STOREFRONT BUTTON AUDIT - SEP 8 2026`
 Theme ID: `158561894555`
 Status: UNPUBLISHED
 
+## Certification standard
+A route is PASS only after a fresh Chromium render of the current unpublished theme is inspected. Workflow success or DOM-only checks are not sufficient. Every reachable shopper-facing collection/category/type route must receive desktop and mobile screenshots, HTTP/status checks, broken-image checks, sidebar/layout checks, availability-leak checks, and a usable-time measurement. A route remains FAIL if it produces a 500/error/challenge result, visible loading delay, broken images, horizontal duplicate facets, missing Refine Products sidebar where required, desktop layout that violates the 1+3 rule, or customer-visible usability slower than the performance gate.
+
+Performance gate currently used by the exhaustive crawler:
+- usable navigation/content target: <= 3.5 seconds
+- first contentful paint target: <= 2.5 seconds when measurable
+- no prolonged `Loading items`, `Building the customer-facing product tree`, `Checking items`, or equivalent blocking state
+- exact counts may hydrate after navigation is usable, but may not block the shopper from navigating
+
 ## Status key
-- PASS = fresh rendered verification completed after current fix
-- FIXED - REVERIFY = code/theme change applied; fresh rendered verification still required
-- FIX REQUIRED = fresh rendered verification exposed a real defect; correction is in progress or just applied
+- PASS = fresh Chromium screenshots inspected after the current fix and performance/layout gates satisfied
+- FIXED - REVERIFY = correction applied; fresh Chromium screenshot proof still required
+- FIX REQUIRED = fresh Chromium verification exposed a real defect
 - OPEN = audit/fix work remains
-- BLOCKED = verification blocked by Shopify challenge/rate protection; not treated as a storefront failure
+- BLOCKED = automation hit Shopify challenge/rate protection; route is retried and never counted as PASS
 
 ## Master checklist
 
 | # | Checklist area | Status | Current evidence / next gate |
 |---|---|---|---|
-| 1 | PBTL root rerender after precedence fix | FIX REQUIRED | Fresh Army desktop render after the all-listed precedence fix removed `available items`, removed availability URLs, retained one sidebar, and showed no bad color labels or broken images. However the tree was still only `Loading items... 7/18` after 30 seconds. PBTL renderer v4 now raises feed workers from 4 to 8; fresh rerender underway. ARNG/AF/ANG/Navy plus Marines/Coast Guard/Space Force require the same current-theme verification. |
-| 2 | State Guard certification | FIXED - REVERIFY | Left sidebar + 3-card grid previously visually passed. New hard gate now strips availability links and recounts each state from all listed products except `OPTIONS_HIDDEN_PRODUCT`, regardless of stock. Color cleanup remains subject to fresh render. |
-| 3 | Armed Forces Gear | FIXED - REVERIFY | Vendor-only universe confirmed previously. Sidebar bridge is in place; fresh current-theme 1+3 visual verification remains. |
-| 4 | ROTC / JROTC / Military Schools & Academies | FIXED - REVERIFY | Program-tree availability parameters removed. Sold-out hard gate now restores academy cards if legacy availability logic removes them and strips availability links. Fresh ROTC/JROTC/MSA renders pending. |
-| 5 | Public Safety | OPEN | Law Enforcement & Corrections and Fire/EMS/SAR need final current-theme all-listed wording, layout, mobile and product-fit certification. Included in v5 sweep. |
-| 6 | Recursive Shop by Category audit | OPEN | Root-level sample audit completed; full Category -> Subcategory -> Type -> Products BFS remains. |
-| 7 | Final product-result pages | OPEN | Custom PBTL sort/grid controls added. Must verify at actual product-result level and confirm native controls elsewhere. |
-| 8 | Color / Pattern semantic cleanup | FIXED - REVERIFY | Metadata/material noise cleaner added. Fresh Army render had `badColorLabels: []`. Air/ANG/Navy and State Guard need equivalent post-hardening confirmation. |
-| 9 | Official vs morale separation | OPEN | Architecture exists; full branch-by-branch product-result verification remains. |
-| 10 | Army/ARNG + Air Force/ANG parity | PARTIAL PASS | Previous root totals matched: Army/ARNG 3,879 each; Air Force/ANG 1,786 each. Category/subcategory/type parity still needs current all-listed comparison. |
-| 11 | Special collections | OPEN | Thin Line and Sta-Brite are now included in the v5 critical sweep. Recursive checks remain for Watches, Flashlights, K9, Literature, Child Safety, Morale/Tactical ID, Flags, Uniforms, Tactical, Armor, First Aid, Outdoor, Footwear, Accessories, etc. |
-| 12 | Semantic product-fit audit | OPEN | Root structure audits do not certify product membership. Final product image/title fit review remains one of the largest work items. |
-| 13 | Button-image audit | OPEN | Homepage and several roots pass visually. Full downstream image appropriateness/containment audit remains. |
-| 14 | Counts | OPEN | Global all-listed architecture in place. State Guard all-listed count gate added. Full displayed-count reconciliation across child routes remains. |
-| 15 | Mobile certification | OPEN | Latest fresh Army mobile render was Shopify `Just a moment...` challenge-blocked, so it was not treated as a storefront failure or pass. Full low-concurrency mobile sweep remains. |
-| 16 | Performance | FIX REQUIRED | Apparel 500 fixed. Fresh Army still loaded only 7/18 feed pages at 30 seconds. PBTL v4 concurrency increase applied and is being measured by a fresh render. |
-| 17 | Homepage final regression | PASS | 29 department cards rendered cleanly; no broken images; bottom red strip preserved; no availability-filter leakage in verified render. A final post-all-fixes regression will still run before publish certification. |
-| 18 | Final certification sweep | OPEN | New `Storefront audit - certification v5` workflow performs a single low-concurrency current-theme sweep across Army, ARNG, AF, ANG, Navy, Marines, Coast Guard, Space Force, State Guard, AFG, ROTC, JROTC, MSA, Law, Fire/EMS/SAR, Thin Line and Sta-Brite, recording load state/timing plus desktop/mobile screenshots. |
+| 1 | PBTL root responsiveness | PARTIAL PASS | Army v6 desktop visually shows the Refine sidebar and usable category cards before the full 18-page product feed completes. Progressive rendering removes the previous 30-second navigation block. Exact-count hydration continues. All PBTL roots still require exhaustive current-theme Chromium timing + screenshot certification. |
+| 2 | State Guard root | PARTIAL PASS | Root Chromium screenshot shows 25 state cards, one left sidebar, no horizontal facets, no availability links and clean color labels. Individual State Guard child renderer still filters products using variant availability, so family is not complete. |
+| 3 | Armed Forces Gear | FIX REQUIRED | Earlier post-bridge screenshot showed correct left sidebar + three-card structure. Latest Chromium desktop attempt returned HTTP 500 / `Something went wrong` while mobile rendered. Any intermittent desktop 500 is unacceptable; AFG remains FAIL until repeated clean desktop Chromium renders pass speed/layout gates. |
+| 4 | ROTC / JROTC / Military Schools & Academies | FIXED - REVERIFY | Sold-out/availability hard gates and wording cleanup applied. Fresh exhaustive Chromium proof required on root and downstream routes. |
+| 5 | Public Safety | FIXED - REVERIFY | Stale `available` wording cleanup broadened. Law Enforcement & Corrections and Fire/EMS/SAR require current exhaustive Chromium timing + screenshot verification. |
+| 6 | Recursive Shop by Category audit | IN PROGRESS | New exhaustive Chromium crawler starts from Shopify collection sitemap plus all special roots and recursively follows discovered collection/category/type routes. Every discovered route gets desktop + mobile screenshots and performance/layout checks. |
+| 7 | Final product-result pages | OPEN | PBTL sort/grid controls exist. Must verify actual product-result pages visually and confirm normal Shopify sort/grid controls elsewhere. |
+| 8 | Color / Pattern semantic cleanup | FIXED - REVERIFY | Army black-Multicam final facet gate added. AF/ANG/Navy/State Guard require fresh Chromium confirmation. |
+| 9 | Official vs morale separation | OPEN | Full visual/product-result verification remains. |
+| 10 | Army/ARNG + Air Force/ANG parity | PARTIAL PASS | Previous root totals matched; recursive current-theme category/subcategory/type parity still required. |
+| 11 | Thin Line | FIXED - REVERIFY | Correct root is `/collections/thin-line`. Thin Yellow has one active inventory-0 item and fresh Chromium screenshot confirms its category remains counted/displayed. Thin Line root and Thin Yellow initially lacked the global Refine sidebar; dedicated Thin/Sta-Brite sidebar bridge added and now requires fresh Chromium proof. |
+| 12 | Sta-Brite | FIXED - REVERIFY | Thin/Sta-Brite special renderer now has a dedicated global sidebar bridge; exhaustive Chromium proof required. |
+| 13 | Semantic product-fit audit | OPEN | Structural automation does not certify whether each product image/title belongs in each category. Screenshot review/contact-sheet phase follows route crawl. |
+| 14 | Button-image audit | OPEN | Homepage and several roots have visual passes; downstream button-image appropriateness/containment remains. |
+| 15 | Counts / zero-inventory preservation | PARTIAL PASS | Thin Yellow inventory quantity 0 product remains visible and counted as 1. State Guard root all-listed recount exists. Full displayed-count reconciliation across all child routes remains. |
+| 16 | Mobile certification | IN PROGRESS | Every route in exhaustive crawler receives mobile Chromium render. Challenge captures remain BLOCKED and are retried rather than passed. |
+| 17 | Performance | FIX REQUIRED | Army navigation blocking improved via progressive v6. AFG produced a fresh desktop 500. Exhaustive crawler now enforces usable <=3.5s and FCP <=2.5s where measurable across every discovered collection route. |
+| 18 | Homepage final regression | PASS - RECHECK AT END | Prior homepage Chromium screenshot visually passed: uniform department cards, no broken images, red strip preserved. Final post-all-fixes regression still required. |
+| 19 | Final certification sweep | IN PROGRESS | `.github/workflows/storefront-chromium-exhaustive-collections.yml` launched. It builds route coverage from the Shopify collections sitemap plus special roots and recursively follows route links, recording screenshots and timing failures. |
 
-## Verified structural passes so far
-- Homepage root
-- Accessories & Gifts root
-- Apparel root after 500 fix
-- Tactical root
-- Army PBTL root: structural sidebar clean on fresh desktop, but NOT certified because the tree remained loading at 30 seconds
-- Army National Guard root: prior structural geometry pass; current-theme recheck pending
-- Air Force PBTL root: prior structural geometry pass; current-theme recheck pending
-- Air National Guard root: prior structural geometry pass; current-theme recheck pending
-- Navy PBTL root: prior desktop/mobile geometry pass; current-theme recheck pending
-- State Guard root: left Refine sidebar + 3-card desktop grid previously visually inspected; post-count/color hard-gate recheck pending
+## Current verified findings
+- Army v6 desktop: category navigation becomes usable progressively instead of waiting for all 18 feed pages. Refine sidebar + 3-card structure visually inspected.
+- Thin Yellow: one active product with inventory quantity 0 remains visible/countable; screenshot inspected.
+- State Guard root: structurally healthy in current diagnostic screenshot, but State Guard child availability filtering remains a real defect.
+- AFG: current mobile render is structurally usable, but newest desktop Chromium render returned HTTP 500 and therefore fails certification.
 
-## Fixes applied in current batch
-1. `sq-sold-out-preservation-hard-gate` added to the unpublished theme. It strips `filter.v.availability`, protects MSA cards from stock-based removal, and enforces all-listed State Guard root counts.
-2. `sq-air-force-recovery-all-listed-gate` added. Air Force recovery groups now retain sold-out recovery products and can create their recovery type button from a listed product even if no variant is currently available.
-3. Fresh Army render proved the old `available items` wording is gone and visible bad Army color labels are gone, but exposed a real performance failure (`7/18` feed pages at 30 seconds).
-4. `sq-bfl-unified-series-tree-audit-wrapper-v4` added and wired into both the early military root section and global normalizer, increasing product-feed concurrency from 4 to 8 workers while preserving all-listed/facet/sort behavior.
-5. New low-concurrency comprehensive workflow `.github/workflows/storefront-audit-cert-v5.yml` created to sweep all critical families from the current unpublished theme.
+## Active fixes / work queue
+1. Eliminate AFG desktop 500 and re-run repeated Chromium desktop checks.
+2. Remove availability filtering from individual State Guard child renderer, then visually certify multiple child states plus deep category/type/product routes.
+3. Complete exhaustive collection crawl and inspect every failed screenshot.
+4. Fix each performance/layout/error/broken-image failure and rerun until zero failures.
+5. Run product-result controls and product-fit audit on every final type/result route.
+6. Reconcile Army/ARNG and AF/ANG deep parity.
+7. Final low-concurrency mobile reruns for any challenge-blocked routes.
+8. Final homepage regression and publish-readiness certification only after all above gates are green.
 
-## Known active defects / debt
-1. Heavy PBTL roots still require proof that v4 completes promptly. Until that fresh render passes, Army/PBTL performance is a known defect, not a certification pass.
-2. Air Force/ANG/Navy older facet renders exposed `Multicam Black` / `Black Multicam`; post-v4/hardening rerender is required.
-3. Some legacy source sections still contain availability parameters or availability-based scripts. The current shopper-facing hard gate neutralizes these, but source cleanup remains technical debt until the recursive audit is complete.
-4. Product-level semantic fit and recursive downstream audit remain incomplete.
-5. Mobile can trigger Shopify anti-bot challenge during automation; blocked captures are not counted as passes or storefront failures and are retried separately at low concurrency.
-
-## Current batch
-Batch 1 targets:
-- Prove the v4 PBTL loader completes heavy roots promptly.
-- Reverify all military PBTL roots on the current unpublished theme.
-- Reverify State Guard all-listed counts + cleaned color sidebar.
-- Verify AFG 1+3 layout after sidebar bridge.
-- Verify ROTC/JROTC/MSA sold-out preservation.
-- Finish Law Enforcement & Corrections and Fire/EMS/SAR root certification.
-- Verify Thin Line sold-out preservation and Sta-Brite.
-- Verify PBTL product-result sort/grid controls before starting the full recursive BFS/product-fit pass.
+## Exhaustive Chromium run
+Workflow: `Storefront Chromium exhaustive collections`
+Run ID: `34293075358`
+Status at launch: in progress
+Artifact when complete: `chromium-exhaustive-collections`
