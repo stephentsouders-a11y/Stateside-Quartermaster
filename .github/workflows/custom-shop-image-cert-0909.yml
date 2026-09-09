@@ -1,0 +1,70 @@
+name: Custom Shop image Chromium certification
+on:
+  push:
+    paths:
+      - '.github/workflows/custom-shop-image-cert-0909.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm init -y >/dev/null 2>&1 && npm i playwright@1.55.0 >/dev/null 2>&1 && npx playwright install chromium --with-deps >/dev/null 2>&1
+      - run: |
+          cat > verify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const url='https://www.statesideqm.com/?preview_theme_id=158561894555';
+          const expected='custom-shop-soldiers-multicam-ocp-0909.webp';
+          const browser=await chromium.launch({headless:true});
+          let failed=false;
+          for(const cfg of [{name:'desktop',w:1440,h:1100},{name:'mobile',w:390,h:844}]){
+            const page=await browser.newPage({viewport:{width:cfg.w,height:cfg.h}});
+            let ok=false;
+            for(let a=1;a<=3&&!ok;a++){
+              const r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000}).catch(()=>null);
+              await page.waitForTimeout(2200);
+              const body=await page.locator('body').innerText().catch(()=> '');
+              ok=!!r&&r.status()===200&&!/Just a moment|Something went wrong|There was a problem/i.test(body);
+            }
+            const result=await page.evaluate((expected)=>{
+              const card=document.querySelector('a.sqhc-custom[href="/pages/custom-unit-gear"]');
+              if(!card)return {missingCard:true};
+              const img=card.querySelector('img');
+              const r=img?.getBoundingClientRect();
+              const cr=card.getBoundingClientRect();
+              const cs=img?getComputedStyle(img):null;
+              return {
+                missingCard:false,
+                src:img?.currentSrc||img?.src||'',
+                complete:!!img?.complete,
+                naturalWidth:img?.naturalWidth||0,
+                naturalHeight:img?.naturalHeight||0,
+                display:cs?.display,
+                objectFit:cs?.objectFit,
+                objectPosition:cs?.objectPosition,
+                imgRect:r?{x:r.x,y:r.y,w:r.width,h:r.height}:null,
+                cardRect:{x:cr.x,y:cr.y,w:cr.width,h:cr.height},
+                overflowX:document.documentElement.scrollWidth>document.documentElement.clientWidth+1,
+                href:card.getAttribute('href'),
+                expectedFound:(img?.currentSrc||img?.src||'').includes(expected)
+              };
+            },expected);
+            console.log(cfg.name.toUpperCase(),JSON.stringify(result));
+            const bad=result.missingCard||!result.expectedFound||!result.complete||result.naturalWidth<1000||result.naturalHeight<700||result.overflowX||result.href!=='/pages/custom-unit-gear';
+            if(bad){failed=true;await page.screenshot({path:`custom-shop-${cfg.name}-failure.png`,fullPage:true});}
+            await page.close();
+          }
+          await browser.close();
+          if(failed)process.exit(1);
+          EOF
+          node verify.mjs
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-shop-image-failures
+          path: custom-shop-*-failure.png
+          if-no-files-found: ignore
