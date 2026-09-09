@@ -1,0 +1,54 @@
+name: Shard 1 current isolated retest
+on:
+  push:
+    paths:
+      - '.github/workflows/shard1-current-isolated.yml'
+permissions:
+  contents: read
+jobs:
+  retest:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - {key: airsoft, route: '/collections/airsoft-milsim'}
+          - {key: firearm-accessories, route: '/collections/firearm-accessories'}
+          - {key: uniforms, route: '/collections/uniforms'}
+          - {key: army-black-red, route: '/collections/products-built-for-the-line-u-s-army?sq_color_pattern=Black+%2F+Red'}
+          - {key: army-desert-tan-brown, route: '/collections/products-built-for-the-line-u-s-army?sq_color_pattern=Desert+Tan+%2F+Brown'}
+          - {key: army-le-blue, route: '/collections/products-built-for-the-line-u-s-army?sq_color_pattern=LE+Blue'}
+          - {key: army-sky-blue, route: '/collections/products-built-for-the-line-u-s-army?sq_color_pattern=Sky+Blue'}
+          - {key: army-rank, route: '/collections/products-built-for-the-line-u-s-army?sq_bfl_category=Rank+%26+Insignia'}
+          - {key: army-art, route: '/collections/products-built-for-the-line-u-s-army?sq_bfl_category=Art%2C+Prints+%26+Wall+Decor'}
+          - {key: army-ex-umbris, route: '/collections/products-built-for-the-line-u-s-army?sq_guard_mirror=1&sq_maker=Ex+Umbris+Designs'}
+          - {key: army-mucitup, route: '/collections/products-built-for-the-line-u-s-army?sq_guard_mirror=1&sq_maker=MUCITUP'}
+          - {key: army-wetsu, route: '/collections/products-built-for-the-line-u-s-army?sq_guard_mirror=1&sq_maker=WETSU+Company'}
+          - {key: af-uniforms, route: '/collections/products-built-for-the-line-u-s-air-force?sq_bfl_category=Uniforms+%26+Uniform+Accessories'}
+          - {key: af-books, route: '/collections/products-built-for-the-line-u-s-air-force?sq_bfl_category=Books%2C+Manuals+%26+Reference'}
+          - {key: afg-coast-guard, route: '/collections/armed-forces-gear-u-s-coast-guard'}
+          - {key: fire-sar, route: '/collections/firefighting-ems-search-rescue?sq_bfl_category=Search+%26+Rescue'}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Retest current draft route
+        env:
+          ROUTE: ${{ matrix.route }}
+          KEY: ${{ matrix.key }}
+        run: |
+          cat > check.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const base='https://www.statesideqm.com',theme='158561894555',route=process.env.ROUTE,key=process.env.KEY;let final=null;
+          for(let attempt=1;attempt<=2;attempt++){const b=await chromium.launch({headless:true}),c=await b.newContext({viewport:{width:1440,height:1100}}),p=await c.newPage();const u=new URL(route,base);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',theme);const start=Date.now();let status=null,error=null,usable=null,state={bad:true,loading:false,visible:false,availability:0,broken:0,overflow:false};
+            try{const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:30000});status=r?.status()??null}catch(e){error=String(e)}
+            if(status===200&&!error){for(let i=0;i<40;i++){state=await p.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim();return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),loading:/loading items|checking items|tree unavailable|building the customer-facing product tree|loading all products/i.test(t),visible:[...(m?.querySelectorAll('a,.product-card,.product-grid__item,.sqbfl-card,.sq-subcategory-card,.sg-entity,.sq-afg-branch-card,.sq-third-level__type,.sq-ts-match-card,.sq-type-family-product')||[])].some(e=>{const r=e.getBoundingClientRect();return r.width>30&&r.height>20}),availability:[...(m?.querySelectorAll('a[href*="filter.v.availability"]')||[])].length,broken:[...(m?.querySelectorAll('img')||[])].filter(x=>x.complete&&x.naturalWidth===0).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}});if(!state.bad&&!state.loading&&state.visible){usable=Date.now()-start;break}await p.waitForTimeout(175)}}
+            const failed=status!==200||!!error||state.bad||state.loading||!state.visible||usable===null||usable>5000||state.availability||state.broken||state.overflow;final={key,route,attempt,status,error,usableMs:usable,failed,...state};console.log(JSON.stringify(final));await c.close();await b.close();if(!failed)break;if(attempt===1)await new Promise(r=>setTimeout(r,8000));}
+          if(final?.failed)process.exitCode=2;
+          EOF
+          node check.mjs
