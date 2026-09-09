@@ -1,0 +1,30 @@
+name: Inspect progressive refine counts
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-progressive-refine.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Inspect early refine state
+        run: |
+          cat > inspect.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const b=await chromium.launch({headless:true}),c=await b.newContext({viewport:{width:1440,height:1100}}),p=await c.newPage();
+          const u='https://www.statesideqm.com/collections/products-built-for-the-line-u-s-army?sq_bfl_category=Flags%2C+Displays+%26+Memorials&preview_theme_id=158561894555';
+          await p.goto(u,{waitUntil:'domcontentloaded',timeout:30000});
+          for(let i=0;i<30;i++){const s=await p.evaluate(()=>({state:document.querySelector('.sqbfl')?.getAttribute('data-sqbfl-load-state'),cards:document.querySelectorAll('.sqbfl-card').length}));if(s.state==='progressive'&&s.cards){break}await p.waitForTimeout(100)}
+          const d=await p.evaluate(()=>{const root=document.querySelector('.sqbfl');const els=[...document.querySelectorAll('#MainContent *')].filter(e=>/\b\d+\s+items?\b/i.test((e.textContent||'').trim())&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0).slice(0,30).map(e=>({tag:e.tagName,id:e.id,cls:String(e.className||''),text:(e.textContent||'').replace(/\s+/g,' ').trim().slice(0,180),insideBfl:!!e.closest('.sqbfl'),parentCls:String(e.parentElement?.className||'')}));return{bflState:root?.getAttribute('data-sqbfl-load-state'),els};});
+          console.log(JSON.stringify(d,null,2));await b.close();
+          EOF
+          node inspect.mjs
