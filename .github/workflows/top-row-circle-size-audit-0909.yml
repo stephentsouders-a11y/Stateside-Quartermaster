@@ -34,10 +34,12 @@ jobs:
           const rows=[];
           for(const h of handles){
             const card=page.locator(`[data-sq-series-handle="${h}"]`);
-            const img=card.locator('.sqhc-series-logo img');
-            const box=await img.boundingBox();
+            const logo=card.locator('.sqhc-series-logo');
+            const img=logo.locator('img');
+            const box=await logo.boundingBox();
+            const imgBox=await img.boundingBox();
             const bg=await card.evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim() || getComputedStyle(el).backgroundColor);
-            const buf=await img.screenshot();
+            const buf=await logo.screenshot({omitBackground:false});
             const {data,info}=await sharp(buf).removeAlpha().raw().toBuffer({resolveWithObject:true});
             let bgRGB=null;
             if(bg.startsWith('#')){const s=bg.slice(1); bgRGB=s.length===6?[parseInt(s.slice(0,2),16),parseInt(s.slice(2,4),16),parseInt(s.slice(4,6),16)]:null;}
@@ -48,8 +50,9 @@ jobs:
               const d=Math.max(Math.abs(data[i]-bgRGB[0]),Math.abs(data[i+1]-bgRGB[1]),Math.abs(data[i+2]-bgRGB[2]));
               if(d>18){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);count++;}
             }
-            const visible=maxX>=0?{w:maxX-minX+1,h:maxY-minY+1,diameter:Math.max(maxX-minX+1,maxY-minY+1),bounds:[minX,minY,maxX,maxY]}:null;
-            rows.push({handle:h,imgBox:box?{w:+box.width.toFixed(2),h:+box.height.toFixed(2)}:null,bg,visible});
+            const visible=maxX>=0?{w:maxX-minX+1,h:maxY-minY+1,diameter:Math.max(maxX-minX+1,maxY-minY+1),bounds:[minX,minY,maxX,maxY],pixels:count}:null;
+            rows.push({handle:h,logoBox:box?{w:+box.width.toFixed(2),h:+box.height.toFixed(2)}:null,imgBox:imgBox?{w:+imgBox.width.toFixed(2),h:+imgBox.height.toFixed(2)}:null,bg,visible});
+            await logo.screenshot({path:`${out}/${h}-logo.png`});
             await card.screenshot({path:`${out}/${h}.png`});
           }
           const ref=rows.find(x=>x.handle==='air-national-guard-series')?.visible?.diameter||0;
@@ -67,4 +70,4 @@ jobs:
           git add audit-output/top-row-circle-size
           git diff --cached --quiet || git commit -m 'Store top-row circle logo size audit'
           git push
-# rerun 2026-09-09T20:42Z after top-row scaling fix
+# rerun 2026-09-09T20:44Z using rendered logo-area pixels
