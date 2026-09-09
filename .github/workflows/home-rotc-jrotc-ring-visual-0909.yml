@@ -1,0 +1,62 @@
+name: Homepage ROTC JROTC ring visual certification
+on:
+  push:
+    paths:
+      - '.github/workflows/home-rotc-jrotc-ring-visual-0909.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm init -y >/dev/null 2>&1 && npm i playwright@1.55.0 >/dev/null 2>&1 && npx playwright install chromium --with-deps >/dev/null 2>&1
+      - run: |
+          cat > verify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const url='https://www.statesideqm.com/?preview_theme_id=158561894555';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1200},deviceScaleFactor:1});
+          let r=null;
+          for(let a=1;a<=3;a++){
+            r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000}).catch(()=>null);
+            await page.waitForTimeout(2200);
+            if(r&&r.status()===200)break;
+          }
+          if(!r||r.status()!==200) throw new Error('Storefront preview did not load');
+          await page.addStyleTag({content:`
+            [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="rotc-series"] .sqhc-series-logo,
+            [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="jrotc-series"] .sqhc-series-logo{position:relative!important}
+            [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="rotc-series"] .sqhc-series-logo::before,
+            [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="jrotc-series"] .sqhc-series-logo::before{content:""!important;position:absolute!important;inset:17px!important;border:4px solid var(--bg)!important;border-radius:50%!important;box-sizing:border-box!important;pointer-events:none!important;z-index:2!important}
+            [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="rotc-series"] .sqhc-series-logo::after,
+            [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="jrotc-series"] .sqhc-series-logo::after{content:""!important;position:absolute!important;inset:18px!important;border:2px solid #d5ab4b!important;border-radius:50%!important;box-sizing:border-box!important;pointer-events:none!important;z-index:3!important}
+          `});
+          const cards=page.locator('[data-sq-series-handle="rotc-series"], [data-sq-series-handle="jrotc-series"], [data-sq-series-handle="military-schools-academies"]');
+          if(await cards.count()!==3) throw new Error('Expected three target cards');
+          await cards.first().scrollIntoViewIfNeeded();
+          await page.waitForTimeout(500);
+          const info=await page.evaluate(()=>{
+            return ['rotc-series','jrotc-series','military-schools-academies'].map(h=>{
+              const c=document.querySelector(`[data-sq-series-handle="${h}"]`);
+              const l=c?.querySelector('.sqhc-series-logo');
+              const r=l?.getBoundingClientRect();
+              const after=l?getComputedStyle(l,'::after'):null;
+              return {h,rect:r&&{x:r.x,y:r.y,w:r.width,h:r.height},afterBorder:after?.borderTopWidth,afterColor:after?.borderTopColor};
+            });
+          });
+          console.log(JSON.stringify(info));
+          if(info[0].afterBorder!=='2px'||info[1].afterBorder!=='2px') throw new Error('Gold ring overlay missing');
+          await cards.screenshot({path:'rotc-jrotc-ring-visual.png'});
+          await browser.close();
+          EOF
+          node verify.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rotc-jrotc-ring-visual
+          path: rotc-jrotc-ring-visual.png
+          if-no-files-found: error
