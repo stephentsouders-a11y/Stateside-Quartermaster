@@ -1,0 +1,32 @@
+name: Final current-theme publish gate
+on:
+  push:
+    paths:
+      - '.github/workflows/final-publish-gate.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Certify final draft desktop and mobile
+        run: |
+          cat > final.mjs <<'EOF'
+          import { chromium } from 'playwright'; import fs from 'fs'; fs.mkdirSync('out/failures',{recursive:true});
+          const base='https://www.statesideqm.com',theme='158561894555';
+          const routes=[['home','/'],['state-guard','/collections/state-guard-series'],['state-guard-alabama','/collections/state-guard-series-alabama'],['army','/collections/products-built-for-the-line-u-s-army'],['arng','/collections/army-national-guard-series'],['air-force','/collections/products-built-for-the-line-u-s-air-force'],['ang','/collections/air-national-guard-series'],['afg','/collections/armed-forces-gear'],['thin-line','/collections/thin-line'],['thin-yellow','/collections/thin-line-shop-thin-yellow-line?sq_type_family=First%20Responder%20Patches&sort_by=title-ascending'],['sta-brite','/collections/sta-brite-insignia'],['law','/collections/law-enforcement-corrections'],['fire-ems-sar','/collections/firefighting-ems-search-rescue'],['rotc','/collections/rotc-series'],['jrotc','/collections/jrotc-series'],['msa','/collections/military-schools-academies'],['flashlights','/collections/flashlights-lighting']];
+          const line=new Set(['army','arng','air-force','ang']); const results=[];
+          const browser=await chromium.launch({headless:true});
+          for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){const ctx=await browser.newContext({viewport});const page=await ctx.newPage();page.setDefaultNavigationTimeout(30000);for(let i=0;i<routes.length;i++){const [slug,route]=routes[i];const u=new URL(route,base);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',theme);const start=Date.now();let status=null,error=null;try{const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null}catch(e){error=String(e)}let usable=null;for(let j=0;j<24;j++){const s=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim();return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),loading:/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(t),visible:[...(m?.querySelectorAll('a,.product-card,.product-grid__item,.sqbfl-card,.sq-subcategory-card,.sg-entity,.sq-afg-branch-card,.sq-ts-match-card,.sq-type-family-product')||[])].some(e=>{const r=e.getBoundingClientRect();return r.width>30&&r.height>20})}}).catch(()=>({bad:true,loading:false,visible:false}));if(!s.bad&&!s.loading&&s.visible){usable=Date.now()-start;break}await page.waitForTimeout(200)}await page.waitForTimeout(400);const d=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim(),vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;const side=[...(m?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis),cards=[...(m?.querySelectorAll('.sq-subcategory-card,.sqbfl-card,.sg-entity,.sq-afg-branch-card,.sq-ts-match-card,.product-card,.product-grid__item,.sq-type-family-product')||[])].filter(vis),first=cards.slice(0,3).map(e=>e.getBoundingClientRect());return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),loading:/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(t),sidebar:side.length,cards:cards.length,sameRow:first.length>=3&&Math.max(...first.map(x=>x.y))-Math.min(...first.map(x=>x.y))<8,availability:[...(m?.querySelectorAll('a[href*="filter.v.availability"]')||[])].length,broken:[...(m?.querySelectorAll('img')||[])].filter(x=>x.complete&&x.naturalWidth===0).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,stateGuardPromoBeforeGrid:(()=>{const p=document.querySelector('[data-sq-state-guard-merch-feature]'),g=document.querySelector('[data-sq-state-guard-root] .sg-entity-grid');return!!(p&&g&&(p.compareDocumentPosition(g)&Node.DOCUMENT_POSITION_FOLLOWING))})()}});const gridFail=device==='desktop'&&line.has(slug)&&(d.sidebar!==1||d.cards<3||!d.sameRow);const failed=status!==200||error||d.bad||d.loading||usable===null||usable>5000||d.availability>0||d.broken>0||d.overflow||d.stateGuardPromoBeforeGrid||gridFail;if(failed)await page.screenshot({path:`out/failures/${device}-${slug}.png`,fullPage:true}).catch(()=>{});results.push({device,slug,route,status,error,usableMs:usable,gridFail,failed,...d});console.log(device,slug,failed?'FAIL':'PASS',usable);await page.waitForTimeout(350)}await ctx.close()}await browser.close();fs.writeFileSync('out/report.json',JSON.stringify(results,null,2));const failures=results.filter(x=>x.failed);console.log(JSON.stringify({tested:results.length,failures:failures.length,failedRoutes:failures},null,2));if(failures.length)process.exitCode=2;
+          EOF
+          node final.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: final-publish-gate, path: out, retention-days: 7}
