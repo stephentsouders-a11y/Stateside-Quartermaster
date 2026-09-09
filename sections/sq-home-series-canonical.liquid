@@ -46,21 +46,59 @@
   </div>
 </section>
 <style data-sq-home-series-live-look>
-[data-sq-line-series-root] .sqhc-series-card{position:relative!important;overflow:hidden!important;grid-template-rows:138px 48px 1px 64px 28px!important}
-[data-sq-line-series-root] .sqhc-series-logo img{transform-origin:center center!important}
-[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="army-national-guard-series"] .sqhc-series-logo img{clip-path:circle(47% at 50% 46%)!important;transform:scale(1.030)!important}
-[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="air-national-guard-series"] .sqhc-series-logo img{transform:none!important}
-[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="stateside-quartermaster-logo-merch"] .sqhc-series-logo img{transform:scale(1.015)!important}
+[data-sq-line-series-root] .sqhc-series-grid{grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:16px!important}
+[data-sq-line-series-root] .sqhc-series-card{position:relative!important;grid-column:auto!important;display:grid!important;grid-template-rows:136px 50px 1px 50px 26px!important;gap:6px!important;height:307px!important;padding:10px 12px 8px!important;overflow:hidden!important;box-sizing:border-box!important}
+[data-sq-line-series-root] .sqhc-series-logo{display:flex!important;align-items:center!important;justify-content:center!important;width:136px!important;height:136px!important;margin:auto!important;overflow:visible!important;border-radius:0!important}
+[data-sq-line-series-root] .sqhc-series-logo img{display:block!important;width:118px!important;height:118px!important;object-fit:contain!important;object-position:center!important;border-radius:50%!important;transform-origin:center center!important}
+[data-sq-line-series-root] .sqhc-series-title{display:flex!important;height:50px!important;align-items:center!important;justify-content:center!important;padding:0 4px!important;font-size:15.5px!important;font-weight:900!important;line-height:1.08!important;text-align:center!important;text-transform:uppercase!important;overflow-wrap:anywhere!important}
+[data-sq-line-series-root] .sqhc-series-title span{white-space:nowrap!important}
+[data-sq-line-series-root] .sqhc-series-rule{width:82%!important;height:1px!important;margin:auto!important;background:#d5ab4b!important}
+[data-sq-line-series-root] .sqhc-series-desc{display:flex!important;min-height:0!important;height:50px!important;align-items:flex-start!important;justify-content:center!important;padding:3px 5px 0!important;overflow:hidden!important;font-size:11.2px!important;font-weight:700!important;line-height:1.23!important;text-align:center!important}
+[data-sq-line-series-root] .sqhc-series-count{display:flex!important;align-items:center!important;justify-content:center!important;gap:7px!important;min-height:0!important;height:26px!important;margin:0!important;padding:0!important;transform:none!important;color:#d5ab4b!important;font-size:12px!important;font-weight:800!important;letter-spacing:.02em!important;line-height:1!important;text-align:center!important;white-space:nowrap!important;overflow:hidden!important}
+[data-sq-line-series-root] .sqhc-series-count::before,[data-sq-line-series-root] .sqhc-series-count::after{content:""!important;display:block!important;width:30px!important;height:1px!important;background:#d5ab4b!important;flex:0 1 30px!important;min-width:10px!important;opacity:.95!important}
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="stateside-quartermaster-logo-merch"] .sqhc-series-logo img{transform:scale(1.01)!important}
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="army-national-guard-series"] .sqhc-series-logo img{clip-path:circle(47% at 50% 46%)!important;transform:scale(.99)!important}
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="air-national-guard-series"] .sqhc-series-logo img{transform:scale(.97)!important}
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="products-built-for-the-line-u-s-army"] .sqhc-series-logo img,
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="products-built-for-the-line-u-s-navy"] .sqhc-series-logo img,
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="products-built-for-the-line-u-s-marine-corps"] .sqhc-series-logo img,
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="products-built-for-the-line-u-s-coast-guard"] .sqhc-series-logo img,
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="products-built-for-the-line-u-s-space-force"] .sqhc-series-logo img{transform:scale(.98)!important}
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="state-guard-series"] .sqhc-series-logo img,
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="products-built-for-the-line-u-s-air-force"] .sqhc-series-logo img,
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="rotc-series"] .sqhc-series-logo img,
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="jrotc-series"] .sqhc-series-logo img,
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="military-schools-academies"] .sqhc-series-logo img,
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="law-enforcement-corrections"] .sqhc-series-logo img,
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="firefighting-ems-search-rescue"] .sqhc-series-logo img{clip-path:none!important;transform:none!important}
-[data-sq-line-series-root] .sqhc-series-desc{overflow:hidden!important;min-height:0!important}
-[data-sq-line-series-root] .sqhc-series-count{display:flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;min-height:0!important;height:100%!important;margin:0!important;padding:0!important;transform:none!important;color:#d5ab4b!important;font-size:12px!important;font-weight:800!important;letter-spacing:.02em!important;line-height:1!important;text-align:center!important;white-space:nowrap!important;overflow:hidden!important}
-[data-sq-line-series-root] .sqhc-series-count::before,[data-sq-line-series-root] .sqhc-series-count::after{content:""!important;display:block!important;width:26px!important;height:1px!important;background:#d5ab4b!important;flex:0 1 26px!important;min-width:10px!important;opacity:.95!important}
-@media(max-width:649px){[data-sq-line-series-root] .sqhc-series-card{grid-template-rows:104px 42px 1px 51px 20px!important}[data-sq-line-series-root] .sqhc-series-count{gap:4px!important;font-size:10px!important;letter-spacing:0!important}[data-sq-line-series-root] .sqhc-series-count::before,[data-sq-line-series-root] .sqhc-series-count::after{width:18px!important;flex-basis:18px!important;min-width:6px!important}}
+@media(max-width:1120px){[data-sq-line-series-root] .sqhc-series-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
+@media(max-width:900px){[data-sq-line-series-root] .sqhc-series-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@media(max-width:649px){
+  [data-sq-line-series-root] .sqhc-series-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important}
+  [data-sq-line-series-root] .sqhc-series-card{grid-template-rows:104px 46px 1px 44px 22px!important;height:247px!important;padding:8px!important;gap:5px!important}
+  [data-sq-line-series-root] .sqhc-series-logo{width:104px!important;height:104px!important}
+  [data-sq-line-series-root] .sqhc-series-logo img{width:94px!important;height:94px!important}
+  [data-sq-line-series-root] .sqhc-series-title{height:46px!important;padding:0 2px!important;font-size:12.8px!important;line-height:1.08!important}
+  [data-sq-line-series-root] .sqhc-series-desc{height:44px!important;padding:2px 2px 0!important;font-size:9.2px!important;line-height:1.18!important}
+  [data-sq-line-series-root] .sqhc-series-count{height:22px!important;gap:5px!important;font-size:10px!important;letter-spacing:0!important}
+  [data-sq-line-series-root] .sqhc-series-count::before,[data-sq-line-series-root] .sqhc-series-count::after{width:18px!important;flex-basis:18px!important;min-width:6px!important}
+  [data-sq-line-series-root] .sqhc-series-card:last-child{grid-column:1/-1!important;width:calc((100% - 12px)/2)!important;justify-self:center!important}
+}
 </style>
-<script data-sq-home-series-reactive-counts>(function(){if(window.__sqHomeSeriesCountsV3)return;window.__sqHomeSeriesCountsV3=true;function label(n){return n+' '+(n===1?'item':'items')}function update(){document.querySelectorAll('[data-sq-line-series-root] a[data-sq-series-handle]').forEach(function(card){var el=card.querySelector('[data-sq-home-series-count]');if(!el)return;var n=parseInt(card.getAttribute('data-sq-item-count')||'',10);if(Number.isFinite(n))el.textContent=label(n);});}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',update,{once:true});else update();})();</script>
+<script data-sq-home-series-reactive-counts>
+(function(){
+  if(window.__sqHomeSeriesCountsV3)return;
+  window.__sqHomeSeriesCountsV3=true;
+  function label(n){return n+' '+(n===1?'item':'items')}
+  function update(){
+    document.querySelectorAll('[data-sq-line-series-root] a[data-sq-series-handle]').forEach(function(card){
+      var el=card.querySelector('[data-sq-home-series-count]');
+      if(!el)return;
+      var n=parseInt(card.getAttribute('data-sq-item-count')||'',10);
+      if(Number.isFinite(n))el.textContent=label(n);
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',update,{once:true});else update();
+})();
+</script>
 {% schema %}{"name":"SQ Canonical Line Series","settings":[],"presets":[{"name":"SQ Canonical Line Series"}]}{% endschema %}
