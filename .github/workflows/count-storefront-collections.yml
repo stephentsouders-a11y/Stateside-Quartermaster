@@ -1,0 +1,28 @@
+name: Count storefront collection sitemap routes
+on:
+  push:
+    paths:
+      - '.github/workflows/count-storefront-collections.yml'
+permissions:
+  contents: read
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          cat > count.mjs <<'EOF'
+          const base='https://www.statesideqm.com';
+          const locs=s=>[...s.matchAll(/<loc>(.*?)<\/loc>/gsi)].map(m=>m[1].replaceAll('&amp;','&').trim());
+          const root=await (await fetch(base+'/sitemap.xml')).text();
+          const sms=locs(root).filter(x=>/sitemap_collections/i.test(x));
+          let urls=[];
+          for(const sm of sms){const r=await fetch(sm);const x=await r.text();urls.push(...locs(x).filter(u=>u.startsWith(base+'/collections/')))}
+          urls=[...new Set(urls)].sort();
+          console.log('COLLECTION_SITEMAPS='+sms.length);
+          console.log('COLLECTION_URLS='+urls.length);
+          console.log('FIRST='+urls[0]);
+          console.log('LAST='+urls.at(-1));
+          EOF
+          node count.mjs
