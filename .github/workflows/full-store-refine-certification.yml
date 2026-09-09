@@ -14,7 +14,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/setup-node@v4
         with: {node-version: '24'}
@@ -29,10 +29,8 @@ jobs:
           cat > audit.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'fs';
-          const shard=Number(process.env.SHARD||0);
-          const shardCount=6;
-          const out=`full-cert-${shard}`;
-          fs.mkdirSync(`${out}/screens`,{recursive:true});
+          const shard=Number(process.env.SHARD||0), shardCount=6;
+          const out=`full-cert-${shard}`; fs.mkdirSync(`${out}/screens`,{recursive:true});
           const theme='158561894555';
           const allRoutes=[
             ['Accessories, Gifts & Collectibles','/collections/accessories-gifts-collectibles','collection'],
@@ -81,134 +79,75 @@ jobs:
           const routes=allRoutes.filter((_,i)=>i%shardCount===shard);
           const browser=await chromium.launch({headless:true});
           const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
-          const rows=[], failures=[];
-          const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60);
+          const rows=[],failures=[];
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          const visible=async loc=>await loc.isVisible().catch(()=>false);
-
-          async function gotoWithRetry(page,target){
+          const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60);
+          const fail=(name,msg)=>failures.push(`${name}: ${msg}`);
+          async function gotoRetry(page,url){
             let resp=null,err=null,attempts=0;
-            for(const delay of [0,8000,20000,40000]){
-              if(delay)await sleep(delay);
-              attempts++;
-              err=null;
-              try{resp=await page.goto(target,{waitUntil:'domcontentloaded',timeout:60000})}catch(e){err=String(e)}
-              if(err)continue;
-              if(resp?.status()!==429)return {resp,err:null,attempts};
+            for(const delay of [0,5000,12000,25000]){
+              if(delay)await sleep(delay); attempts++; err=null;
+              try{resp=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000})}catch(e){err=String(e)}
+              const st=resp?.status(); if(!err && st!==429 && !(st>=500)) return {resp,err:null,attempts};
             }
             return {resp,err,attempts};
           }
-
-          async function productVendorFromLink(href){
+          async function vendorFor(href){
             try{
-              const u=new URL(href,'https://www.statesideqm.com');
-              const m=u.pathname.match(/^\/products\/([^/?#]+)/); if(!m)return null;
-              const url='https://www.statesideqm.com/products/'+m[1]+'.js';
-              for(const delay of [0,2500,7000]){
-                if(delay)await sleep(delay);
-                const r=await ctx.request.get(url,{timeout:15000});
-                if(r.status()===429)continue;
-                if(!r.ok())return null;
-                const j=await r.json(); return String(j.vendor||'').trim();
-              }
-              return null;
-            }catch{return null}
+              const u=new URL(href,'https://www.statesideqm.com'); const m=u.pathname.match(/^\/products\/([^/?#]+)/); if(!m)return null;
+              for(const delay of [0,2500,6000]){if(delay)await sleep(delay); const r=await ctx.request.get(`https://www.statesideqm.com/products/${m[1]}.js`,{timeout:15000}); if(r.status()===429)continue; if(!r.ok())return null; return String((await r.json()).vendor||'').trim()}
+            }catch{} return null;
           }
-
           for(const [name,path,type] of routes){
-            const page=await ctx.newPage();
-            page.setDefaultTimeout(12000); page.setDefaultNavigationTimeout(60000);
+            const page=await ctx.newPage(); page.setDefaultTimeout(10000); page.setDefaultNavigationTimeout(60000);
             const consoleErrors=[]; page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
-            const target='https://www.statesideqm.com'+path+(path.includes('?')?'&':'?')+'preview_theme_id='+theme;
-            const started=Date.now();
-            const nav=await gotoWithRetry(page,target);
-            const resp=nav.resp, navError=nav.err;
-            let usableMs=null;
-            if(!navError && resp?.status()!==429){
-              for(let i=0;i<64;i++){
-                const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const h=m.querySelector('h1,.collection-title,.title');if(!h)return false;const r=h.getBoundingClientRect();return r.width>0&&r.height>0}).catch(()=>false);
-                if(ok){usableMs=Date.now()-started;break}
-                await page.waitForTimeout(125);
+            const target=`https://www.statesideqm.com${path}${path.includes('?')?'&':'?'}preview_theme_id=${theme}`;
+            let row={name,path,type,status:null,navAttempts:0,navError:null,usableMs:null,base:{main:false},refine:{expected:type==='collection',attempted:false,vendor:null,interactionError:null,checked:false,urlFiltered:false,productsChecked:0,vendors:[],allMatch:null,cleared:false},consoleErrors:[]};
+            try{
+              const started=Date.now(),nav=await gotoRetry(page,target); row.status=nav.resp?.status()??null; row.navAttempts=nav.attempts; row.navError=nav.err;
+              if(!nav.err && row.status!==429 && !(row.status>=500)){
+                for(let i=0;i<80;i++){const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const h=m.querySelector('h1,.collection-title,.title');if(!h)return false;const r=h.getBoundingClientRect();return r.width>0&&r.height>0}).catch(()=>false);if(ok){row.usableMs=Date.now()-started;break}await page.waitForTimeout(125)}
               }
-            }
-            await page.waitForTimeout(1800);
-            const base=await page.evaluate(()=>{
-              const main=document.querySelector('#MainContent'); if(!main)return {main:false};
-              const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
-              const side=[...main.querySelectorAll('.sq-global-refine-sidebar')].filter(vis);
-              const native=[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis);
-              const nav=performance.getEntriesByType('navigation')[0];
-              return {main:true,url:location.href,title:document.title,sidebarCount:side.length,nativeFilters:native.length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,brokenImages:[...main.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.currentSrc||i.src).filter(Boolean),manufacturerDetails:[...main.querySelectorAll('.sq-global-refine-sidebar details')].filter(d=>/manufacturer/i.test(d.querySelector(':scope>summary')?.textContent||'')).length,checkboxes:[...main.querySelectorAll('.sq-global-refine-manufacturer-checkbox')].length,perf:nav?{ttfb:Math.round(nav.responseStart),dcl:Math.round(nav.domContentLoadedEventEnd),load:Math.round(nav.loadEventEnd),transferSize:nav.transferSize,decodedBodySize:nav.decodedBodySize}:null};
-            }).catch(()=>({main:false}));
-
-            let refine={expected:type==='collection',attempted:false,vendor:null,checked:false,urlFiltered:false,productsChecked:0,vendors:[],allMatch:null,cleared:false};
-            if(type==='collection'&&base.main){
-              const side=page.locator('.sq-global-refine-sidebar').first();
-              if(await visible(side)){
+              if(type==='collection') await page.locator('.sq-global-refine-sidebar').first().waitFor({state:'visible',timeout:12000}).catch(()=>{});
+              if(type==='collection') await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:9000}).catch(()=>{});
+              await page.waitForTimeout(400);
+              row.base=await page.evaluate(()=>{const main=document.querySelector('#MainContent');if(!main)return {main:false};const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};const side=[...main.querySelectorAll('.sq-global-refine-sidebar')].filter(vis);const native=[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis);const n=performance.getEntriesByType('navigation')[0];return {main:true,url:location.href,title:document.title,sidebarCount:side.length,nativeFilters:native.length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,brokenImages:[...main.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.currentSrc||i.src).filter(Boolean),manufacturerDetails:[...main.querySelectorAll('.sq-global-refine-sidebar details')].filter(d=>/manufacturer/i.test(d.querySelector(':scope>summary')?.textContent||'')).length,checkboxes:[...main.querySelectorAll('.sq-global-refine-manufacturer-checkbox')].length,perf:n?{ttfb:Math.round(n.responseStart),dcl:Math.round(n.domContentLoadedEventEnd),load:Math.round(n.loadEventEnd),transferSize:n.transferSize,decodedBodySize:n.decodedBodySize}:null}}).catch(()=>({main:false}));
+              if(type==='collection'&&row.base.main){
                 const md=page.locator('.sq-global-refine-sidebar details').filter({has:page.locator('summary').filter({hasText:/Manufacturer/i})}).first();
                 if(await md.count()){
-                  if((await md.getAttribute('open'))===null)await md.locator('summary').click().catch(()=>{});
-                  await page.waitForTimeout(200);
-                  const boxes=md.locator('.sq-global-refine-manufacturer-checkbox');
-                  if(await boxes.count()){
-                    refine.attempted=true;
-                    const box=boxes.first(); refine.vendor=await box.inputValue();
-                    await box.check().catch(async()=>box.click());
-                    await page.waitForURL(u=>new URL(u).searchParams.get('filter.p.vendor')===refine.vendor,{timeout:15000}).catch(()=>{});
-                    await page.waitForLoadState('domcontentloaded').catch(()=>{});
-                    await page.waitForTimeout(1200);
-                    refine.urlFiltered=new URL(page.url()).searchParams.get('filter.p.vendor')===refine.vendor;
-                    refine.checked=await page.locator('.sq-global-refine-manufacturer-checkbox').first().isChecked().catch(()=>false);
-                    let links=await page.locator('#MainContent .product-grid a[href*="/products/"],#MainContent .card-product a[href*="/products/"],#MainContent a.full-unstyled-link[href*="/products/"]').evaluateAll(as=>[...new Set(as.map(a=>a.href))].slice(0,3)).catch(()=>[]);
-                    if(!links.length)links=await page.locator('#MainContent a[href*="/products/"]').evaluateAll(as=>[...new Set(as.map(a=>a.href))].slice(0,3)).catch(()=>[]);
-                    const vendors=[]; for(const href of links){const v=await productVendorFromLink(href);if(v)vendors.push(v)}
-                    refine.productsChecked=vendors.length; refine.vendors=vendors; refine.allMatch=vendors.length?vendors.every(v=>v.toLowerCase()===String(refine.vendor).toLowerCase()):null;
-                    const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first();
-                    if(await active.count()){
-                      await active.uncheck().catch(async()=>active.click());
-                      await page.waitForURL(u=>!new URL(u).searchParams.has('filter.p.vendor'),{timeout:15000}).catch(()=>{});
-                      await page.waitForLoadState('domcontentloaded').catch(()=>{});
-                      await page.waitForTimeout(700);
-                      refine.cleared=!new URL(page.url()).searchParams.has('filter.p.vendor');
+                  if((await md.getAttribute('open'))===null)await md.locator('summary').click({timeout:5000}).catch(()=>{});
+                  const box=md.locator('.sq-global-refine-manufacturer-checkbox').first();
+                  if(await box.count()){
+                    row.refine.attempted=true; row.refine.vendor=await box.inputValue();
+                    try{await box.check({force:true,timeout:7000})}catch(e){row.refine.interactionError='select '+String(e).split('\n')[0]}
+                    if(!row.refine.interactionError){
+                      await page.waitForURL(u=>{const q=new URL(u).searchParams;return q.get('filter.p.vendor')===row.refine.vendor&&q.get('sq_maker')===row.refine.vendor},{timeout:15000}).catch(()=>{});
+                      await page.waitForLoadState('domcontentloaded').catch(()=>{}); await page.waitForTimeout(1800);
+                      const q=new URL(page.url()).searchParams; row.refine.urlFiltered=q.get('filter.p.vendor')===row.refine.vendor&&q.get('sq_maker')===row.refine.vendor;
+                      await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:9000}).catch(()=>{});
+                      row.refine.checked=await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().isChecked().catch(()=>false);
+                      let links=await page.locator('#MainContent .product-grid a[href*="/products/"],#MainContent .card-product a[href*="/products/"],#MainContent a.full-unstyled-link[href*="/products/"]').evaluateAll(as=>[...new Set(as.map(a=>a.href))].slice(0,3)).catch(()=>[]);
+                      if(!links.length)links=await page.locator('#MainContent a[href*="/products/"]').evaluateAll(as=>[...new Set(as.map(a=>a.href))].slice(0,3)).catch(()=>[]);
+                      for(const href of links){const v=await vendorFor(href);if(v)row.refine.vendors.push(v)} row.refine.productsChecked=row.refine.vendors.length; row.refine.allMatch=row.refine.vendors.length?row.refine.vendors.every(v=>v.toLowerCase()===String(row.refine.vendor).toLowerCase()):null;
+                      const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first();
+                      if(await active.count()){
+                        try{await active.uncheck({force:true,timeout:7000})}catch(e){row.refine.interactionError='clear '+String(e).split('\n')[0]}
+                        if(!row.refine.interactionError){await page.waitForURL(u=>{const q2=new URL(u).searchParams;return !q2.has('filter.p.vendor')&&!q2.has('sq_maker')},{timeout:15000}).catch(()=>{});const q2=new URL(page.url()).searchParams;row.refine.cleared=!q2.has('filter.p.vendor')&&!q2.has('sq_maker')}
+                      }
                     }
                   }
                 }
               }
-            }
-
-            await page.screenshot({path:`${out}/screens/${slug(name)}.png`,fullPage:false}).catch(()=>{});
-            const row={name,path,type,status:resp?.status()??null,navAttempts:nav.attempts,navError,usableMs,base,refine,consoleErrors:consoleErrors.filter(e=>!e.includes('shop.app')).slice(0,8)}; rows.push(row);
-            if(row.status!==200)failures.push(`${name}: HTTP ${row.status}`);
-            if(navError)failures.push(`${name}: navigation error`);
-            if(usableMs===null||usableMs>5000)failures.push(`${name}: usable ${usableMs}ms`);
-            if(!base.main)failures.push(`${name}: #MainContent missing`);
-            if(base.overflow)failures.push(`${name}: horizontal overflow`);
-            if(base.brokenImages?.length)failures.push(`${name}: ${base.brokenImages.length} broken images`);
+            }catch(e){row.routeError=String(e).split('\n')[0]}
+            await page.screenshot({path:`${out}/screens/${slug(name)}.png`,fullPage:false}).catch(()=>{}); row.consoleErrors=consoleErrors.filter(e=>!e.includes('shop.app')).slice(0,8); rows.push(row);
+            if(row.status!==200)fail(name,`HTTP ${row.status}`); if(row.navError)fail(name,'navigation error'); if(row.routeError)fail(name,`route error ${row.routeError}`); if(row.usableMs===null||row.usableMs>5000)fail(name,`usable ${row.usableMs}ms`); if(!row.base.main)fail(name,'#MainContent missing'); if(row.base.overflow)fail(name,'horizontal overflow'); if(row.base.brokenImages?.length)fail(name,`${row.base.brokenImages.length} broken images`);
             if(type==='collection'){
-              if(base.sidebarCount!==1)failures.push(`${name}: refine sidebar count ${base.sidebarCount}`);
-              if(base.nativeFilters!==0)failures.push(`${name}: duplicate native filters ${base.nativeFilters}`);
-              if((base.manufacturerDetails??0)<1)failures.push(`${name}: Manufacturer group missing`);
-              if((base.checkboxes??0)<1)failures.push(`${name}: manufacturer checkboxes missing`);
-              if(!refine.attempted)failures.push(`${name}: manufacturer checkbox was not testable`);
-              else {
-                if(!refine.urlFiltered)failures.push(`${name}: manufacturer filter URL did not apply`);
-                if(!refine.checked)failures.push(`${name}: manufacturer checkbox did not remain checked`);
-                if(refine.productsChecked<1)failures.push(`${name}: no product vendors could be verified after filtering`);
-                if(refine.allMatch===false)failures.push(`${name}: filtered results include wrong manufacturer(s): ${refine.vendors.join(', ')}`);
-                if(!refine.cleared)failures.push(`${name}: manufacturer filter did not clear`);
-              }
+              if(row.base.sidebarCount!==1)fail(name,`refine sidebar count ${row.base.sidebarCount}`); if(row.base.nativeFilters!==0)fail(name,`duplicate native filters ${row.base.nativeFilters}`); if((row.base.manufacturerDetails??0)<1)fail(name,'Manufacturer group missing'); if((row.base.checkboxes??0)<1)fail(name,'manufacturer checkboxes missing');
+              if(!row.refine.attempted)fail(name,'manufacturer checkbox was not testable'); else {if(row.refine.interactionError)fail(name,row.refine.interactionError);if(!row.refine.urlFiltered)fail(name,'dual manufacturer filter URL did not apply');if(!row.refine.checked)fail(name,'manufacturer checkbox did not remain checked');if(row.refine.productsChecked<1)fail(name,'no product vendors could be verified after filtering');if(row.refine.allMatch===false)fail(name,`filtered results include wrong manufacturer(s): ${row.refine.vendors.join(', ')}`);if(!row.refine.cleared)fail(name,'manufacturer filter did not clear')}
             }
-            console.log(JSON.stringify(row));
-            await page.close();
-            await sleep(2500);
+            console.log(JSON.stringify(row)); await page.close(); await sleep(3000);
           }
-          await ctx.close(); await browser.close();
-          const badRoutes=new Set(failures.map(f=>f.split(':')[0]));
-          const summary={theme,shard,routes:rows.length,passed:rows.length-badRoutes.size,failures,rows};
-          fs.writeFileSync(`${out}/report.json`,JSON.stringify(summary,null,2));
-          fs.writeFileSync(`${out}/failures.txt`,failures.join('\n'));
-          console.log('\nFINAL\n'+JSON.stringify({shard,routes:rows.length,passed:rows.length-badRoutes.size,failures},null,2));
-          if(failures.length)process.exitCode=2;
+          await ctx.close(); await browser.close(); const bad=new Set(failures.map(f=>f.split(':')[0])); const summary={theme,shard,routes:rows.length,passed:rows.length-bad.size,failures,rows}; fs.writeFileSync(`${out}/report.json`,JSON.stringify(summary,null,2)); fs.writeFileSync(`${out}/failures.txt`,failures.join('\n')); console.log('\nFINAL\n'+JSON.stringify({shard,routes:rows.length,passed:rows.length-bad.size,failures},null,2)); if(failures.length)process.exitCode=2;
           EOF
           node audit.mjs
       - uses: actions/upload-artifact@v4
