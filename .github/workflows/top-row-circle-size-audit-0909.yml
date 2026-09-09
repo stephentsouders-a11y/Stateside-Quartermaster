@@ -27,9 +27,19 @@ jobs:
           const handles=['stateside-quartermaster-logo-merch','army-national-guard-series','air-national-guard-series','state-guard-series','products-built-for-the-line-u-s-army'];
           const browser=await chromium.launch({headless:true});
           const page=await browser.newPage({viewport:{width:1440,height:1150},deviceScaleFactor:1});
-          await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
-          await page.waitForTimeout(3500);
-          await page.locator('[data-sq-series-handle="air-national-guard-series"]').scrollIntoViewIfNeeded();
+          let ready=false;
+          for(let attempt=1;attempt<=5;attempt++){
+            const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000}).catch(()=>null);
+            await page.waitForTimeout(3000);
+            const count=await page.locator('[data-sq-series-handle="air-national-guard-series"]').count().catch(()=>0);
+            if(response && response.status()===200 && count){ready=true;break;}
+            await page.waitForTimeout(1500);
+          }
+          if(!ready){
+            await page.screenshot({path:`${out}/load-failure.png`,fullPage:true}).catch(()=>{});
+            throw new Error('Preview theme did not render the line-series selector after 5 attempts');
+          }
+          await page.locator('[data-sq-series-handle="air-national-guard-series"]').scrollIntoViewIfNeeded({timeout:10000});
           await page.waitForTimeout(1000);
           const rows=[];
           for(const h of handles){
@@ -64,10 +74,11 @@ jobs:
           EOF
           node measure.mjs
       - name: Commit measurement evidence
+        if: always()
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add audit-output/top-row-circle-size
           git diff --cached --quiet || git commit -m 'Store top-row circle logo size audit'
           git push
-# rerun 2026-09-09T20:44Z using rendered logo-area pixels
+# rerun 2026-09-09T20:47Z resilient preview retries
