@@ -101,3 +101,8 @@
     flex-basis:24px;
   }
 }
+
+/* Army National Guard seal cleanup: source PNG contains three stray light pixels below the circular seal. Clip only this logo to the actual seal boundary. */
+.sqhc-series-card[data-sq-series-handle="army-national-guard-series"] .sqhc-series-logo img{
+  clip-path:circle(47% at 50% 46%);
+}
