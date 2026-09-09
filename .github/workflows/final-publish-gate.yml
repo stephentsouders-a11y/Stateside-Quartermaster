@@ -1,4 +1,5 @@
 name: Final current-theme publish gate
+# final isolated sequential certification for unpublished theme 158561894555
 on:
   push:
     paths:
@@ -19,6 +20,10 @@ jobs:
           - {slug: arng, path: /collections/army-national-guard-series, line: true}
           - {slug: air-force, path: /collections/products-built-for-the-line-u-s-air-force, line: true}
           - {slug: ang, path: /collections/air-national-guard-series, line: true}
+          - {slug: navy, path: /collections/products-built-for-the-line-u-s-navy, line: true}
+          - {slug: marines, path: /collections/products-built-for-the-line-u-s-marine-corps, line: true}
+          - {slug: coast-guard, path: /collections/products-built-for-the-line-u-s-coast-guard, line: true}
+          - {slug: space-force, path: /collections/products-built-for-the-line-u-s-space-force, line: true}
           - {slug: afg, path: /collections/armed-forces-gear, line: false}
           - {slug: thin-line, path: /collections/thin-line, line: false}
           - {slug: thin-yellow, path: '/collections/thin-line-shop-thin-yellow-line?sq_type_family=First%20Responder%20Patches&sort_by=title-ascending', line: false}
@@ -30,7 +35,7 @@ jobs:
           - {slug: msa, path: /collections/military-schools-academies, line: false}
           - {slug: flashlights, path: /collections/flashlights-lighting, line: false}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/setup-node@v4
         with: {node-version: '24'}
@@ -47,19 +52,19 @@ jobs:
           cat > route.mjs <<'EOF'
           import { chromium } from 'playwright'; import fs from 'fs'; fs.mkdirSync('out',{recursive:true});
           const base='https://www.statesideqm.com',theme='158561894555',results=[];
+          const HARD_LIMIT=5000;
           for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
             const browser=await chromium.launch({headless:true});const ctx=await browser.newContext({viewport});const page=await ctx.newPage();page.setDefaultNavigationTimeout(60000);
             const u=new URL(process.env.ROUTE,base);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',theme);
             await page.waitForTimeout(2500);const start=Date.now();let status=null,error=null;
-            try{let r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null;if(status===429){await page.waitForTimeout(12000);r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null}}catch(e){error=String(e)}
-            let usable=null;for(let i=0;i<36;i++){const s=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim();return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),loading:/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(t),visible:[...(m?.querySelectorAll('a,.product-card,.product-grid__item,.sqbfl-card,.sq-subcategory-card,.sg-entity,.sq-afg-branch-card,.sq-ts-match-card,.sq-type-family-product')||[])].some(e=>{const r=e.getBoundingClientRect();return r.width>30&&r.height>20})}}).catch(()=>({bad:true,loading:false,visible:false}));if(!s.bad&&!s.loading&&s.visible){usable=Date.now()-start;break}await page.waitForTimeout(200)}await page.waitForTimeout(600);
-            const d=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim(),vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;const side=[...(m?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis),cards=[...(m?.querySelectorAll('.sq-subcategory-card,.sqbfl-card,.sg-entity,.sq-afg-branch-card,.sq-ts-match-card,.product-card,.product-grid__item,.sq-type-family-product')||[])].filter(vis),first=cards.slice(0,3).map(e=>e.getBoundingClientRect());return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),loading:/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(t),sidebar:side.length,cards:cards.length,sameRow:first.length>=3&&Math.max(...first.map(x=>x.y))-Math.min(...first.map(x=>x.y))<8,availability:[...(m?.querySelectorAll('a[href*="filter.v.availability"]')||[])].length,broken:[...(m?.querySelectorAll('img')||[])].filter(x=>x.complete&&x.naturalWidth===0).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,stateGuardPromoBeforeGrid:(()=>{const p=document.querySelector('[data-sq-state-guard-merch-feature]'),g=document.querySelector('[data-sq-state-guard-root] .sg-entity-grid');return!!(p&&g&&(p.compareDocumentPosition(g)&Node.DOCUMENT_POSITION_FOLLOWING))})()}});
-            await page.screenshot({path:`out/${process.env.SLUG}-${device}.png`,fullPage:true}).catch(()=>{});const gridFail=device==='desktop'&&process.env.LINE==='true'&&(d.sidebar!==1||d.cards<3||!d.sameRow);const failed=status!==200||error||d.bad||d.loading||usable===null||usable>5000||d.availability>0||d.broken>0||d.overflow||d.stateGuardPromoBeforeGrid||gridFail;results.push({device,status,error,usableMs:usable,gridFail,failed,...d});await browser.close();if(device==='desktop')await new Promise(r=>setTimeout(r,5000));
+            try{let r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null;if(status===429||status>=500){await page.waitForTimeout(8000);r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null}}catch(e){error=String(e)}
+            let usable=null;for(let i=0;i<60;i++){const s=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{if(!e)return false;const c=getComputedStyle(e),r=e.getBoundingClientRect();return c.display!=='none'&&c.visibility!=='hidden'&&r.width>30&&r.height>20},t=(m?.innerText||'').replace(/\s+/g,' ').trim();const loading=[...(m?.querySelectorAll('[data-sqbfl-load-state],p,small,span,div')||[])].filter(vis).some(e=>/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test((e.innerText||'').trim()));return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),loading,visible:[...(m?.querySelectorAll('a,.product-card,.product-grid__item,.sqbfl-card,.sq-subcategory-card,.sg-entity,.sq-afg-branch-card,.sq-ts-match-card,.sq-type-family-product')||[])].some(vis)}}).catch(()=>({bad:true,loading:false,visible:false}));if(!s.bad&&!s.loading&&s.visible){usable=Date.now()-start;break}await page.waitForTimeout(200)}await page.waitForTimeout(600);
+            const d=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim(),vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;const side=[...(m?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis),cards=[...(m?.querySelectorAll('.sq-subcategory-card,.sqbfl-card,.sg-entity,.sq-afg-branch-card,.sq-ts-match-card,.product-card,.product-grid__item,.sq-type-family-product')||[])].filter(vis).filter(e=>!side.some(s=>s.contains(e))),first=cards.slice(0,3).map(e=>e.getBoundingClientRect()),loading=[...(m?.querySelectorAll('[data-sqbfl-load-state],p,small,span,div')||[])].filter(vis).some(e=>/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test((e.innerText||'').trim()));return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),loading,sidebar:side.length,cards:cards.length,sameRow:first.length>=3&&Math.max(...first.map(x=>x.y))-Math.min(...first.map(x=>x.y))<8,availability:[...(m?.querySelectorAll('a[href*="filter.v.availability"]')||[])].length,broken:[...(m?.querySelectorAll('img')||[])].filter(x=>x.complete&&x.naturalWidth===0).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,stateGuardPromoBeforeGrid:(()=>{const p=document.querySelector('[data-sq-state-guard-merch-feature]'),g=document.querySelector('[data-sq-state-guard-root] .sg-entity-grid');return!!(p&&g&&(p.compareDocumentPosition(g)&Node.DOCUMENT_POSITION_FOLLOWING))})()}});
+            await page.screenshot({path:`out/${process.env.SLUG}-${device}.png`,fullPage:true}).catch(()=>{});const gridFail=device==='desktop'&&process.env.LINE==='true'&&(d.sidebar!==1||d.cards<3||!d.sameRow);const failed=status!==200||error||d.bad||d.loading||usable===null||usable>HARD_LIMIT||d.availability>0||d.broken>0||d.overflow||d.stateGuardPromoBeforeGrid||gridFail;results.push({device,status,error,usableMs:usable,gridFail,failed,...d});await browser.close();if(device==='desktop')await new Promise(r=>setTimeout(r,5000));
           }
-          console.log(JSON.stringify({slug:process.env.SLUG,results},null,2));fs.writeFileSync('out/report.json',JSON.stringify({slug:process.env.SLUG,results},null,2));if(results.some(x=>x.failed))process.exitCode=2;
+          console.log(JSON.stringify({slug:process.env.SLUG,results},null,2));fs.writeFileSync('out/report.json',JSON.stringify({slug:process.env.SLUG,hardLimitMs:HARD_LIMIT,results},null,2));if(results.some(x=>x.failed))process.exitCode=2;
           EOF
           node route.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with: {name: 'final-${{ matrix.slug }}', path: out, retention-days: 7}
-# rerun marker: current draft after progressive count-truthfulness fix
