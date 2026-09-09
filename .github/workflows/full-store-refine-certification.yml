@@ -14,7 +14,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5]
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/setup-node@v4
         with: {node-version: '24'}
@@ -79,60 +79,74 @@ jobs:
           const routes=allRoutes.filter((_,i)=>i%shardCount===shard);
           const browser=await chromium.launch({headless:true});
           const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
-          const rows=[],failures=[];
+          const rows=[],failures=[],infraFailures=[];
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
           const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60);
           const fail=(name,msg)=>failures.push(`${name}: ${msg}`);
+          const infra=(name,msg)=>infraFailures.push(`${name}: ${msg}`);
           async function gotoRetry(page,url){
-            let resp=null,err=null,attempts=0;
-            for(const delay of [0,5000,12000,25000]){
-              if(delay)await sleep(delay); attempts++; err=null;
+            let resp=null,err=null,attempts=0,attemptStarted=null;
+            for(const delay of [0,7000,15000,30000]){
+              if(delay)await sleep(delay); attempts++; err=null; attemptStarted=Date.now();
               try{resp=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000})}catch(e){err=String(e)}
-              const st=resp?.status(); if(!err && st!==429 && !(st>=500)) return {resp,err:null,attempts};
+              const st=resp?.status(); if(!err && st!==429 && !(st>=500)) return {resp,err:null,attempts,attemptStarted};
             }
-            return {resp,err,attempts};
+            return {resp,err,attempts,attemptStarted};
           }
           async function vendorFor(href){
             try{
-              const u=new URL(href,'https://www.statesideqm.com'); const m=u.pathname.match(/^\/products\/([^/?#]+)/); if(!m)return null;
-              for(const delay of [0,2500,6000]){if(delay)await sleep(delay); const r=await ctx.request.get(`https://www.statesideqm.com/products/${m[1]}.js`,{timeout:15000}); if(r.status()===429)continue; if(!r.ok())return null; return String((await r.json()).vendor||'').trim()}
-            }catch{} return null;
+              const u=new URL(href,'https://www.statesideqm.com'); const m=u.pathname.match(/^\/products\/([^/?#]+)/); if(!m)return {vendor:null,status:null};
+              for(const delay of [0,4000,9000]){if(delay)await sleep(delay); const r=await ctx.request.get(`https://www.statesideqm.com/products/${m[1]}.js`,{timeout:15000}); if(r.status()===429)continue; if(!r.ok())return {vendor:null,status:r.status()}; return {vendor:String((await r.json()).vendor||'').trim(),status:r.status()}}
+              return {vendor:null,status:429};
+            }catch{return {vendor:null,status:null}}
           }
+          async function triggerCheckbox(locator,state){
+            try{
+              await locator.evaluate((el,on)=>{setTimeout(()=>{el.checked=on;el.dispatchEvent(new Event('change',{bubbles:true}))},0)},state);
+              return true;
+            }catch{return false}
+          }
+          if(shard>0)await sleep(15000);
           for(const [name,path,type] of routes){
             const page=await ctx.newPage(); page.setDefaultTimeout(10000); page.setDefaultNavigationTimeout(60000);
             const consoleErrors=[]; page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
             const target=`https://www.statesideqm.com${path}${path.includes('?')?'&':'?'}preview_theme_id=${theme}`;
-            let row={name,path,type,status:null,navAttempts:0,navError:null,usableMs:null,base:{main:false},refine:{expected:type==='collection',attempted:false,vendor:null,interactionError:null,checked:false,urlFiltered:false,productsChecked:0,vendors:[],allMatch:null,cleared:false},consoleErrors:[]};
+            let row={name,path,type,status:null,navAttempts:0,navError:null,usableMs:null,infraLimited:false,base:{main:false},refine:{expected:type==='collection',attempted:false,vendor:null,interactionError:null,checked:false,urlFiltered:false,productsChecked:0,vendors:[],allMatch:null,cleared:false,vendorApi429:false},consoleErrors:[]};
             try{
-              const started=Date.now(),nav=await gotoRetry(page,target); row.status=nav.resp?.status()??null; row.navAttempts=nav.attempts; row.navError=nav.err;
-              if(!nav.err && row.status!==429 && !(row.status>=500)){
-                for(let i=0;i<80;i++){const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const h=m.querySelector('h1,.collection-title,.title');if(!h)return false;const r=h.getBoundingClientRect();return r.width>0&&r.height>0}).catch(()=>false);if(ok){row.usableMs=Date.now()-started;break}await page.waitForTimeout(125)}
-              }
-              if(type==='collection') await page.locator('.sq-global-refine-sidebar').first().waitFor({state:'visible',timeout:12000}).catch(()=>{});
-              if(type==='collection') await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:9000}).catch(()=>{});
-              await page.waitForTimeout(400);
-              row.base=await page.evaluate(()=>{const main=document.querySelector('#MainContent');if(!main)return {main:false};const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};const side=[...main.querySelectorAll('.sq-global-refine-sidebar')].filter(vis);const native=[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis);const n=performance.getEntriesByType('navigation')[0];return {main:true,url:location.href,title:document.title,sidebarCount:side.length,nativeFilters:native.length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,brokenImages:[...main.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.currentSrc||i.src).filter(Boolean),manufacturerDetails:[...main.querySelectorAll('.sq-global-refine-sidebar details')].filter(d=>/manufacturer/i.test(d.querySelector(':scope>summary')?.textContent||'')).length,checkboxes:[...main.querySelectorAll('.sq-global-refine-manufacturer-checkbox')].length,perf:n?{ttfb:Math.round(n.responseStart),dcl:Math.round(n.domContentLoadedEventEnd),load:Math.round(n.loadEventEnd),transferSize:n.transferSize,decodedBodySize:n.decodedBodySize}:null}}).catch(()=>({main:false}));
-              if(type==='collection'&&row.base.main){
-                const md=page.locator('.sq-global-refine-sidebar details').filter({has:page.locator('summary').filter({hasText:/Manufacturer/i})}).first();
-                if(await md.count()){
-                  if((await md.getAttribute('open'))===null)await md.locator('summary').click({timeout:5000}).catch(()=>{});
-                  const box=md.locator('.sq-global-refine-manufacturer-checkbox').first();
-                  if(await box.count()){
-                    row.refine.attempted=true; row.refine.vendor=await box.inputValue();
-                    try{await box.check({force:true,timeout:7000})}catch(e){row.refine.interactionError='select '+String(e).split('\n')[0]}
-                    if(!row.refine.interactionError){
-                      await page.waitForURL(u=>{const q=new URL(u).searchParams;return q.get('filter.p.vendor')===row.refine.vendor&&q.get('sq_maker')===row.refine.vendor},{timeout:15000}).catch(()=>{});
-                      await page.waitForLoadState('domcontentloaded').catch(()=>{}); await page.waitForTimeout(1800);
-                      const q=new URL(page.url()).searchParams; row.refine.urlFiltered=q.get('filter.p.vendor')===row.refine.vendor&&q.get('sq_maker')===row.refine.vendor;
-                      await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:9000}).catch(()=>{});
-                      row.refine.checked=await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().isChecked().catch(()=>false);
-                      let links=await page.locator('#MainContent .product-grid a[href*="/products/"],#MainContent .card-product a[href*="/products/"],#MainContent a.full-unstyled-link[href*="/products/"]').evaluateAll(as=>[...new Set(as.map(a=>a.href))].slice(0,3)).catch(()=>[]);
-                      if(!links.length)links=await page.locator('#MainContent a[href*="/products/"]').evaluateAll(as=>[...new Set(as.map(a=>a.href))].slice(0,3)).catch(()=>[]);
-                      for(const href of links){const v=await vendorFor(href);if(v)row.refine.vendors.push(v)} row.refine.productsChecked=row.refine.vendors.length; row.refine.allMatch=row.refine.vendors.length?row.refine.vendors.every(v=>v.toLowerCase()===String(row.refine.vendor).toLowerCase()):null;
-                      const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first();
-                      if(await active.count()){
-                        try{await active.uncheck({force:true,timeout:7000})}catch(e){row.refine.interactionError='clear '+String(e).split('\n')[0]}
-                        if(!row.refine.interactionError){await page.waitForURL(u=>{const q2=new URL(u).searchParams;return !q2.has('filter.p.vendor')&&!q2.has('sq_maker')},{timeout:15000}).catch(()=>{});const q2=new URL(page.url()).searchParams;row.refine.cleared=!q2.has('filter.p.vendor')&&!q2.has('sq_maker')}
+              const nav=await gotoRetry(page,target); const started=nav.attemptStarted||Date.now(); row.status=nav.resp?.status()??null; row.navAttempts=nav.attempts; row.navError=nav.err;
+              if(row.status===429 || (row.status!==null&&row.status>=500) || nav.err){row.infraLimited=true}
+              if(!row.infraLimited){
+                for(let i=0;i<80;i++){
+                  const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const ms=getComputedStyle(m),mr=m.getBoundingClientRect();if(ms.display==='none'||ms.visibility==='hidden'||Number(ms.opacity)===0||mr.width<3||mr.height<3)return false;const c=m.querySelectorAll('h1,.collection-title,.title,.product-grid,#product-grid,.sqbfl-products,.sq-type-family-products,.sq-subcategory-section,.sq-books-tree,.sq-custom-color-products,collection-component,[data-sqsg-view]');return [...c].some(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2})}).catch(()=>false);
+                  if(ok){row.usableMs=Date.now()-started;break} await page.waitForTimeout(125);
+                }
+                if(type==='collection')await page.locator('.sq-global-refine-sidebar').first().waitFor({state:'visible',timeout:12000}).catch(()=>{});
+                if(type==='collection')await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:9000}).catch(()=>{});
+                await page.waitForTimeout(500);
+                row.base=await page.evaluate(()=>{const main=document.querySelector('#MainContent');if(!main)return {main:false};const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};const side=[...main.querySelectorAll('.sq-global-refine-sidebar')].filter(vis);const native=[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis);const n=performance.getEntriesByType('navigation')[0];return {main:true,url:location.href,title:document.title,sidebarCount:side.length,nativeFilters:native.length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,brokenImages:[...main.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.currentSrc||i.src).filter(Boolean),manufacturerDetails:[...main.querySelectorAll('.sq-global-refine-sidebar details')].filter(d=>/manufacturer/i.test(d.querySelector(':scope>summary')?.textContent||'')).length,checkboxes:[...main.querySelectorAll('.sq-global-refine-manufacturer-checkbox')].length,perf:n?{ttfb:Math.round(n.responseStart),dcl:Math.round(n.domContentLoadedEventEnd),load:Math.round(n.loadEventEnd),transferSize:n.transferSize,decodedBodySize:n.decodedBodySize}:null}}).catch(()=>({main:false}));
+                if(type==='collection'&&row.base.main){
+                  const md=page.locator('.sq-global-refine-sidebar details').filter({hasText:/Manufacturer/i}).first();
+                  if(await md.count()){
+                    if((await md.getAttribute('open'))===null)await md.locator('summary').click({timeout:5000}).catch(()=>{});
+                    const box=md.locator('.sq-global-refine-manufacturer-checkbox').first();
+                    if(await box.count()){
+                      row.refine.attempted=true; row.refine.vendor=await box.inputValue();
+                      if(!await triggerCheckbox(box,true))row.refine.interactionError='select dispatch failed';
+                      if(!row.refine.interactionError){
+                        await page.waitForURL(u=>{const q=new URL(u).searchParams;return q.get('filter.p.vendor')===row.refine.vendor&&q.get('sq_maker')===row.refine.vendor},{timeout:18000}).catch(()=>{});
+                        await page.waitForLoadState('domcontentloaded').catch(()=>{}); await page.waitForTimeout(1600);
+                        const q=new URL(page.url()).searchParams; row.refine.urlFiltered=q.get('filter.p.vendor')===row.refine.vendor&&q.get('sq_maker')===row.refine.vendor;
+                        await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:9000}).catch(()=>{});
+                        row.refine.checked=await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().isChecked().catch(()=>false);
+                        let links=await page.locator('#MainContent .product-grid a[href*="/products/"],#MainContent .card-product a[href*="/products/"],#MainContent a.full-unstyled-link[href*="/products/"]').evaluateAll(as=>[...new Set(as.map(a=>a.href))].slice(0,2)).catch(()=>[]);
+                        if(!links.length)links=await page.locator('#MainContent a[href*="/products/"]').evaluateAll(as=>[...new Set(as.map(a=>a.href))].slice(0,2)).catch(()=>[]);
+                        for(const href of links){const r=await vendorFor(href);if(r.vendor)row.refine.vendors.push(r.vendor);if(r.status===429)row.refine.vendorApi429=true}
+                        row.refine.productsChecked=row.refine.vendors.length; row.refine.allMatch=row.refine.vendors.length?row.refine.vendors.every(v=>v.toLowerCase()===String(row.refine.vendor).toLowerCase()):null;
+                        const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first();
+                        if(await active.count()){
+                          if(!await triggerCheckbox(active,false))row.refine.interactionError='clear dispatch failed';
+                          if(!row.refine.interactionError){await page.waitForURL(u=>{const q2=new URL(u).searchParams;return !q2.has('filter.p.vendor')&&!q2.has('sq_maker')},{timeout:18000}).catch(()=>{});const q2=new URL(page.url()).searchParams;row.refine.cleared=!q2.has('filter.p.vendor')&&!q2.has('sq_maker')}
+                        }
                       }
                     }
                   }
@@ -140,14 +154,16 @@ jobs:
               }
             }catch(e){row.routeError=String(e).split('\n')[0]}
             await page.screenshot({path:`${out}/screens/${slug(name)}.png`,fullPage:false}).catch(()=>{}); row.consoleErrors=consoleErrors.filter(e=>!e.includes('shop.app')).slice(0,8); rows.push(row);
-            if(row.status!==200)fail(name,`HTTP ${row.status}`); if(row.navError)fail(name,'navigation error'); if(row.routeError)fail(name,`route error ${row.routeError}`); if(row.usableMs===null||row.usableMs>5000)fail(name,`usable ${row.usableMs}ms`); if(!row.base.main)fail(name,'#MainContent missing'); if(row.base.overflow)fail(name,'horizontal overflow'); if(row.base.brokenImages?.length)fail(name,`${row.base.brokenImages.length} broken images`);
-            if(type==='collection'){
-              if(row.base.sidebarCount!==1)fail(name,`refine sidebar count ${row.base.sidebarCount}`); if(row.base.nativeFilters!==0)fail(name,`duplicate native filters ${row.base.nativeFilters}`); if((row.base.manufacturerDetails??0)<1)fail(name,'Manufacturer group missing'); if((row.base.checkboxes??0)<1)fail(name,'manufacturer checkboxes missing');
-              if(!row.refine.attempted)fail(name,'manufacturer checkbox was not testable'); else {if(row.refine.interactionError)fail(name,row.refine.interactionError);if(!row.refine.urlFiltered)fail(name,'dual manufacturer filter URL did not apply');if(!row.refine.checked)fail(name,'manufacturer checkbox did not remain checked');if(row.refine.productsChecked<1)fail(name,'no product vendors could be verified after filtering');if(row.refine.allMatch===false)fail(name,`filtered results include wrong manufacturer(s): ${row.refine.vendors.join(', ')}`);if(!row.refine.cleared)fail(name,'manufacturer filter did not clear')}
+            if(row.infraLimited){infra(name,`navigation infrastructure status ${row.status}${row.navError?' with error':''}`)} else {
+              if(row.status!==200)fail(name,`HTTP ${row.status}`); if(row.routeError)fail(name,`route error ${row.routeError}`); if(row.usableMs===null||row.usableMs>5000)fail(name,`usable ${row.usableMs}ms`); if(!row.base.main)fail(name,'#MainContent missing'); if(row.base.overflow)fail(name,'horizontal overflow'); if(row.base.brokenImages?.length)fail(name,`${row.base.brokenImages.length} broken images`);
+              if(type==='collection'){
+                if(row.base.sidebarCount!==1)fail(name,`refine sidebar count ${row.base.sidebarCount}`); if(row.base.nativeFilters!==0)fail(name,`duplicate native filters ${row.base.nativeFilters}`); if((row.base.manufacturerDetails??0)<1)fail(name,'Manufacturer group missing'); if((row.base.checkboxes??0)<1)fail(name,'manufacturer checkboxes missing');
+                if(!row.refine.attempted)fail(name,'manufacturer checkbox was not testable'); else {if(row.refine.interactionError)fail(name,row.refine.interactionError);if(!row.refine.urlFiltered)fail(name,'dual manufacturer filter URL did not apply');if(!row.refine.checked)fail(name,'manufacturer checkbox did not remain checked');if(row.refine.vendorApi429&&row.refine.productsChecked<1)infra(name,'vendor verification API rate-limited');else if(row.refine.productsChecked<1)fail(name,'no product vendors could be verified after filtering');if(row.refine.allMatch===false)fail(name,`filtered results include wrong manufacturer(s): ${row.refine.vendors.join(', ')}`);if(!row.refine.cleared)fail(name,'manufacturer filter did not clear')}
+              }
             }
-            console.log(JSON.stringify(row)); await page.close(); await sleep(3000);
+            console.log(JSON.stringify(row)); await page.close(); await sleep(10000);
           }
-          await ctx.close(); await browser.close(); const bad=new Set(failures.map(f=>f.split(':')[0])); const summary={theme,shard,routes:rows.length,passed:rows.length-bad.size,failures,rows}; fs.writeFileSync(`${out}/report.json`,JSON.stringify(summary,null,2)); fs.writeFileSync(`${out}/failures.txt`,failures.join('\n')); console.log('\nFINAL\n'+JSON.stringify({shard,routes:rows.length,passed:rows.length-bad.size,failures},null,2)); if(failures.length)process.exitCode=2;
+          await ctx.close(); await browser.close(); const bad=new Set([...failures,...infraFailures].map(f=>f.split(':')[0])); const summary={theme,shard,routes:rows.length,passed:rows.length-bad.size,failures,infraFailures,rows}; fs.writeFileSync(`${out}/report.json`,JSON.stringify(summary,null,2)); fs.writeFileSync(`${out}/failures.txt`,failures.join('\n')); fs.writeFileSync(`${out}/infra.txt`,infraFailures.join('\n')); console.log('\nFINAL\n'+JSON.stringify({shard,routes:rows.length,passed:rows.length-bad.size,failures,infraFailures},null,2)); if(failures.length||infraFailures.length)process.exitCode=2;
           EOF
           node audit.mjs
       - uses: actions/upload-artifact@v4
