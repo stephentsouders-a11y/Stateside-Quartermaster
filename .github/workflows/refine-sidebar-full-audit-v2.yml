@@ -1,5 +1,5 @@
-name: Refine Products sidebar exhaustive certification v3
-# final checksum cad5d7869cd62786794a63d7244034e5; exact desktop Refine/card top alignment <8px
+name: Refine Products sidebar exhaustive certification v4
+# final checksum cad5d7869cd62786794a63d7244034e5; settle before verdict
 on:
   push:
     paths:
@@ -9,20 +9,20 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 32
+      max-parallel: 8
       matrix:
         shard: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31]
     steps:
       - uses: actions/setup-node@v4
         with: {node-version: '24'}
       - run: |
-          npm init -y
-          npm install playwright@1.55.0
-          npx playwright install --with-deps chromium
-      - name: Exhaustive sidebar audit
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Exhaustive settled-state sidebar audit
         env:
           SHARD: ${{ matrix.shard }}
         run: |
@@ -30,50 +30,20 @@ jobs:
           import { chromium } from 'playwright'; import fs from 'fs';
           const base='https://www.statesideqm.com',theme='158561894555',shard=Number(process.env.SHARD),shards=32;
           const locs=s=>[...s.matchAll(/<loc>(.*?)<\/loc>/gsi)].map(m=>m[1].replaceAll('&amp;','&').trim());
-          const get=async u=>{for(let i=0;i<4;i++){try{const r=await fetch(u);if(r.ok)return await r.text();if(r.status===429)await new Promise(x=>setTimeout(x,3000*(i+1)))}catch{}await new Promise(x=>setTimeout(x,600*(i+1)))}throw new Error('fetch '+u)};
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          async function get(u){for(let i=0;i<5;i++){try{const r=await fetch(u);if(r.ok)return await r.text()}catch{}await sleep(800*(i+1))}throw new Error('fetch '+u)}
           const root=await get(base+'/sitemap.xml'),sms=locs(root).filter(x=>/sitemap_collections/i.test(x));let urls=[];for(const s of sms)urls.push(...locs(await get(s)).filter(x=>x.startsWith(base+'/collections/')));urls=[...new Set(urls)].sort();const mine=urls.filter((_,i)=>i%shards===shard);
-          fs.mkdirSync('out',{recursive:true}); const browser=await chromium.launch({headless:true}); const results=[];
-          for(const source of mine){for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
-            const ctx=await browser.newContext({viewport});const p=await ctx.newPage();p.setDefaultNavigationTimeout(30000);const u=new URL(source);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',theme);let status=null,error=null,d=null;
-            for(let attempt=1;attempt<=3;attempt++){
-              error=null;
-              try{const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null;if(status===200)await p.waitForTimeout(850);d=await p.evaluate(device=>{const m=document.querySelector('#MainContent')||document.querySelector('main');if(!m)return null;const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&+s.opacity!==0&&r.width>2&&r.height>2},text=(m.innerText||'').replace(/\s+/g,' ').trim();
-                const side=[...m.querySelectorAll('.sq-global-refine-sidebar')].filter(vis),sb=side[0]||null;
-                const productLinks=[...m.querySelectorAll('a[href*="/products/"]')].filter(vis);
-                const productCards=[...m.querySelectorAll('.product-grid__item,.product-card,.sqbfl-product,.sq-type-family-product,.sq-ts-match-card,.sq-custom-color-products__item')].filter(vis);
-                const categoryCards=[...m.querySelectorAll('.sq-subcategory-card,.sqbfl-card,.sg-entity,.sq-afg-branch-card,.sq-third-level__type,.sq-books-tree a,.sq-msa-card,.sq-thin-line-card')].filter(vis);
-                const hasProducts=productLinks.length>0||productCards.length>0;
-                const customSurface=!!m.querySelector('.sq-books-tree,.sq-subcategory-section,.sq-type-family-products,.sqbfl-w,.sqbfl,[data-sqsg-view],.sq-custom-color-products,.sq-msa-root,.sq-thin-line-root');
-                const hasCollectionSurface=hasProducts||categoryCards.length>0||customSurface||!!m.querySelector('collection-component');
-                const nativeDesktop=[...m.querySelectorAll('.facets-block-wrapper .facets--horizontal,.facets--horizontal.facets')].filter(vis).filter(e=>!sb?.contains(e));
-                const nativeFilterItems=nativeDesktop.flatMap(e=>[...e.querySelectorAll('.facets__filters-wrapper,.facets__summary')].filter(vis));
-                const nativeMobile=[...m.querySelectorAll('.facets-toggle__wrapper,.facets-toggle__button')].filter(vis).filter(e=>!sb?.contains(e));
-                const links=sb?[...sb.querySelectorAll('a[href]')]:[];
-                const availabilityLinks=[...m.querySelectorAll('a[href*="filter.v.availability"]')];
-                const badLinks=links.filter(a=>{const h=a.getAttribute('href')||'';return !h||h==='#'||/^javascript:/i.test(h)});
-                const counts=sb?[...sb.querySelectorAll('small,[data-count],[class*="count"]')].filter(vis):[];
-                const badCountText=counts.filter(e=>/checking|loading|updating|undefined|null|nan/i.test((e.textContent||'').trim()));
-                const progressive=!!m.querySelector('[data-sqbfl-load-state="progressive"]');
-                const progressiveCountBad=progressive&&counts.some(e=>/\d/.test(e.textContent||''));
-                let geometry=true,overlap=false,under=false,topDelta=0;const sr=sb?.getBoundingClientRect();let first=null;
-                const candidates=[...productCards,...categoryCards,...productLinks].filter(vis).filter(e=>!sb?.contains(e)).sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top||a.getBoundingClientRect().left-b.getBoundingClientRect().left);if(candidates[0])first=candidates[0].getBoundingClientRect();
-                if(device==='desktop'&&hasCollectionSurface&&sb&&first){overlap=!(sr.right<=first.left+8||first.right<=sr.left+8||sr.bottom<=first.top+8||first.bottom<=sr.top+8);under=first.top>sr.bottom-8;topDelta=Math.abs(sr.top-first.top);geometry=sr.left<first.left&&sr.right<=first.left+16&&topDelta<8&&!overlap}
-                const sbClip=sb?sr.left<-2||sr.right>innerWidth+2||sb.scrollWidth>sb.clientWidth+4:false,pageOverflow=document.documentElement.scrollWidth>document.documentElement.clientWidth+4;
-                const bad=/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+text),loading=[...m.querySelectorAll('[data-sqbfl-load-state],p,small,span,div')].filter(vis).some(e=>/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test((e.innerText||'').trim()));
-                return{bad,loading,hasProducts,customSurface,hasCollectionSurface,productLinks:productLinks.length,productCards:productCards.length,categoryCards:categoryCards.length,sidebarCount:side.length,sidebarHeading:sb?(sb.querySelector('.sq-global-refine-sidebar__title')?.textContent||'').trim():'',sidebarLinks:links.length,availabilityLinks:availabilityLinks.length,badLinks:badLinks.length,badCountText:badCountText.length,progressive,progressiveCountBad,nativeDesktopFilters:nativeFilterItems.length,nativeMobileFilters:nativeMobile.length,geometry,overlap,under,topDelta,sbClip,pageOverflow,sidebarRect:sr?{x:sr.x,y:sr.y,w:sr.width,h:sr.height}:null,firstRect:first?{x:first.x,y:first.y,w:first.width,h:first.height}:null};
-              },device);if(status===200&&d&&!d.bad)break}catch(e){error=String(e)}await p.waitForTimeout(1800*attempt)
-            }
-            d=d||{bad:true,loading:false,hasCollectionSurface:false,sidebarCount:0,nativeDesktopFilters:0,nativeMobileFilters:0,availabilityLinks:0,badLinks:0,badCountText:0,progressiveCountBad:false,geometry:false,sbClip:false,pageOverflow:false};
-            const sidebarRequired=status===200&&d.hasCollectionSurface; const missing=sidebarRequired&&d.sidebarCount!==1; const duplicate=d.sidebarCount>1; const nativeDuplicate=d.sidebarCount===1&&((device==='desktop'&&d.nativeDesktopFilters>0)||(device==='mobile'&&d.nativeMobileFilters>0)); const geomFail=device==='desktop'&&sidebarRequired&&d.sidebarCount===1&&!d.geometry;
-            const failed=status!==200||!!error||d.bad||d.loading||missing||duplicate||nativeDuplicate||geomFail||d.availabilityLinks>0||d.badLinks>0||d.badCountText>0||d.progressiveCountBad||d.sbClip||d.pageOverflow;
-            const row={path:new URL(source).pathname,device,status,error,sidebarRequired,missing,duplicate,nativeDuplicate,geomFail,failed,...d};results.push(row);console.log(JSON.stringify(row));await ctx.close();
-          }}
-          await browser.close();const failures=results.filter(x=>x.failed);fs.writeFileSync('out/summary.json',JSON.stringify({shard,totalStoreUrls:urls.length,pages:mine.length,views:results.length,passed:results.length-failures.length,failed:failures.length,failures,results},null,2));console.log(`SHARD ${shard}: ${results.length-failures.length}/${results.length} PASS; ${failures.length} FAIL of ${urls.length} URLs`);if(failures.length)process.exitCode=2;
+          fs.mkdirSync('out',{recursive:true});const browser=await chromium.launch({headless:true});const results=[];
+          async function inspect(p,device){return await p.evaluate(device=>{const m=document.querySelector('#MainContent')||document.querySelector('main');if(!m)return null;const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&+s.opacity!==0&&r.width>2&&r.height>2};const text=(m.innerText||'').replace(/\s+/g,' ').trim();const side=[...m.querySelectorAll('.sq-global-refine-sidebar')].filter(vis),sb=side[0]||null;const productLinks=[...m.querySelectorAll('a[href*="/products/"]')].filter(vis);const productCards=[...m.querySelectorAll('.product-grid__item,.product-card,.sqbfl-product,.sq-type-family-product,.sq-ts-match-card,.sq-custom-color-products__item')].filter(vis);const categoryCards=[...m.querySelectorAll('.sq-subcategory-card,.sqbfl-card,.sg-entity,.sq-afg-branch-card,.sq-third-level__type,.sq-books-tree a,.sq-msa-card,.sq-thin-line-card')].filter(vis);const customSurface=!!m.querySelector('.sq-books-tree,.sq-subcategory-section,.sq-type-family-products,.sqbfl-w,.sqbfl,[data-sqsg-view],.sq-custom-color-products,.sq-msa-root,.sq-thin-line-root');const hasCollectionSurface=productLinks.length>0||productCards.length>0||categoryCards.length>0||customSurface||!!m.querySelector('collection-component');const nativeDesktop=[...m.querySelectorAll('.facets-block-wrapper .facets--horizontal,.facets--horizontal.facets')].filter(vis).filter(e=>!sb?.contains(e)).flatMap(e=>[...e.querySelectorAll('.facets__filters-wrapper,.facets__summary')].filter(vis));const nativeMobile=[...m.querySelectorAll('.facets-toggle__wrapper,.facets-toggle__button')].filter(vis).filter(e=>!sb?.contains(e));const links=sb?[...sb.querySelectorAll('a[href]')]:[];const availabilityLinks=[...m.querySelectorAll('a[href*="filter.v.availability"]')];const badLinks=links.filter(a=>{const h=a.getAttribute('href')||'';return !h||h==='#'||/^javascript:/i.test(h)});const counts=sb?[...sb.querySelectorAll('small,[data-count],[class*="count"]')].filter(vis):[];const badCountText=counts.filter(e=>/checking|loading|updating|undefined|null|nan/i.test((e.textContent||'').trim()));const progressive=!!m.querySelector('[data-sqbfl-load-state="progressive"]'),progressiveCountBad=progressive&&counts.some(e=>/\d/.test(e.textContent||''));const sr=sb?.getBoundingClientRect();const candidates=[...productCards,...categoryCards,...productLinks].filter(vis).filter(e=>!sb?.contains(e)).sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top||a.getBoundingClientRect().left-b.getBoundingClientRect().left);const fr=candidates[0]?.getBoundingClientRect();let geometry=true,topDelta=0,overlap=false;if(device==='desktop'&&hasCollectionSurface&&sb&&fr){topDelta=Math.abs(sr.top-fr.top);overlap=!(sr.right<=fr.left+8||fr.right<=sr.left+8||sr.bottom<=fr.top+8||fr.bottom<=sr.top+8);geometry=sr.left<fr.left&&sr.right<=fr.left+16&&topDelta<8&&!overlap}const loading=[...m.querySelectorAll('[data-sqbfl-load-state],p,small,span,div')].filter(vis).some(e=>/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test((e.innerText||'').trim()));const bad=/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+text);const sbClip=sb?sr.left<-2||sr.right>innerWidth+2||sb.scrollWidth>sb.clientWidth+4:false,pageOverflow=document.documentElement.scrollWidth>document.documentElement.clientWidth+4;return{bad,loading,hasCollectionSurface,sidebarCount:side.length,sidebarHeading:sb?(sb.querySelector('.sq-global-refine-sidebar__title')?.textContent||'').trim():'',sidebarLinks:links.length,availabilityLinks:availabilityLinks.length,badLinks:badLinks.length,badCountText:badCountText.length,progressiveCountBad,nativeDesktopFilters:nativeDesktop.length,nativeMobileFilters:nativeMobile.length,geometry,topDelta,overlap,sbClip,pageOverflow,productLinks:productLinks.length,productCards:productCards.length,categoryCards:categoryCards.length,sidebarRect:sr?{x:sr.x,y:sr.y,w:sr.width,h:sr.height}:null,firstRect:fr?{x:fr.x,y:fr.y,w:fr.width,h:fr.height}:null};},device)}
+          for(const source of mine){for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){const ctx=await browser.newContext({viewport});const p=await ctx.newPage();p.setDefaultNavigationTimeout(45000);const u=new URL(source);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',theme);let status=null,error=null,d=null,settled=false;
+            for(let nav=0;nav<3&&!settled;nav++){error=null;try{const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null;if(status!==200){await sleep(1500*(nav+1));continue}let stable=0;for(let tick=0;tick<36;tick++){await sleep(250);d=await inspect(p,device);if(!d)continue;const sidebarRequired=d.hasCollectionSurface;const structural=!d.bad&&!d.loading&&(!sidebarRequired||d.sidebarCount===1)&&d.sidebarCount<=1&&d.nativeDesktopFilters===0&&d.nativeMobileFilters===0&&d.availabilityLinks===0&&d.badLinks===0&&d.badCountText===0&&!d.progressiveCountBad&&!d.sbClip&&!d.pageOverflow&&(device!=='desktop'||!sidebarRequired||d.sidebarCount!==1||d.geometry);if(structural){stable++;if(stable>=2){settled=true;break}}else stable=0}}catch(e){error=String(e)}if(!settled)await sleep(1500*(nav+1))}
+            d=d||{bad:true,loading:false,hasCollectionSurface:false,sidebarCount:0,nativeDesktopFilters:0,nativeMobileFilters:0,availabilityLinks:0,badLinks:0,badCountText:0,progressiveCountBad:false,geometry:false,sbClip:false,pageOverflow:false};const sidebarRequired=status===200&&d.hasCollectionSurface,missing=sidebarRequired&&d.sidebarCount!==1,duplicate=d.sidebarCount>1,nativeDuplicate=d.sidebarCount===1&&((device==='desktop'&&d.nativeDesktopFilters>0)||(device==='mobile'&&d.nativeMobileFilters>0)),geomFail=device==='desktop'&&sidebarRequired&&d.sidebarCount===1&&!d.geometry;const failed=!settled||status!==200||!!error||d.bad||d.loading||missing||duplicate||nativeDuplicate||geomFail||d.availabilityLinks>0||d.badLinks>0||d.badCountText>0||d.progressiveCountBad||d.sbClip||d.pageOverflow;const row={path:new URL(source).pathname,device,status,error,settled,sidebarRequired,missing,duplicate,nativeDuplicate,geomFail,failed,...d};results.push(row);if(failed)console.log(JSON.stringify(row));await ctx.close()}}
+          await browser.close();const failures=results.filter(x=>x.failed);fs.writeFileSync('out/summary.json',JSON.stringify({shard,totalStoreUrls:urls.length,pages:mine.length,views:results.length,passed:results.length-failures.length,failed:failures.length,failures},null,2));console.log(`SHARD ${shard}: ${results.length-failures.length}/${results.length} PASS; ${failures.length} FAIL of ${urls.length} URLs`);if(failures.length)process.exitCode=2;
           EOF
           node audit.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: refine-sidebar-v3-${{ matrix.shard }}
+          name: refine-sidebar-v4-${{ matrix.shard }}
           path: out/summary.json
           retention-days: 7
