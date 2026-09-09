@@ -1,0 +1,41 @@
+name: State Guard PT final Chromium certification
+on:
+  push:
+    paths:
+      - '.github/workflows/state-guard-pt-final-cert.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - run: |
+          cat > verify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const base='https://www.statesideqm.com/collections/state-guard-series-alabama';
+          const theme='158561894555';
+          const cases=[
+            {name:'pt-root',qs:{sg_type:'PT Uniform'},expectRoot:true},
+            {name:'footwear',qs:{sg_type:'PT Uniform',sg_component:'Footwear'},expectShoe:true},
+            {name:'cold-weather',qs:{sg_type:'PT Uniform',sg_component:'Cold Weather PT'},forbidShoe:true}
+          ];
+          const browser=await chromium.launch({headless:true});let failed=false;
+          for(const device of [{name:'desktop',viewport:{width:1440,height:1100}},{name:'mobile',viewport:{width:390,height:844}}]){
+            for(const c of cases){
+              const page=await browser.newPage({viewport:device.viewport});const u=new URL(base);u.searchParams.set('preview_theme_id',theme);for(const [k,v] of Object.entries(c.qs))u.searchParams.set(k,v);
+              let r=null;for(let a=0;a<3;a++){r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:45000}).catch(()=>null);await page.waitForTimeout(2600);if(r?.status()===200)break;await page.waitForTimeout(1800)}
+              const d=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>1&&r.height>1};const cards=[...(m?.querySelectorAll('a.sqsg-card')||[])].filter(vis),products=[...(m?.querySelectorAll('a.sqsg-product[href^="/products/"]')||[])].filter(vis);const txt=(m?.innerText||'').replace(/\s+/g,' ');return{rootFootwear:cards.some(a=>/PT Footwear/i.test(a.innerText||'')),shoeProducts:products.filter(a=>/m-tac-carbon-performance-sneakers/i.test(a.getAttribute('href')||'')).length,shoeText:/M-Tac Carbon Performance Sneakers/i.test(txt),coldLeak:products.some(a=>/m-tac-carbon-performance-sneakers|shoe|sneaker|footwear/i.test((a.getAttribute('href')||'')+' '+(a.innerText||''))),overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,broken:[...(m?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).length,error:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+txt)}});
+              const bad=!r||r.status()!==200||d.error||d.overflow||d.broken>0||(c.expectRoot&&!d.rootFootwear)||(c.expectShoe&&(d.shoeProducts!==1||!d.shoeText))||(c.forbidShoe&&d.coldLeak);
+              console.log(JSON.stringify({device:device.name,case:c.name,status:r?.status()??null,bad,...d}));if(bad)failed=true;await page.close();
+            }
+          }
+          await browser.close();if(failed)process.exit(1);
+          EOF
+          node verify.mjs
