@@ -1,0 +1,112 @@
+name: Refine failure retest
+on:
+  push:
+    paths:
+      - '.github/workflows/refine-failure-retest.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  retest:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - {slug: body-armor-ballistic-protection, name: 'Body Armor & Ballistic Protection', path: /collections/body-armor-ballistic-protection}
+          - {slug: books-literature-manuals-reference, name: 'Books, Literature, Manuals & Reference', path: /collections/literature}
+          - {slug: child-safety-shop, name: 'Child Safety Shop', path: /collections/child-safety-shop}
+          - {slug: firearm-accessories, name: 'Firearm Accessories, Holsters & Shooting Gear', path: /collections/firearm-accessories}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Retest failed route
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          SLUG: ${{ matrix.slug }}
+          NAME: ${{ matrix.name }}
+          ROUTE: ${{ matrix.path }}
+        run: |
+          cat > retest.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage();
+          page.setDefaultTimeout(14000); page.setDefaultNavigationTimeout(60000);
+          const bad429=[],bad5xx=[],consoleErrors=[];
+          page.on('response',r=>{if(r.status()===429)bad429.push(r.url());if(r.status()>=500)bad5xx.push(`${r.status()} ${r.url()}`)});
+          page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+          const result={name:process.env.NAME,slug:process.env.SLUG,status:null,usableMs:null,outcome:'FAIL',reasons:[],base:{},refine:{vendor:null,urlFiltered:false,checked:false,surface:null,productsChecked:0,vendors:[],allMatch:null,cleared:false},bad429:[],bad5xx:[],consoleErrors:[]};
+          const challenge=async()=>page.evaluate(()=>/verify you are human|just a moment|attention required|performing security verification/i.test((document.title||'')+' '+(document.body?.innerText||''))).catch(()=>false);
+          const target=new URL(process.env.ROUTE,process.env.BASE);target.searchParams.set('preview_theme_id',process.env.THEME);
+          async function visibleLinks(){
+            const sels=['#MainContent [data-sq-filtered-product-surface-guard-products] a[href*="/products/"]','#MainContent [data-sq-category-universe-products] a[href*="/products/"]','#MainContent [data-sq-custom-color-products] a[href*="/products/"]','#MainContent .sq-custom-color-products a[href*="/products/"]','#MainContent .product-grid a[href*="/products/"]','#MainContent #product-grid a[href*="/products/"]','#MainContent collection-component a[href*="/products/"]'];
+            for(const sel of sels){const links=await page.locator(sel).evaluateAll(as=>[...new Set(as.filter(a=>{const s=getComputedStyle(a),r=a.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2}).map(a=>a.href))].slice(0,2)).catch(()=>[]);if(links.length)return{sel,links}}
+            return{sel:null,links:[]};
+          }
+          async function vendorFor(href){try{const u=new URL(href),m=u.pathname.match(/^\/products\/([^/?#]+)/);if(!m)return null;const r=await ctx.request.get(`${process.env.BASE}/products/${m[1]}.js`,{timeout:15000});if(r.status()>=500)bad5xx.push(`${r.status()} product-vendor ${m[1]}`);if(r.status()===429)bad429.push(`vendor ${m[1]}`);if(!r.ok())return null;return String((await r.json()).vendor||'').trim()}catch{return null}}
+          try{
+            await sleep(2500);
+            const started=Date.now();const resp=await page.goto(target.toString(),{waitUntil:'domcontentloaded'});result.status=resp?.status()??null;
+            if(result.status===429||result.status>=500||await challenge()){result.outcome='INFRA';result.reasons.push(`navigation/challenge ${result.status}`)}
+            if(result.outcome!=='INFRA'){
+              for(let i=0;i<40;i++){
+                const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const r=m.getBoundingClientRect(),s=getComputedStyle(m);if(s.display==='none'||s.visibility==='hidden'||r.width<3||r.height<3)return false;return !!m.querySelector('h1,.product-grid,#product-grid,.sq-subcategory-section,.sq-books-tree,collection-component,a[href*="/collections/"],a[href*="/products/"]')}).catch(()=>false);
+                if(ok){result.usableMs=Date.now()-started;break}await sleep(250);
+              }
+              await page.locator('.sq-global-refine-sidebar').first().waitFor({state:'visible',timeout:12000}).catch(()=>{});
+              await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:14000}).catch(()=>{});
+              result.base=await page.evaluate(()=>{const main=document.querySelector('#MainContent');if(!main)return{main:false};const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return{main:true,sidebarCount:[...main.querySelectorAll('.sq-global-refine-sidebar')].filter(vis).length,nativeFilters:[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,brokenImages:[...main.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.currentSrc||i.src),checkboxes:main.querySelectorAll('.sq-global-refine-manufacturer-checkbox').length}}).catch(()=>({main:false}));
+              await page.screenshot({path:'out/base.png',fullPage:false}).catch(()=>{});
+              const box=page.locator('.sq-global-refine-manufacturer-checkbox').first();
+              if(await box.count()){
+                result.refine.vendor=await box.inputValue();
+                await box.evaluate(el=>{el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}))});
+                await page.waitForURL(u=>{const q=new URL(u).searchParams;return q.get('filter.p.vendor')===result.refine.vendor&&q.get('sq_maker')===result.refine.vendor},{timeout:18000}).catch(()=>{});
+                await page.waitForLoadState('domcontentloaded').catch(()=>{});
+                await sleep(1800);
+                if(await challenge()){result.outcome='INFRA';result.reasons.push('challenge after manufacturer select')}
+                const q=new URL(page.url()).searchParams;result.refine.urlFiltered=q.get('filter.p.vendor')===result.refine.vendor&&q.get('sq_maker')===result.refine.vendor;
+                result.refine.checked=await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().isChecked().catch(()=>false);
+                let sample={sel:null,links:[]};for(let i=0;i<16;i++){sample=await visibleLinks();if(sample.links.length)break;await sleep(500)}result.refine.surface=sample.sel;
+                for(const href of sample.links){const v=await vendorFor(href);if(v)result.refine.vendors.push(v)}
+                result.refine.productsChecked=result.refine.vendors.length;result.refine.allMatch=result.refine.vendors.length?result.refine.vendors.every(v=>v.toLowerCase()===result.refine.vendor.toLowerCase()):null;
+                await page.screenshot({path:'out/filtered.png',fullPage:false}).catch(()=>{});
+                const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first();if(await active.count()){await active.evaluate(el=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(u=>{const q2=new URL(u).searchParams;return !q2.has('filter.p.vendor')&&!q2.has('sq_maker')},{timeout:18000}).catch(()=>{});const q2=new URL(page.url()).searchParams;result.refine.cleared=!q2.has('filter.p.vendor')&&!q2.has('sq_maker')}
+              }
+            }
+          }catch(e){result.reasons.push(String(e).split('\n')[0])}
+          result.bad429=[...new Set(bad429)].slice(0,20);result.bad5xx=[...new Set(bad5xx)].slice(0,20);result.consoleErrors=consoleErrors.slice(0,10);
+          if(result.bad429.length||result.bad5xx.length||await challenge()){result.outcome='INFRA';if(result.bad429.length)result.reasons.push(`${result.bad429.length} HTTP 429 response(s)`);if(result.bad5xx.length)result.reasons.push(`${result.bad5xx.length} HTTP 5xx response(s)`)}
+          if(result.outcome!=='INFRA'){
+            if(result.status!==200)result.reasons.push(`HTTP ${result.status}`);
+            if(result.usableMs===null||result.usableMs>5000)result.reasons.push(`usable ${result.usableMs}ms`);
+            if(!result.base.main)result.reasons.push('#MainContent missing');
+            if(result.base.sidebarCount!==1)result.reasons.push(`refine sidebar count ${result.base.sidebarCount}`);
+            if(result.base.nativeFilters!==0)result.reasons.push(`duplicate native filters ${result.base.nativeFilters}`);
+            if(result.base.overflow)result.reasons.push('horizontal overflow');
+            if(result.base.brokenImages?.length)result.reasons.push(`${result.base.brokenImages.length} broken image(s)`);
+            if(!result.refine.vendor)result.reasons.push('manufacturer checkbox not testable');
+            else{if(!result.refine.urlFiltered)result.reasons.push('dual manufacturer URL failed');if(!result.refine.checked)result.reasons.push('checkbox did not remain checked');if(result.refine.productsChecked<1)result.reasons.push('no filtered products verifiable');if(result.refine.allMatch===false)result.reasons.push(`wrong manufacturer: ${result.refine.vendors.join(', ')}`);if(!result.refine.cleared)result.reasons.push('clear failed')}
+            result.outcome=result.reasons.length?'FAIL':'PASS';
+          }
+          await page.screenshot({path:'out/final.png',fullPage:false}).catch(()=>{});fs.writeFileSync('out/report.json',JSON.stringify(result,null,2));console.log('\nRETEST RESULT\n'+JSON.stringify(result,null,2));await ctx.close();await browser.close();if(result.outcome!=='PASS')process.exitCode=2;
+          EOF
+          node retest.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: failure-retest-${{ matrix.slug }}
+          path: out
+          retention-days: 7
