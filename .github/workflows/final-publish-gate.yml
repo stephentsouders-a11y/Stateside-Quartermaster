@@ -62,3 +62,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: {name: 'final-${{ matrix.slug }}', path: out, retention-days: 7}
+# rerun marker: current draft after progressive count-truthfulness fix
