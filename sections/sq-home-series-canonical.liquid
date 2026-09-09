@@ -50,8 +50,8 @@
 [data-sq-line-series-root] .sqhc-series-logo img{transform-origin:center center!important}
 /* Army National Guard source has stray pixels below the seal. Keep the targeted cleanup only. */
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="army-national-guard-series"] .sqhc-series-logo img{clip-path:circle(47% at 50% 46%)!important;transform:scale(1.030)!important}
-/* U.S. Air Force is the visual size reference. ANG is slightly oversized in the source artwork, so reduce ANG only. */
-[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="air-national-guard-series"] .sqhc-series-logo img{transform:scale(.980)!important}
+/* U.S. Air Force is the visible-size reference. Air National Guard now renders at its native size, which matches the Air Force reference in Chromium. */
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="air-national-guard-series"] .sqhc-series-logo img{transform:none!important}
 /* Logo Merch remains slightly undersized in its source artwork. */
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="stateside-quartermaster-logo-merch"] .sqhc-series-logo img{transform:scale(1.015)!important}
 /* These rebuilt assets contain exactly one clean gold outer ring. Do not crop, border, or rescale them in CSS. */
