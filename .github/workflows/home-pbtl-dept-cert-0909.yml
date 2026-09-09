@@ -1,0 +1,64 @@
+name: Home PBTL count and department dedupe certification
+on:
+  push:
+    paths:
+      - '.github/workflows/home-pbtl-dept-cert-0909.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm init -y >/dev/null 2>&1 && npm i playwright@1.55.0 >/dev/null 2>&1 && npx playwright install chromium --with-deps >/dev/null 2>&1
+      - run: |
+          cat > verify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const base='https://www.statesideqm.com/?preview_theme_id=158561894555';
+          const browser=await chromium.launch({headless:true});
+          let failed=false;
+          for(const cfg of [{name:'desktop',w:1440,h:1100},{name:'mobile',w:390,h:844}]){
+            const page=await browser.newPage({viewport:{width:cfg.w,height:cfg.h}});
+            let ok=false;
+            for(let attempt=1;attempt<=3&&!ok;attempt++){
+              const r=await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000}).catch(()=>null);
+              await page.waitForTimeout(2200);
+              const txt=(await page.locator('body').innerText().catch(()=>''));
+              ok=!!r&&r.status()===200&&!/Just a moment|There was a problem|Something went wrong/i.test(txt)&&await page.locator('[data-sq-line-series-root]').count()>0;
+              if(!ok)await page.waitForTimeout(1200);
+            }
+            const result=await page.evaluate(()=>{
+              const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'};
+              const dept=[...document.querySelectorAll('.sqhc-grid .sqhc-card')].filter(visible);
+              const deptHrefs=dept.map(a=>new URL(a.href,location.href).pathname);
+              const series=[...document.querySelectorAll('[data-sq-line-series-root] .sqhc-series-card')].filter(visible);
+              const failures=[];
+              for(const card of series){
+                const count=card.querySelector('[data-sq-home-series-count]');
+                const desc=card.querySelector('.sqhc-series-desc');
+                const title=card.querySelector('.sqhc-series-title');
+                if(!count||!visible(count)){failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'missing-count'});continue;}
+                const cr=count.getBoundingClientRect(), ar=card.getBoundingClientRect();
+                if(cr.top<ar.top-1||cr.bottom>ar.bottom+1||cr.left<ar.left-1||cr.right>ar.right+1)failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'count-outside-card',cr:{top:cr.top,bottom:cr.bottom},ar:{top:ar.top,bottom:ar.bottom}});
+                for(const [name,el] of [['desc',desc],['title',title]])if(el&&visible(el)){const r=el.getBoundingClientRect();const overlap=!(cr.right<=r.left||cr.left>=r.right||cr.bottom<=r.top||cr.top>=r.bottom);if(overlap)failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'count-overlaps-'+name,cr:{top:cr.top,bottom:cr.bottom},r:{top:r.top,bottom:r.bottom}});}
+                const cs=getComputedStyle(count);if(cs.whiteSpace!=='nowrap')failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'count-wrap-enabled'});
+              }
+              return {deptCount:dept.length,hasLawDept:deptHrefs.includes('/collections/law-enforcement-corrections'),hasFireDept:deptHrefs.includes('/collections/firefighting-ems-search-rescue'),seriesCount:series.length,hasLawPBTL:series.some(a=>a.dataset.sqSeriesHandle==='law-enforcement-corrections'),hasFirePBTL:series.some(a=>a.dataset.sqSeriesHandle==='firefighting-ems-search-rescue'),countFailures:failures};
+            });
+            console.log(cfg.name.toUpperCase(),JSON.stringify(result));
+            if(result.deptCount!==27||result.hasLawDept||result.hasFireDept||!result.hasLawPBTL||!result.hasFirePBTL||result.countFailures.length){failed=true;await page.screenshot({path:`failure-${cfg.name}.png`,fullPage:true});}
+            await page.close();
+          }
+          await browser.close();
+          if(failed)process.exit(1);
+          EOF
+          node verify.mjs
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: home-pbtl-dept-failures
+          path: failure-*.png
+          if-no-files-found: ignore
