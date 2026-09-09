@@ -1,0 +1,52 @@
+name: ROTC JROTC Chromium Audit 0909
+on:
+  push:
+    paths:
+      - '.github/workflows/rotc-jrotc-chromium-audit-0909.yml'
+      - 'sections/sq-home-series-canonical.liquid'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm init -y >/dev/null 2>&1 && npm i playwright@1.55.0 >/dev/null 2>&1 && npx playwright install chromium --with-deps >/dev/null 2>&1
+      - name: Chromium render and checks
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const url='https://www.statesideqm.com/?preview_theme_id=158561894555';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1200},deviceScaleFactor:1});
+          await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+          await page.waitForTimeout(5000);
+          const cards=page.locator('[data-sq-series-handle="rotc-series"], [data-sq-series-handle="jrotc-series"]');
+          if(await cards.count()!==2) throw new Error('Expected ROTC and JROTC cards');
+          const data=await page.evaluate(()=>['rotc-series','jrotc-series'].map(h=>{
+            const c=document.querySelector(`[data-sq-series-handle="${h}"]`);
+            const img=c?.querySelector('.sqhc-series-logo img');
+            const cr=c?.getBoundingClientRect();
+            const ir=img?.getBoundingClientRect();
+            return {h,src:img?.currentSrc||img?.src||'',card:cr?{w:cr.width,h:cr.height}:null,img:ir?{w:ir.width,h:ir.height}:null,transform:img?getComputedStyle(img).transform:null};
+          }));
+          console.log('AUDIT_DATA',JSON.stringify(data));
+          if(!data[0].src.includes('sq-circle-rotc-rebuilt-transparent-2026-09-09.png')) throw new Error('ROTC rebuilt asset not rendered');
+          if(!data[1].src.includes('sq-circle-jrotc-rebuilt-transparent-2026-09-09.png')) throw new Error('JROTC rebuilt asset not rendered');
+          await page.locator('[data-sq-series-handle="rotc-series"]').scrollIntoViewIfNeeded();
+          await page.waitForTimeout(500);
+          const box=await page.locator('[data-sq-line-series-root]').boundingBox();
+          await page.screenshot({path:'rotc-jrotc-homepage.png',fullPage:true});
+          if(box) await page.screenshot({path:'rotc-jrotc-section.png',clip:{x:Math.max(0,box.x),y:Math.max(0,box.y),width:Math.min(1440,box.width),height:Math.min(1000,box.height)}});
+          await browser.close();
+          EOF
+          node audit.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rotc-jrotc-chromium-audit
+          path: rotc-jrotc-*.png
+          if-no-files-found: error
