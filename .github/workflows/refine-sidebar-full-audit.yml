@@ -1,0 +1,108 @@
+name: Refine Products sidebar full storefront audit
+on:
+  push:
+    paths:
+      - '.github/workflows/refine-sidebar-full-audit.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Audit Refine Products sidebar on every collection page
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const base='https://www.statesideqm.com', theme='158561894555';
+          const shard=Number(process.env.SHARD||0), shards=8;
+          const out=`out-${shard}`; fs.mkdirSync(out,{recursive:true}); fs.mkdirSync(`${out}/screens`,{recursive:true});
+          const extractLocs=s=>[...s.matchAll(/<loc>(.*?)<\/loc>/gsi)].map(m=>m[1].replaceAll('&amp;','&').trim());
+          async function getText(url){for(let a=0;a<4;a++){try{const r=await fetch(url,{headers:{'user-agent':'StatesideQM-RefineAudit/1.0'}});if(r.ok)return await r.text();if(r.status===429)await new Promise(x=>setTimeout(x,5000*(a+1)));else throw new Error(`${r.status} ${url}`)}catch(e){if(a===3)throw e;await new Promise(x=>setTimeout(x,1500*(a+1)))}}}
+          const root=await getText(`${base}/sitemap.xml`); const sm=extractLocs(root).filter(x=>/sitemap_collections/i.test(x));
+          let urls=[]; for(const s of sm){const xml=await getText(s);urls.push(...extractLocs(xml).filter(x=>x.startsWith(base+'/collections/')))}
+          urls=[...new Set(urls)].sort(); const mine=urls.filter((_,i)=>i%shards===shard);
+          console.log(`DISCOVERED ${urls.length} collection pages; shard ${shard} testing ${mine.length}`);
+          const browser=await chromium.launch({headless:true}); const results=[]; let shots=0;
+          const productSelectors=['.product-card','.product-grid__item','.sq-type-family-product','.sq-product-card','.sqbfl-product-card','.sq-ts-match-card','li.grid__item:has(a[href*="/products/"])','article:has(a[href*="/products/"])'];
+          for(let idx=0;idx<mine.length;idx++){
+            const source=mine[idx], path=new URL(source).pathname+new URL(source).search;
+            for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
+              const ctx=await browser.newContext({viewport}); const page=await ctx.newPage(); page.setDefaultNavigationTimeout(45000);
+              const u=new URL(path,base);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',theme);
+              let status=null,error=null,start=Date.now();
+              try{let r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null;if(status===429){await page.waitForTimeout(9000);r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null}}catch(e){error=String(e)}
+              if(status===200&&!error){await page.waitForTimeout(900)}
+              const data=await page.evaluate(({device,productSelectors})=>{
+                const main=document.querySelector('#MainContent')||document.querySelector('main')||document.body;
+                const visible=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
+                const text=(main?.innerText||'').replace(/\s+/g,' ').trim();
+                const sidebars=[...main.querySelectorAll('.sq-global-refine-sidebar')].filter(visible);
+                const sidebar=sidebars[0]||null;
+                const allProductLinks=[...main.querySelectorAll('a[href*="/products/"]')].filter(a=>{if(!visible(a))return false;const r=a.getBoundingClientRect();return r.width>70&&r.height>20});
+                let cards=[]; for(const sel of productSelectors){try{cards.push(...[...main.querySelectorAll(sel)].filter(visible))}catch{}}
+                cards=[...new Set(cards)]; if(!cards.length&&allProductLinks.length){cards=allProductLinks.map(a=>a.closest('article,li,.card,.grid__item,[class*="product"]')||a).filter(visible)}
+                cards=[...new Set(cards)]; const hasProducts=allProductLinks.length>0||cards.length>0;
+                const sbText=(sidebar?.innerText||'').replace(/\s+/g,' ').trim();
+                const links=sidebar?[...sidebar.querySelectorAll('a[href]')].filter(visible):[];
+                const badLinks=links.map(a=>a.getAttribute('href')||'').filter(h=>!h||h==='#'||/^javascript:/i.test(h));
+                const availabilityLinks=links.map(a=>a.getAttribute('href')||'').filter(h=>/filter\.v\.availability(?:=|%3D)/i.test(h));
+                const progressive=!!document.querySelector('.sqbfl[data-sqbfl-load-state="progressive"]');
+                const countNodes=sidebar?[...sidebar.querySelectorAll('small,.sq-global-refine-sidebar__count,[data-count],[class*="count"]')].filter(e=>/\d|checking|loading|updating|items?/i.test((e.textContent||'').trim())):[];
+                const visibleCounts=countNodes.filter(visible);
+                const unstableCountText=visibleCounts.map(e=>(e.textContent||'').trim()).filter(t=>/checking|loading|updating|undefined|null|nan/i.test(t));
+                const heading=sidebar?[...sidebar.querySelectorAll('h1,h2,h3,h4,strong,b')].map(x=>(x.textContent||'').trim()).find(t=>/refine products/i.test(t))||'':'';
+                const trigger=[...main.querySelectorAll('button,a,summary')].filter(visible).find(e=>/refine products|filter products|filters/i.test((e.textContent||'').replace(/\s+/g,' ').trim()));
+                const sr=sidebar?.getBoundingClientRect()||null, first=cards[0]?.getBoundingClientRect()||null;
+                let geometry=true, overlap=false, underSidebar=false;
+                if(device==='desktop'&&hasProducts){
+                  if(!sidebar||!first) geometry=false; else {overlap=!(sr.right<=first.left+6||first.right<=sr.left+6||sr.bottom<=first.top+6||first.bottom<=sr.top+6);underSidebar=first.top>sr.bottom-6;geometry=sr.left<first.left&&sr.right<=first.left+12&&!overlap&&!underSidebar;}
+                }
+                const sbClipped=sidebar?sr.left<-2||sr.right>innerWidth+2||sr.width<160:false;
+                const sbHorizontalOverflow=sidebar?sidebar.scrollWidth>sidebar.clientWidth+4:false;
+                const pageOverflow=document.documentElement.scrollWidth>document.documentElement.clientWidth+4;
+                const mobileAccess=device!=='mobile'||!hasProducts||!!sidebar||!!trigger;
+                const progressiveCountsBad=progressive&&visibleCounts.length>0;
+                const duplicateSidebars=sidebars.length>1;
+                const loading=/checking items|loading items|building the customer-facing product tree|tree unavailable/i.test(text);
+                const badPage=/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+text);
+                return {title:document.title,hasProducts,productLinks:allProductLinks.length,cards:cards.length,sidebarCount:sidebars.length,heading,sidebarText:sbText.slice(0,500),sidebarLinks:links.length,badLinks,availabilityLinks,progressive,visibleCountNodes:visibleCounts.length,unstableCountText,progressiveCountsBad,duplicateSidebars,geometry,overlap,underSidebar,sbClipped,sbHorizontalOverflow,pageOverflow,mobileAccess,triggerText:(trigger?.textContent||'').replace(/\s+/g,' ').trim(),loading,badPage,sidebarRect:sr?{x:sr.x,y:sr.y,w:sr.width,h:sr.height}:null,firstCardRect:first?{x:first.x,y:first.y,w:first.width,h:first.height}:null,firstFilterHref:links.find(a=>{const h=a.getAttribute('href')||'';return h&&!/^#|javascript:/i.test(h)&&!/clear|reset/i.test((a.textContent||''))})?.getAttribute('href')||null};
+              },{device,productSelectors}).catch(e=>({badPage:true,evalError:String(e),hasProducts:false,sidebarCount:0,geometry:false,pageOverflow:false,mobileAccess:false,availabilityLinks:[],badLinks:[],unstableCountText:[],progressiveCountsBad:false,duplicateSidebars:false,loading:false}));
+              let clickStatus=null,clickBad=false;
+              if(device==='desktop'&&status===200&&!error&&data.hasProducts&&data.firstFilterHref){
+                try{const f=new URL(data.firstFilterHref,u);f.searchParams.set('preview_theme_id',theme);f.searchParams.delete('filter.v.availability');const p2=await ctx.newPage();p2.setDefaultNavigationTimeout(30000);const r2=await p2.goto(f.toString(),{waitUntil:'domcontentloaded'});clickStatus=r2?.status()??null;await p2.waitForTimeout(300);clickBad=await p2.evaluate(()=>/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+(document.querySelector('#MainContent')?.innerText||''))).catch(()=>true);await p2.close()}catch{clickBad=true}
+              }
+              const missingDesktopSidebar=device==='desktop'&&data.hasProducts&&data.sidebarCount!==1;
+              const missingMobileAccess=device==='mobile'&&data.hasProducts&&!data.mobileAccess;
+              const failed=status!==200||!!error||data.badPage||data.loading||missingDesktopSidebar||missingMobileAccess||(device==='desktop'&&data.hasProducts&&!data.geometry)||data.progressiveCountsBad||data.duplicateSidebars||data.sbClipped||data.sbHorizontalOverflow||data.pageOverflow||data.availabilityLinks.length>0||data.badLinks.length>0||data.unstableCountText.length>0||(device==='desktop'&&data.hasProducts&&data.firstFilterHref&&(clickStatus!==200||clickBad));
+              const row={path,device,status,error,elapsedMs:Date.now()-start,clickStatus,clickBad,missingDesktopSidebar,missingMobileAccess,failed,...data};results.push(row);console.log(JSON.stringify(row));
+              if(failed&&shots<20){try{await page.screenshot({path:`${out}/screens/${String(shots).padStart(2,'0')}-${device}-${idx}.png`,fullPage:true});shots++}catch{}}
+              await ctx.close();
+              await new Promise(r=>setTimeout(r,400));
+            }
+          }
+          await browser.close();
+          const failures=results.filter(x=>x.failed); const summary={shard,discovered:urls.length,testedPages:mine.length,testedViews:results.length,passed:results.length-failures.length,failed:failures.length,failures,results};
+          fs.writeFileSync(`${out}/summary.json`,JSON.stringify(summary,null,2));console.log(`REFINE SIDEBAR SHARD ${shard}: ${summary.passed}/${summary.testedViews} PASS; ${summary.failed} FAIL`);
+          if(failures.length)process.exitCode=2;
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine-sidebar-audit-${{ matrix.shard }}
+          path: out-${{ matrix.shard }}
+          retention-days: 7
