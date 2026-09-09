@@ -1,0 +1,73 @@
+name: Triple audit ROTC JROTC homepage rings
+on:
+  push:
+    paths:
+      - '.github/workflows/triple-audit-rotc-jrotc-0909.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm init -y >/dev/null 2>&1 && npm i playwright@1.55.0 >/dev/null 2>&1 && npx playwright install chromium --with-deps >/dev/null 2>&1
+      - run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const targets=[
+            {name:'live',url:'https://www.statesideqm.com/'},
+            {name:'preview',url:'https://www.statesideqm.com/?preview_theme_id=158561894555'}
+          ];
+          const browser=await chromium.launch({headless:true});
+          let failed=false;
+          for(const t of targets){
+            for(const vp of [{name:'desktop',width:1440,height:1200},{name:'mobile',width:390,height:844}]){
+              const page=await browser.newPage({viewport:{width:vp.width,height:vp.height},deviceScaleFactor:1});
+              let r=null;
+              for(let i=0;i<3;i++){
+                r=await page.goto(t.url,{waitUntil:'domcontentloaded',timeout:45000}).catch(()=>null);
+                await page.waitForTimeout(2200);
+                if(r&&r.status()===200) break;
+              }
+              if(!r||r.status()!==200){console.log('LOAD_FAIL',t.name,vp.name); failed=true; await page.close(); continue;}
+              const data=await page.evaluate(()=>['rotc-series','jrotc-series','military-schools-academies'].map(h=>{
+                const c=document.querySelector(`[data-sq-series-handle="${h}"]`);
+                const l=c?.querySelector('.sqhc-series-logo');
+                const img=l?.querySelector('img');
+                const r=l?.getBoundingClientRect();
+                const before=l?getComputedStyle(l,'::before'):null;
+                const after=l?getComputedStyle(l,'::after'):null;
+                return {
+                  h,
+                  exists:!!c,
+                  rect:r?{x:r.x,y:r.y,w:r.width,h:r.height}:null,
+                  imgSrc:img?.currentSrc||img?.src||'',
+                  beforeBorder:before?.borderTopWidth,
+                  beforeColor:before?.borderTopColor,
+                  afterBorder:after?.borderTopWidth,
+                  afterColor:after?.borderTopColor,
+                  overflow:getComputedStyle(l||document.body).overflow
+                };
+              }));
+              console.log('AUDIT',t.name,vp.name,JSON.stringify(data));
+              const rotc=data[0],jrotc=data[1];
+              if(!rotc.exists||!jrotc.exists) failed=true;
+              await page.locator('[data-sq-series-handle="rotc-series"]').scrollIntoViewIfNeeded().catch(()=>{});
+              await page.waitForTimeout(400);
+              await page.screenshot({path:`triple-${t.name}-${vp.name}.png`,fullPage:true});
+              await page.close();
+            }
+          }
+          await browser.close();
+          if(failed) process.exit(1);
+          EOF
+          node audit.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: triple-audit-rotc-jrotc
+          path: triple-*.png
+          if-no-files-found: error
