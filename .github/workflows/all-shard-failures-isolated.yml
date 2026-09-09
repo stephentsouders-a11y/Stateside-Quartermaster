@@ -1,0 +1,46 @@
+name: All shard failures isolated
+on:
+  push:
+    paths:
+      - '.github/workflows/all-shard-failures-isolated.yml'
+permissions:
+  actions: read
+  contents: read
+jobs:
+  retest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Download shard reports
+        run: |
+          mkdir -p reports
+          gh run download 34306950148 -R stephentsouders-a11y/Stateside-Quartermaster -p 'button-shard-*' -D reports
+          find reports -name report.json -print
+      - name: Retest every unique prior failure in fresh browsers
+        run: |
+          cat > retest.mjs <<'EOF'
+          import { chromium } from 'playwright'; import fs from 'fs'; import path from 'path';
+          const base='https://www.statesideqm.com',theme='158561894555';
+          function walk(d){let out=[];for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory())out=out.concat(walk(p));else if(e.name==='report.json')out.push(p)}return out}
+          const files=walk('reports'),map=new Map();for(const f of files){const j=JSON.parse(fs.readFileSync(f,'utf8'));for(const x of j.failures||[])if(x.route)map.set(x.route,x.label||'')}
+          const routes=[...map.entries()];console.log('UNIQUE PRIOR FAILURES',routes.length);const results=[];let hard=[];
+          for(let ri=0;ri<routes.length;ri++){const [route,label]=routes[ri];let final=null;
+            for(let attempt=1;attempt<=2;attempt++){const browser=await chromium.launch({headless:true});const ctx=await browser.newContext({viewport:{width:1440,height:1100}}),page=await ctx.newPage();const u=new URL(route,base);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',theme);const start=Date.now();let status=null,error=null;
+              try{const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:30000});status=r?.status()??null}catch(e){error=String(e)}
+              let usable=null,state={bad:true,loading:false,visible:false,availability:0,broken:0,overflow:false};if(status===200&&!error){for(let i=0;i<35;i++){state=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim(),title=document.title;const visible=[...(m?.querySelectorAll('a,.product-card,.product-grid__item,.sqbfl-card,.sq-subcategory-card,.sg-entity,.sq-afg-branch-card,.sq-third-level__type,.sq-ts-match-card,.sq-type-family-product,.sqaca-card,.sqaca-all')||[])].some(e=>{const r=e.getBoundingClientRect();return r.width>30&&r.height>20});return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(title+' '+t),loading:/loading items|checking items|tree unavailable|building the customer-facing product tree|loading all products/i.test(t),visible,availability:[...(m?.querySelectorAll('a[href*="filter.v.availability"]')||[])].length,broken:[...(m?.querySelectorAll('img')||[])].filter(x=>x.complete&&x.naturalWidth===0).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}}).catch(()=>({bad:true,loading:false,visible:false,availability:0,broken:0,overflow:false}));if(!state.bad&&!state.loading&&state.visible){usable=Date.now()-start;break}await page.waitForTimeout(200)}}
+              const failed=status!==200||!!error||state.bad||state.loading||!state.visible||usable===null||usable>5000||state.availability>0||state.broken>0||state.overflow;final={route,label,attempt,status,error,usableMs:usable,failed,...state};console.log(JSON.stringify(final));await ctx.close();await browser.close();if(!failed)break;if(attempt===1)await new Promise(r=>setTimeout(r,8000));}
+            results.push(final);if(final.failed)hard.push(final);await new Promise(r=>setTimeout(r,1000));}
+          fs.writeFileSync('isolated-results.json',JSON.stringify({tested:results.length,passed:results.length-hard.length,failed:hard.length,failures:hard},null,2));console.log(`ISOLATED: ${results.length-hard.length} PASS / ${hard.length} FAIL`);if(hard.length)process.exitCode=2;
+          EOF
+          node retest.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: all-shard-isolated-results, path: isolated-results.json, retention-days: 7}
