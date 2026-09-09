@@ -1,0 +1,47 @@
+name: Capture Army compiled preview HTML
+on:
+  push:
+    paths:
+      - '.github/workflows/capture-army-compiled-html.yml'
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Capture compiled preview HTML and timing
+        run: |
+          cat > capture.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage();
+          const url='https://www.statesideqm.com/collections/products-built-for-the-line-u-s-army?preview_theme_id=158561894555';
+          const start=Date.now();
+          let responseStatus=null;
+          const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+          responseStatus=response?.status()??null;
+          const domContentLoadedMs=Date.now()-start;
+          fs.writeFileSync('out/army-compiled.html',await page.content());
+          const perf=await page.evaluate(()=>{const n=performance.getEntriesByType('navigation')[0];return n?{responseStart:n.responseStart,responseEnd:n.responseEnd,domContentLoadedEventEnd:n.domContentLoadedEventEnd,loadEventEnd:n.loadEventEnd,transferSize:n.transferSize,encodedBodySize:n.encodedBodySize,decodedBodySize:n.decodedBodySize}:null});
+          fs.writeFileSync('out/timing.json',JSON.stringify({responseStatus,domContentLoadedMs,perf},null,2));
+          console.log(JSON.stringify({responseStatus,domContentLoadedMs,perf},null,2));
+          await browser.close();
+          EOF
+          node capture.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: army-compiled-preview
+          path: out
+          retention-days: 2
