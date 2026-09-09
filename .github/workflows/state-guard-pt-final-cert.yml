@@ -1,4 +1,5 @@
 name: State Guard PT final Chromium certification
+# retry until a valid rendered storefront page is present, not merely HTTP 200
 on:
   push:
     paths:
@@ -30,10 +31,15 @@ jobs:
           for(const device of [{name:'desktop',viewport:{width:1440,height:1100}},{name:'mobile',viewport:{width:390,height:844}}]){
             for(const c of cases){
               const page=await browser.newPage({viewport:device.viewport});const u=new URL(base);u.searchParams.set('preview_theme_id',theme);for(const [k,v] of Object.entries(c.qs))u.searchParams.set(k,v);
-              let r=null;for(let a=0;a<3;a++){r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:45000}).catch(()=>null);await page.waitForTimeout(2600);if(r?.status()===200)break;await page.waitForTimeout(1800)}
+              let r=null,valid=false;
+              for(let a=0;a<4&&!valid;a++){
+                r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:45000}).catch(()=>null);await page.waitForTimeout(2800);
+                valid=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),txt=(m?.innerText||'').replace(/\s+/g,' ');return !!m&&!/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+txt)&&!!m.querySelector('[data-sqsg-view],a.sqsg-card,a.sqsg-product')}).catch(()=>false);
+                if(!valid)await page.waitForTimeout(2200*(a+1));
+              }
               const d=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>1&&r.height>1};const cards=[...(m?.querySelectorAll('a.sqsg-card')||[])].filter(vis),products=[...(m?.querySelectorAll('a.sqsg-product[href^="/products/"]')||[])].filter(vis);const txt=(m?.innerText||'').replace(/\s+/g,' ');return{rootFootwear:cards.some(a=>/PT Footwear/i.test(a.innerText||'')),shoeProducts:products.filter(a=>/m-tac-carbon-performance-sneakers/i.test(a.getAttribute('href')||'')).length,shoeText:/M-Tac Carbon Performance Sneakers/i.test(txt),coldLeak:products.some(a=>/m-tac-carbon-performance-sneakers|shoe|sneaker|footwear/i.test((a.getAttribute('href')||'')+' '+(a.innerText||''))),overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,broken:[...(m?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).length,error:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+txt)}});
-              const bad=!r||r.status()!==200||d.error||d.overflow||d.broken>0||(c.expectRoot&&!d.rootFootwear)||(c.expectShoe&&(d.shoeProducts!==1||!d.shoeText))||(c.forbidShoe&&d.coldLeak);
-              console.log(JSON.stringify({device:device.name,case:c.name,status:r?.status()??null,bad,...d}));if(bad)failed=true;await page.close();
+              const bad=!r||r.status()!==200||!valid||d.error||d.overflow||d.broken>0||(c.expectRoot&&!d.rootFootwear)||(c.expectShoe&&(d.shoeProducts!==1||!d.shoeText))||(c.forbidShoe&&d.coldLeak);
+              console.log(JSON.stringify({device:device.name,case:c.name,status:r?.status()??null,valid,bad,...d}));if(bad)failed=true;await page.close();
             }
           }
           await browser.close();if(failed)process.exit(1);
