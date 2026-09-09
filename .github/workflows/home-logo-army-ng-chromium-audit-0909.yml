@@ -66,6 +66,8 @@ jobs:
           if(failed) process.exit(1);
           EOF
           node audit.mjs
+          base64 -w0 audit-output/home-logo-army-ng/desktop-series.png > audit-output/home-logo-army-ng/desktop-series.b64
+          base64 -w0 audit-output/home-logo-army-ng/mobile-series.png > audit-output/home-logo-army-ng/mobile-series.b64
       - name: Commit audit evidence
         if: always()
         run: |
