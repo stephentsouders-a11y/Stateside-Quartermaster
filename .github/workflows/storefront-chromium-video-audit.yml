@@ -1,0 +1,131 @@
+name: Storefront Chromium video audit
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-chromium-video-audit.yml'
+permissions:
+  contents: read
+jobs:
+  video-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Record desktop and mobile storefront walkthroughs
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > record.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out/videos',{recursive:true});
+          fs.mkdirSync('out/screens',{recursive:true});
+
+          const routes=[
+            ['home','/'],
+            ['army','/collections/products-built-for-the-line-u-s-army'],
+            ['arng','/collections/army-national-guard-series'],
+            ['air-force','/collections/products-built-for-the-line-u-s-air-force'],
+            ['ang','/collections/air-national-guard-series'],
+            ['state-guard','/collections/state-guard-series'],
+            ['alabama-state-guard','/collections/state-guard-series-alabama'],
+            ['afg','/collections/armed-forces-gear'],
+            ['thin-line','/collections/thin-line'],
+            ['thin-yellow','/collections/thin-line-shop-thin-yellow-line'],
+            ['thin-yellow-products','/collections/thin-line-shop-thin-yellow-line?sq_type_family=First%20Responder%20Patches&sort_by=title-ascending'],
+            ['sta-brite','/collections/sta-brite-insignia'],
+            ['law','/collections/law-enforcement-corrections'],
+            ['fire-ems-sar','/collections/firefighting-ems-search-rescue'],
+            ['rotc','/collections/rotc-series'],
+            ['jrotc','/collections/jrotc-series'],
+            ['msa','/collections/military-schools-academies']
+          ];
+
+          const browser=await chromium.launch({headless:true});
+          const report=[];
+
+          async function run(kind,viewport){
+            const ctx=await browser.newContext({viewport,recordVideo:{dir:`out/videos/${kind}`,size:viewport}});
+            const page=await ctx.newPage();
+            page.setDefaultNavigationTimeout(60000);
+            const rec={kind,routes:[]};
+            for(const [slug,path] of routes){
+              const u=new URL(path,process.env.BASE);
+              u.searchParams.delete('filter.v.availability');
+              u.searchParams.set('preview_theme_id',process.env.THEME);
+              const started=Date.now();let status=null,error=null;
+              try{
+                const resp=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});
+                status=resp?.status()??null;
+              }catch(e){error=String(e)}
+              let usableMs=null;
+              for(let i=0;i<40;i++){
+                const state=await page.evaluate(()=>{
+                  const main=document.querySelector('#MainContent');
+                  const text=(main?.textContent||'').replace(/\s+/g,' ').trim();
+                  const blocked=/just a moment|something went wrong|internal server error/i.test(document.title+' '+text);
+                  const loading=/loading items|building the customer-facing product tree|checking items|tree unavailable/i.test(text);
+                  const visible=[...(main?.querySelectorAll('a,.product-card,.product-grid__item,.sq-subcategory-card,.sqbfl-card,.sg-entity,.sq-afg-branch-card,.sq-ts-match-card')||[])].some(e=>{const r=e.getBoundingClientRect();return r.width>30&&r.height>20});
+                  return {blocked,loading,visible,text:text.slice(0,1200)};
+                }).catch(()=>({blocked:false,loading:true,visible:false,text:''}));
+                if(!state.blocked&&!state.loading&&state.visible){usableMs=Date.now()-started;break}
+                await page.waitForTimeout(250);
+              }
+              await page.waitForTimeout(1000);
+              const details=await page.evaluate(()=>{
+                const main=document.querySelector('#MainContent');
+                const text=(main?.textContent||'').replace(/\s+/g,' ').trim();
+                const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;
+                const side=[...(main?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis);
+                const cards=[...(main?.querySelectorAll('.sq-subcategory-card,.sqbfl-card,.sg-entity,.sq-afg-branch-card,.sq-ts-match-card,.product-card,.product-grid__item,.sq-type-family-product')||[])].filter(vis);
+                return {
+                  title:document.title,
+                  url:location.href,
+                  challenge:/just a moment/i.test(document.title+' '+text),
+                  errorPage:/something went wrong|internal server error|there was a problem/i.test(document.title+' '+text),
+                  loading:/loading items|building the customer-facing product tree|checking items|tree unavailable/i.test(text),
+                  sidebarCount:side.length,
+                  cardCount:cards.length,
+                  availabilityLinks:[...(main?.querySelectorAll('a[href*="filter.v.availability"]')||[])].map(a=>a.getAttribute('href')).slice(0,20),
+                  brokenImages:[...(main?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).map(i=>({alt:i.alt,src:i.currentSrc||i.src})).slice(0,20),
+                  overflowX:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,
+                  text:text.slice(0,2500)
+                };
+              }).catch(e=>({extractError:String(e)}));
+              await page.screenshot({path:`out/screens/${kind}-${slug}.png`,fullPage:true}).catch(()=>{});
+              rec.routes.push({slug,path,status,error,usableMs,...details});
+              await page.evaluate(()=>window.scrollTo({top:Math.min(document.body.scrollHeight,900),behavior:'smooth'})).catch(()=>{});
+              await page.waitForTimeout(500);
+              await page.evaluate(()=>window.scrollTo({top:0,behavior:'smooth'})).catch(()=>{});
+              await page.waitForTimeout(350);
+            }
+            const video=page.video();
+            await page.close();
+            await ctx.close();
+            if(video){
+              const p=await video.path().catch(()=>null);
+              if(p){const dest=`out/videos/${kind}-walkthrough.webm`;fs.copyFileSync(p,dest);rec.video=dest}
+            }
+            return rec;
+          }
+
+          report.push(await run('desktop',{width:1440,height:1100}));
+          report.push(await run('mobile',{width:390,height:844}));
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          await browser.close();
+          console.log(JSON.stringify(report.map(r=>({kind:r.kind,video:r.video,routes:r.routes.map(x=>({slug:x.slug,status:x.status,usableMs:x.usableMs,challenge:x.challenge,errorPage:x.errorPage,loading:x.loading,sidebar:x.sidebarCount,cards:x.cardCount,availabilityLinks:x.availabilityLinks?.length||0,brokenImages:x.brokenImages?.length||0,overflowX:x.overflowX}))})),null,2));
+          EOF
+          node record.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: storefront-chromium-video-audit
+          path: out
+          retention-days: 7
