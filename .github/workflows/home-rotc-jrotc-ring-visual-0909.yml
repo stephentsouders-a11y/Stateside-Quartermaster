@@ -50,7 +50,7 @@ jobs:
           });
           console.log(JSON.stringify(info));
           if(info[0].afterBorder!=='2px'||info[1].afterBorder!=='2px') throw new Error('Gold ring overlay missing');
-          await cards.screenshot({path:'rotc-jrotc-ring-visual.png'});
+          await page.screenshot({path:'rotc-jrotc-ring-visual.png',fullPage:true});
           await browser.close();
           EOF
           node verify.mjs
