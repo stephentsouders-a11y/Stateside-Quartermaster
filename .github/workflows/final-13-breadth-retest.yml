@@ -1,0 +1,78 @@
+name: Final 13 breadth retest
+on:
+  push:
+    paths:
+      - '.github/workflows/final-13-breadth-retest.yml'
+permissions:
+  contents: read
+jobs:
+  retest:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - slug: army-flags
+            route: '/collections/products-built-for-the-line-u-s-army?sq_bfl_category=Flags%2C+Displays+%26+Memorials'
+          - slug: arng-field-gear
+            route: '/collections/army-national-guard-series?sq_bfl_category=Field+Gear%2C+Packs+%26+Equipment'
+          - slug: ang-awards
+            route: '/collections/air-national-guard-series?sq_bfl_category=Awards%2C+Medals+%26+Ribbons'
+          - slug: literature
+            route: '/collections/literature'
+          - slug: af-washed-black
+            route: '/collections/products-built-for-the-line-u-s-air-force?sq_color_pattern=Washed+Black'
+          - slug: af-awards
+            route: '/collections/products-built-for-the-line-u-s-air-force?sq_bfl_category=Awards%2C+Medals+%26+Ribbons'
+          - slug: ang-221b
+            route: '/collections/products-built-for-the-line-u-s-air-force?sq_ang_mirror=1&sq_maker=221B+Tactical'
+          - slug: ang-foreverwave
+            route: '/collections/products-built-for-the-line-u-s-air-force?sq_ang_mirror=1&sq_maker=ForeverWaveFlags'
+          - slug: ang-blue
+            route: '/collections/products-built-for-the-line-u-s-air-force?sq_ang_mirror=1&sq_color_pattern=Blue'
+          - slug: state-guard-virginia
+            route: '/collections/state-guard-series-virginia'
+          - slug: rotc-bradleys
+            route: "/collections/rotc-series?filter.p.vendor=Bradley%27s+Surplus"
+          - slug: msa-stabrite
+            route: '/collections/military-schools-academies?filter.p.vendor=Sta-Brite+Insignia+Inc.'
+          - slug: msa-books
+            route: '/collections/military-schools-academies?sq_bfl_category=Academy+Books+%26+History'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Retest candidate three times
+        env:
+          SLUG: ${{ matrix.slug }}
+          ROUTE: ${{ matrix.route }}
+        run: |
+          cat > retest.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const base='https://www.statesideqm.com', theme='158561894555';
+          let pass=null, attempts=[];
+          for(let attempt=1;attempt<=3;attempt++){
+            if(attempt>1) await new Promise(r=>setTimeout(r,10000));
+            const browser=await chromium.launch({headless:true});
+            const ctx=await browser.newContext({viewport:{width:1440,height:1100}}), page=await ctx.newPage();
+            const u=new URL(process.env.ROUTE,base);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',theme);
+            const start=Date.now();let status=null,error=null;
+            try{const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:30000});status=r?.status()??null}catch(e){error=String(e)}
+            let usable=null,state={bad:true,loading:false,visible:false,availability:0,broken:0,overflow:false};
+            if(status===200&&!error){for(let i=0;i<45;i++){
+              state=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim(),title=document.title;const visible=[...(m?.querySelectorAll('a,.product-card,.product-grid__item,.sqbfl-card,.sq-subcategory-card,.sg-entity,.sq-afg-branch-card,.sq-third-level__type,.sq-ts-match-card,.sq-type-family-product,.sqaca-card,.sqaca-all')||[])].some(e=>{const r=e.getBoundingClientRect();return r.width>30&&r.height>20});return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(title+' '+t),loading:/loading items|checking items|tree unavailable|building the customer-facing product tree|loading all products/i.test(t),visible,availability:[...(m?.querySelectorAll('a[href*="filter.v.availability"]')||[])].length,broken:[...(m?.querySelectorAll('img')||[])].filter(x=>x.complete&&x.naturalWidth===0).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}}).catch(()=>({bad:true,loading:false,visible:false,availability:0,broken:0,overflow:false}));
+              if(!state.bad&&!state.loading&&state.visible){usable=Date.now()-start;break}await page.waitForTimeout(200)
+            }}
+            const failed=status!==200||!!error||state.bad||state.loading||!state.visible||usable===null||usable>5000||state.availability>0||state.broken>0||state.overflow;
+            const row={attempt,status,error,usableMs:usable,failed,...state}; attempts.push(row); console.log(JSON.stringify(row));
+            await ctx.close();await browser.close();if(!failed){pass=row;break}
+          }
+          console.log(JSON.stringify({slug:process.env.SLUG,route:process.env.ROUTE,pass,attempts},null,2));
+          if(!pass)process.exitCode=2;
+          EOF
+          node retest.mjs
