@@ -1,5 +1,5 @@
 name: Refine Products sidebar exhaustive certification v3
-# post-fix certification for draft theme checksum c1f297e6ec55b88d2df21cd3d5b81286
+# final-publish-candidate rerun 2026-09-09 after PBTL scheduler and visibility fixes
 on:
   push:
     paths:
