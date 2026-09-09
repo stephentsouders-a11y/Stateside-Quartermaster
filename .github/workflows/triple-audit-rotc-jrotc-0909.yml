@@ -1,5 +1,5 @@
 name: Triple audit ROTC JROTC homepage rings
-# rerun 2026-09-09T19:24Z after stacking fix
+# rerun 2026-09-09T19:36Z after preserving source artwork
 on:
   push:
     paths:
@@ -46,8 +46,7 @@ jobs:
                   exists:!!c,
                   rect:r?{x:r.x,y:r.y,w:r.width,h:r.height}:null,
                   imgSrc:img?.currentSrc||img?.src||'',
-                  beforeBorder:before?.borderTopWidth,
-                  beforeColor:before?.borderTopColor,
+                  beforeContent:before?.content,
                   afterBorder:after?.borderTopWidth,
                   afterColor:after?.borderTopColor,
                   overflow:getComputedStyle(l||document.body).overflow
