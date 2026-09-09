@@ -10,7 +10,7 @@ jobs:
   certify:
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 8
       matrix:
         include:
           - { slug: home, path: / }
