@@ -54,9 +54,11 @@
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="military-schools-academies"] .sqhc-series-logo img{transform:scale(1.078)!important;transform-origin:center center!important}
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="law-enforcement-corrections"] .sqhc-series-logo img{transform:scale(1.302)!important;transform-origin:center center!important}
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="firefighting-ems-search-rescue"] .sqhc-series-logo img{transform:scale(1.353)!important;transform-origin:center center!important}
-/* ROTC/JROTC ring repair: mask the imperfect source-image ring, then redraw one clean continuous site-gold ring in the same visual position. */
+/* ROTC/JROTC ring repair: force the repair layers above the transformed source image so the gold ring is continuous through the bottom arc. */
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="rotc-series"] .sqhc-series-logo,
-[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="jrotc-series"] .sqhc-series-logo{position:relative!important}
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="jrotc-series"] .sqhc-series-logo{position:relative!important;isolation:isolate!important}
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="rotc-series"] .sqhc-series-logo img,
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="jrotc-series"] .sqhc-series-logo img{position:relative!important;z-index:1!important}
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="rotc-series"] .sqhc-series-logo::before,
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="jrotc-series"] .sqhc-series-logo::before{content:""!important;position:absolute!important;inset:17px!important;border:4px solid var(--bg)!important;border-radius:50%!important;box-sizing:border-box!important;pointer-events:none!important;z-index:2!important}
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="rotc-series"] .sqhc-series-logo::after,
