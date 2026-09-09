@@ -1,0 +1,207 @@
+{
+  "failed": false,
+  "results": [
+    {
+      "viewport": "desktop",
+      "httpStatus": 200,
+      "data": [
+        {
+          "handle": "stateside-quartermaster-logo-merch",
+          "exists": true,
+          "src": "https://cdn.shopify.com/s/files/1/0774/4602/1275/files/stateside-quartermaster-logo-merch-seal-2026-09-09.png?v=1788985421",
+          "logoRect": {
+            "x": 132.6,
+            "y": 423.1,
+            "w": 138,
+            "h": 138
+          },
+          "imgRect": {
+            "x": 132.6,
+            "y": 423.1,
+            "w": 138,
+            "h": 138
+          },
+          "transform": "matrix(1, 0, 0, 1, 0, 0)",
+          "objectFit": "contain"
+        },
+        {
+          "handle": "army-national-guard-series",
+          "exists": true,
+          "src": "https://cdn.shopify.com/s/files/1/0774/4602/1275/files/army-national-guard-seal-2026-09-09.png?v=1788985435",
+          "logoRect": {
+            "x": 391.8,
+            "y": 423.1,
+            "w": 138,
+            "h": 138
+          },
+          "imgRect": {
+            "x": 391.8,
+            "y": 423.1,
+            "w": 138,
+            "h": 138
+          },
+          "transform": "matrix(1, 0, 0, 1, 0, 0)",
+          "objectFit": "contain"
+        },
+        {
+          "handle": "air-national-guard-series",
+          "exists": true,
+          "src": "https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-circle-air-ng.png?v=1787804097",
+          "logoRect": {
+            "x": 651,
+            "y": 423.1,
+            "w": 138,
+            "h": 138
+          },
+          "imgRect": {
+            "x": 651,
+            "y": 423.1,
+            "w": 138,
+            "h": 138
+          },
+          "transform": "none",
+          "objectFit": "contain"
+        },
+        {
+          "handle": "state-guard-series",
+          "exists": true,
+          "src": "https://cdn.shopify.com/s/files/1/0774/4602/1275/files/state-guard-series-seal-final.png?v=1788122026",
+          "logoRect": {
+            "x": 910.2,
+            "y": 423.1,
+            "w": 138,
+            "h": 138
+          },
+          "imgRect": {
+            "x": 910.2,
+            "y": 423.1,
+            "w": 138,
+            "h": 138
+          },
+          "transform": "none",
+          "objectFit": "contain"
+        },
+        {
+          "handle": "products-built-for-the-line-u-s-army",
+          "exists": true,
+          "src": "https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-army-official-seal.png?v=1787801298",
+          "logoRect": {
+            "x": 1169.4,
+            "y": 423.1,
+            "w": 138,
+            "h": 138
+          },
+          "imgRect": {
+            "x": 1169.4,
+            "y": 423.1,
+            "w": 138,
+            "h": 138
+          },
+          "transform": "none",
+          "objectFit": "contain"
+        }
+      ]
+    },
+    {
+      "viewport": "mobile",
+      "httpStatus": 200,
+      "data": [
+        {
+          "handle": "stateside-quartermaster-logo-merch",
+          "exists": true,
+          "src": "https://cdn.shopify.com/s/files/1/0774/4602/1275/files/stateside-quartermaster-logo-merch-seal-2026-09-09.png?v=1788985421",
+          "logoRect": {
+            "x": 49.5,
+            "y": 303.7,
+            "w": 104,
+            "h": 104
+          },
+          "imgRect": {
+            "x": 49.5,
+            "y": 303.7,
+            "w": 104,
+            "h": 104
+          },
+          "transform": "matrix(1, 0, 0, 1, 0, 0)",
+          "objectFit": "contain"
+        },
+        {
+          "handle": "army-national-guard-series",
+          "exists": true,
+          "src": "https://cdn.shopify.com/s/files/1/0774/4602/1275/files/army-national-guard-seal-2026-09-09.png?v=1788985435",
+          "logoRect": {
+            "x": 236.5,
+            "y": 303.7,
+            "w": 104,
+            "h": 104
+          },
+          "imgRect": {
+            "x": 236.5,
+            "y": 303.7,
+            "w": 104,
+            "h": 104
+          },
+          "transform": "matrix(1, 0, 0, 1, 0, 0)",
+          "objectFit": "contain"
+        },
+        {
+          "handle": "air-national-guard-series",
+          "exists": true,
+          "src": "https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-circle-air-ng.png?v=1787804097",
+          "logoRect": {
+            "x": 49.5,
+            "y": 569.7,
+            "w": 104,
+            "h": 104
+          },
+          "imgRect": {
+            "x": 49.5,
+            "y": 569.7,
+            "w": 104,
+            "h": 104
+          },
+          "transform": "none",
+          "objectFit": "contain"
+        },
+        {
+          "handle": "state-guard-series",
+          "exists": true,
+          "src": "https://cdn.shopify.com/s/files/1/0774/4602/1275/files/state-guard-series-seal-final.png?v=1788122026",
+          "logoRect": {
+            "x": 236.5,
+            "y": 569.7,
+            "w": 104,
+            "h": 104
+          },
+          "imgRect": {
+            "x": 236.5,
+            "y": 569.7,
+            "w": 104,
+            "h": 104
+          },
+          "transform": "none",
+          "objectFit": "contain"
+        },
+        {
+          "handle": "products-built-for-the-line-u-s-army",
+          "exists": true,
+          "src": "https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-army-official-seal.png?v=1787801298",
+          "logoRect": {
+            "x": 49.5,
+            "y": 835.7,
+            "w": 104,
+            "h": 104
+          },
+          "imgRect": {
+            "x": 49.5,
+            "y": 835.7,
+            "w": 104,
+            "h": 104
+          },
+          "transform": "none",
+          "objectFit": "contain"
+        }
+      ]
+    }
+  ]
+}
