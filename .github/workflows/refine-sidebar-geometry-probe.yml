@@ -1,5 +1,5 @@
 name: Refine Products focused geometry probe
-# current draft rerun after visible-surface fallback fix
+# final placement checksum 75b2c6af7a2bcd2ebbad20acef28bd19
 on:
   push:
     paths:
