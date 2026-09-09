@@ -16,7 +16,7 @@ jobs:
           npm init -y
           npm install playwright@1.55.0
           npx playwright install --with-deps chromium
-      - name: Locate stale loading elements
+      - name: Locate stale loading elements and script source
         run: |
           cat > diagnose.mjs <<'EOF'
           import { chromium } from 'playwright';
@@ -25,16 +25,12 @@ jobs:
           const page=await ctx.newPage();
           const url='https://www.statesideqm.com/collections/armed-forces-gear-u-s-coast-guard?preview_theme_id=158561894555';
           const r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
-          console.log('HTTP',r?.status());
-          await page.waitForTimeout(7000);
+          console.log('HTTP',r?.status()); await page.waitForTimeout(5000);
           const data=await page.evaluate(()=>{
-            const re=/loading items|checking items|tree unavailable|building the customer-facing product tree|loading all products/i;
-            const all=[...document.querySelectorAll('#MainContent *')];
-            const hits=all.filter(e=>re.test((e.innerText||'').trim())).map(e=>({tag:e.tagName,id:e.id,cls:String(e.className||''),text:(e.innerText||'').replace(/\s+/g,' ').trim().slice(0,260),parent:e.parentElement?`${e.parentElement.tagName}#${e.parentElement.id}.${String(e.parentElement.className||'')}`:''})).slice(-30);
-            const cards=[...document.querySelectorAll('.sq-afg-branch-card')].slice(0,6).map(a=>({href:a.getAttribute('href'),name:a.querySelector('.sq-afg-branch-name')?.textContent?.trim(),meta:a.querySelector('.sq-afg-branch-count')?.textContent?.trim()}));
-            return {hits,cards,htmlClass:document.documentElement.className};
-          });
-          console.log(JSON.stringify(data,null,2));
-          await browser.close();
+            const re=/checking items|loading items/i;
+            const scripts=[...document.scripts].map((s,i)=>({i,src:s.src||'',attrs:[...s.attributes].reduce((o,a)=>(o[a.name]=a.value,o),{}),text:(s.textContent||'')})).filter(s=>re.test(s.text)).map(s=>({i:s.i,src:s.src,attrs:s.attrs,snippets:[...s.text.matchAll(/.{0,180}(?:Checking items|Loading items).{0,260}/gi)].map(m=>m[0].replace(/\s+/g,' ').slice(0,520)).slice(0,8)}));
+            const cards=[...document.querySelectorAll('.sq-third-level__type')].slice(0,8).map(a=>({href:a.getAttribute('href'),type:a.dataset.productType,text:(a.innerText||'').replace(/\s+/g,' ').trim(),count:a.querySelector('.sq-nav-count')?.textContent?.trim()}));
+            return {scripts,cards};
+          }); console.log(JSON.stringify(data,null,2)); await browser.close();
           EOF
           node diagnose.mjs
