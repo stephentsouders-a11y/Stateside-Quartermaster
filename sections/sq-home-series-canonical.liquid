@@ -1,7 +1,7 @@
 {{ 'sq-home-canonical.css' | asset_url | stylesheet_tag }}
 {% capture data %}
-/collections/stateside-quartermaster-logo-merch|Logo|Merch|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/stateside_quartermaster_exact_original_interior_6.png?v=1788197895|#57401e|Company logo products, apparel, accessories and merchandise.||
-/collections/army-national-guard-series|Army National|Guard Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-circle-army-ng.png?v=1787804088|#a30003|Army National Guard and U.S. Army apparel, insignia, patches and service gear.||
+/collections/stateside-quartermaster-logo-merch|Logo|Merch|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/stateside-quartermaster-logo-merch-seal-2026-09-09.png?v=1788985421|#57401e|Company logo products, apparel, accessories and merchandise.||
+/collections/army-national-guard-series|Army National|Guard Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/army-national-guard-seal-2026-09-09.png?v=1788985435|#a30003|Army National Guard and U.S. Army apparel, insignia, patches and service gear.||
 /collections/air-national-guard-series|Air National|Guard Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-circle-air-ng.png?v=1787804097|#01236d|Air National Guard and U.S. Air Force apparel, insignia, patches and service gear.||
 /collections/state-guard-series|State Guard|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/state-guard-series-seal-final.png?v=1788122026|#2c451d|State defense force and state guard products organized by service organization.||
 /collections/products-built-for-the-line-u-s-army|U.S. Army|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-army-official-seal.png?v=1787801298|#20291b|Full U.S. Army line, including qualifying Armed Forces Gear products.||
@@ -47,7 +47,9 @@
 </section>
 <style data-sq-home-series-live-look>
 [data-sq-line-series-root] .sqhc-series-card{position:relative!important;overflow:hidden!important;grid-template-rows:138px 48px 1px 64px 28px!important}
-[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="army-national-guard-series"] .sqhc-series-logo img{clip-path:circle(47% at 50% 46%)!important}
+/* New Logo Merch and Army National Guard seals use transparent source canvases; render them at the natural series-logo scale with no clipping. */
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="stateside-quartermaster-logo-merch"] .sqhc-series-logo img,
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="army-national-guard-series"] .sqhc-series-logo img{transform:scale(1)!important;transform-origin:center center!important;clip-path:none!important}
 /* Rebuilt ROTC/JROTC seals: match the visible diameter of the neighboring homepage seals. */
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="rotc-series"] .sqhc-series-logo img,
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="jrotc-series"] .sqhc-series-logo img{transform:scale(1)!important;transform-origin:center center!important}
