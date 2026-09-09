@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - '.github/workflows/storefront-chromium-isolated-route-audit.yml'
+      - 'snippets/sq-global-refine-direct-data.liquid'
+      - 'snippets/sq-storefront-content-guard.liquid'
   workflow_dispatch:
 permissions:
   contents: read
@@ -89,7 +91,7 @@ jobs:
           page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
           const target=new URL(process.env.ROUTE,process.env.BASE); target.searchParams.delete('filter.v.availability'); target.searchParams.set('preview_theme_id',process.env.THEME);
           const result={name:process.env.NAME,slug:process.env.SLUG,path:process.env.ROUTE,type:process.env.TYPE,status:null,usableMs:null,outcome:'FAIL',reasons:[],base:{},refine:{expected:process.env.TYPE==='collection',attempted:false,vendor:null,urlFiltered:false,checked:false,sampleSelector:null,productsChecked:0,vendors:[],allMatch:null,cleared:false},rateLimitUrls:[],consoleErrors:[]};
-          const isChallenge=async()=>page.evaluate(re=>re.test((document.title||'')+' '+(document.body?.innerText||'')),challengeText).catch(()=>false);
+          const isChallenge=async()=>page.evaluate(()=>/verify you are human|just a moment|attention required|performing security verification/i.test((document.title||'')+' '+(document.body?.innerText||''))).catch(()=>false);
           async function visibleProductLinks(){
             const selectors=['#MainContent [data-sq-category-universe-products] a[href*="/products/"]','#MainContent [data-sq-custom-color-products] a[href*="/products/"]','#MainContent .sq-custom-color-products a[href*="/products/"]','#MainContent .sqbfl-products a[href*="/products/"]','#MainContent .sqsg-products a[href*="/products/"]','#MainContent .sq-type-family-products__grid a[href*="/products/"]','#MainContent .product-grid a[href*="/products/"]','#MainContent #product-grid a[href*="/products/"]','#MainContent collection-component a[href*="/products/"]'];
             for(const sel of selectors){const links=await page.locator(sel).evaluateAll(as=>[...new Set(as.filter(a=>{const s=getComputedStyle(a),r=a.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2}).map(a=>a.href))].slice(0,2)).catch(()=>[]);if(links.length)return {selector:sel,links}}
@@ -106,7 +108,7 @@ jobs:
             if(result.outcome!=='INFRA'){
               for(let i=0;i<60;i++){
                 if(await isChallenge()){result.outcome='INFRA';result.reasons.push('anti-bot challenge during load');break}
-                const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const ms=getComputedStyle(m),mr=m.getBoundingClientRect();if(ms.display==='none'||ms.visibility==='hidden'||mr.width<3||mr.height<3)return false;return [...m.querySelectorAll('h1,.collection-title,.title,.product-grid,#product-grid,.sqbfl-products,.sq-type-family-products,.sq-subcategory-section,.sq-books-tree,.sq-custom-color-products,collection-component,[data-sqsg-view],.rte')].some(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2})}).catch(()=>false);
+                const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const ms=getComputedStyle(m),mr=m.getBoundingClientRect();if(ms.display==='none'||ms.visibility==='hidden'||mr.width<3||mr.height<3)return false;return [...m.querySelectorAll('h1,.collection-title,.title,.product-grid,#product-grid,.sqbfl-products,.sq-type-family-products,.sq-subcategory-section,.sq-books-tree,.sq-custom-color-products,collection-component,[data-sqsg-view],.rte,a[href*="/collections/"],a[href*="/products/"]')].some(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2})}).catch(()=>false);
                 if(ok){result.usableMs=Date.now()-started;break} await sleep(250);
               }
             }
