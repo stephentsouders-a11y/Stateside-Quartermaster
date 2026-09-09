@@ -1,0 +1,116 @@
+{
+  "pass": false,
+  "reference": "air-national-guard-series",
+  "rows": [
+    {
+      "handle": "stateside-quartermaster-logo-merch",
+      "imgBox": {
+        "w": 138,
+        "h": 138
+      },
+      "bg": "#57401e",
+      "visible": {
+        "w": 96,
+        "h": 98,
+        "diameter": 98,
+        "bounds": [
+          22,
+          21,
+          117,
+          118
+        ]
+      },
+      "referenceDiameter": 134,
+      "deltaPx": -36,
+      "scaleToReference": 1.3673
+    },
+    {
+      "handle": "army-national-guard-series",
+      "imgBox": {
+        "w": 138,
+        "h": 138
+      },
+      "bg": "#a30003",
+      "visible": {
+        "w": 94,
+        "h": 94,
+        "diameter": 94,
+        "bounds": [
+          23,
+          22,
+          116,
+          115
+        ]
+      },
+      "referenceDiameter": 134,
+      "deltaPx": -40,
+      "scaleToReference": 1.4255
+    },
+    {
+      "handle": "air-national-guard-series",
+      "imgBox": {
+        "w": 138,
+        "h": 138
+      },
+      "bg": "#01236d",
+      "visible": {
+        "w": 129,
+        "h": 134,
+        "diameter": 134,
+        "bounds": [
+          6,
+          4,
+          134,
+          137
+        ]
+      },
+      "referenceDiameter": 134,
+      "deltaPx": 0,
+      "scaleToReference": 1
+    },
+    {
+      "handle": "state-guard-series",
+      "imgBox": {
+        "w": 138,
+        "h": 138
+      },
+      "bg": "#2c451d",
+      "visible": {
+        "w": 125,
+        "h": 129,
+        "diameter": 129,
+        "bounds": [
+          6,
+          4,
+          130,
+          132
+        ]
+      },
+      "referenceDiameter": 134,
+      "deltaPx": -5,
+      "scaleToReference": 1.0388
+    },
+    {
+      "handle": "products-built-for-the-line-u-s-army",
+      "imgBox": {
+        "w": 138,
+        "h": 138
+      },
+      "bg": "#20291b",
+      "visible": {
+        "w": 138,
+        "h": 138,
+        "diameter": 138,
+        "bounds": [
+          0,
+          0,
+          137,
+          137
+        ]
+      },
+      "referenceDiameter": 134,
+      "deltaPx": 4,
+      "scaleToReference": 0.971
+    }
+  ]
+}
