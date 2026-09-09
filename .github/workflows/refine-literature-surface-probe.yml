@@ -1,0 +1,22 @@
+name: Refine Literature surface probe
+on:
+  push:
+    paths:
+      - '.github/workflows/refine-literature-surface-probe.yml'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - run: |
+          cat > p.mjs <<'EOF'
+          import{chromium}from'playwright';const b=await chromium.launch({headless:true});const c=await b.newContext({viewport:{width:1440,height:1100}}),p=await c.newPage(),u=new URL('/collections/literature','https://www.statesideqm.com');u.searchParams.set('preview_theme_id','158561894555');await p.goto(u.toString(),{waitUntil:'domcontentloaded'});await p.waitForTimeout(2200);console.log(JSON.stringify(await p.evaluate(()=>{const v=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};function chain(el){let a=[],n=el;for(let i=0;n&&i<10;i++,n=n.parentElement){const r=n.getBoundingClientRect();a.push({tag:n.tagName,id:n.id||'',cls:typeof n.className==='string'?n.className:'',x:r.x,y:r.y,w:r.width,h:r.height})}return a}const cards=[...document.querySelectorAll('.product-card')].filter(v);const book=document.querySelector('.sq-books-tree');const layout=document.querySelector('.sq-global-refine-layout'),body=layout?.querySelector(':scope>.sq-global-refine-main');return{productCount:cards.length,firstProduct:cards[0]?chain(cards[0]):[],book:book?chain(book):[],layout:layout?chain(layout):[],firstInBody:!!(cards[0]&&body?.contains(cards[0])),bookInBody:!!(book&&body?.contains(book))}})));await c.close();await b.close();
+          EOF
+          node p.mjs
