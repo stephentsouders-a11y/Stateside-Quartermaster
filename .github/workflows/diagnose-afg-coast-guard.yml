@@ -1,4 +1,4 @@
-name: Diagnose AFG Coast Guard loader
+name: Focused Army Flags performance
 on:
   push:
     paths:
@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 jobs:
-  diagnose:
+  certify:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -16,21 +16,15 @@ jobs:
           npm init -y
           npm install playwright@1.55.0
           npx playwright install --with-deps chromium
-      - name: Locate stale loading elements and script source
+      - name: Certify Army Flags
         run: |
-          cat > diagnose.mjs <<'EOF'
+          cat > check.mjs <<'EOF'
           import { chromium } from 'playwright';
+          const base='https://www.statesideqm.com',theme='158561894555',route='/collections/products-built-for-the-line-u-s-army?sq_bfl_category=Flags%2C+Displays+%26+Memorials';
           const browser=await chromium.launch({headless:true});
-          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
-          const page=await ctx.newPage();
-          const url='https://www.statesideqm.com/collections/armed-forces-gear-u-s-coast-guard?preview_theme_id=158561894555';
-          const r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
-          console.log('HTTP',r?.status()); await page.waitForTimeout(5000);
-          const data=await page.evaluate(()=>{
-            const re=/checking items|loading items/i;
-            const scripts=[...document.scripts].map((s,i)=>({i,src:s.src||'',attrs:[...s.attributes].reduce((o,a)=>(o[a.name]=a.value,o),{}),text:(s.textContent||'')})).filter(s=>re.test(s.text)).map(s=>({i:s.i,src:s.src,attrs:s.attrs,snippets:[...s.text.matchAll(/.{0,180}(?:Checking items|Loading items).{0,260}/gi)].map(m=>m[0].replace(/\s+/g,' ').slice(0,520)).slice(0,8)}));
-            const cards=[...document.querySelectorAll('.sq-third-level__type')].slice(0,8).map(a=>({href:a.getAttribute('href'),type:a.dataset.productType,text:(a.innerText||'').replace(/\s+/g,' ').trim(),count:a.querySelector('.sq-nav-count')?.textContent?.trim()}));
-            return {scripts,cards};
-          }); console.log(JSON.stringify(data,null,2)); await browser.close();
+          for(const [name,vp] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){const ctx=await browser.newContext({viewport:vp}),page=await ctx.newPage();const u=new URL(route,base);u.searchParams.set('preview_theme_id',theme);const start=Date.now();const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:30000});let usable=null,state;
+            for(let i=0;i<40;i++){state=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim();const visible=[...m.querySelectorAll('a,.sqbfl-card,.product-card,.product-grid__item')].some(e=>{const r=e.getBoundingClientRect();return r.width>30&&r.height>20});return{loading:/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(t),visible,availability:[...m.querySelectorAll('a[href*="filter.v.availability"]')].length,broken:[...m.querySelectorAll('img')].filter(x=>x.complete&&x.naturalWidth===0).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,text:t.slice(0,500)}});if(!state.loading&&state.visible){usable=Date.now()-start;break}await page.waitForTimeout(150)}
+            const failed=r.status()!==200||usable===null||usable>5000||state.loading||!state.visible||state.availability||state.broken||state.overflow;console.log(JSON.stringify({name,status:r.status(),usableMs:usable,failed,...state}));await ctx.close();if(failed)process.exitCode=2;}
+          await browser.close();
           EOF
-          node diagnose.mjs
+          node check.mjs
