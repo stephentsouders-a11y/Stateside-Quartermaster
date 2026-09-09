@@ -5,46 +5,46 @@
     {
       "handle": "stateside-quartermaster-logo-merch",
       "imgBox": {
-        "w": 138,
-        "h": 138
+        "w": 188.69,
+        "h": 188.69
       },
       "bg": "#57401e",
       "visible": {
-        "w": 96,
-        "h": 98,
-        "diameter": 98,
+        "w": 189,
+        "h": 190,
+        "diameter": 190,
         "bounds": [
-          22,
-          21,
-          117,
-          118
+          0,
+          0,
+          188,
+          189
         ]
       },
       "referenceDiameter": 134,
-      "deltaPx": -36,
-      "scaleToReference": 1.3673
+      "deltaPx": 56,
+      "scaleToReference": 0.7053
     },
     {
       "handle": "army-national-guard-series",
       "imgBox": {
-        "w": 138,
-        "h": 138
+        "w": 196.72,
+        "h": 196.72
       },
       "bg": "#a30003",
       "visible": {
-        "w": 94,
-        "h": 94,
-        "diameter": 94,
+        "w": 198,
+        "h": 195,
+        "diameter": 198,
         "bounds": [
-          23,
-          22,
-          116,
-          115
+          0,
+          0,
+          197,
+          194
         ]
       },
       "referenceDiameter": 134,
-      "deltaPx": -40,
-      "scaleToReference": 1.4255
+      "deltaPx": 64,
+      "scaleToReference": 0.6768
     },
     {
       "handle": "air-national-guard-series",
@@ -71,46 +71,46 @@
     {
       "handle": "state-guard-series",
       "imgBox": {
-        "w": 138,
-        "h": 138
+        "w": 143.35,
+        "h": 143.35
       },
       "bg": "#2c451d",
       "visible": {
-        "w": 125,
-        "h": 129,
-        "diameter": 129,
+        "w": 130,
+        "h": 134,
+        "diameter": 134,
         "bounds": [
-          6,
-          4,
-          130,
-          132
+          7,
+          5,
+          136,
+          138
         ]
       },
       "referenceDiameter": 134,
-      "deltaPx": -5,
-      "scaleToReference": 1.0388
+      "deltaPx": 0,
+      "scaleToReference": 1
     },
     {
       "handle": "products-built-for-the-line-u-s-army",
       "imgBox": {
-        "w": 138,
-        "h": 138
+        "w": 134,
+        "h": 134
       },
       "bg": "#20291b",
       "visible": {
-        "w": 138,
-        "h": 138,
-        "diameter": 138,
+        "w": 134,
+        "h": 134,
+        "diameter": 134,
         "bounds": [
           0,
           0,
-          137,
-          137
+          133,
+          133
         ]
       },
       "referenceDiameter": 134,
-      "deltaPx": 4,
-      "scaleToReference": 0.971
+      "deltaPx": 0,
+      "scaleToReference": 1
     }
   ]
 }
