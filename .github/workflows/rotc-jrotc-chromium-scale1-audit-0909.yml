@@ -1,0 +1,51 @@
+name: ROTC JROTC Chromium Scale1 Audit 0909
+on:
+  push:
+    paths:
+      - '.github/workflows/rotc-jrotc-chromium-scale1-audit-0909.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm init -y >/dev/null 2>&1 && npm i playwright@1.55.0 >/dev/null 2>&1 && npx playwright install chromium --with-deps >/dev/null 2>&1
+      - name: Chromium visual audit
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const url='https://www.statesideqm.com/?preview_theme_id=158561894555';
+          const browser=await chromium.launch({headless:true});
+          for (const vp of [{name:'desktop',width:1440,height:1200},{name:'mobile',width:390,height:844}]) {
+            const page=await browser.newPage({viewport:{width:vp.width,height:vp.height},deviceScaleFactor:1});
+            await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForTimeout(5000);
+            const section=page.locator('[data-sq-line-series-root]');
+            await section.scrollIntoViewIfNeeded();
+            await page.waitForTimeout(500);
+            const metrics=await page.evaluate(()=>['rotc-series','jrotc-series','military-schools-academies','law-enforcement-corrections','firefighting-ems-search-rescue'].map(h=>{
+              const card=document.querySelector(`[data-sq-series-handle="${h}"]`);
+              const logo=card?.querySelector('.sqhc-series-logo');
+              const img=logo?.querySelector('img');
+              const ir=img?.getBoundingClientRect();
+              const lr=logo?.getBoundingClientRect();
+              return {h,src:img?.currentSrc||img?.src||'',transform:img?getComputedStyle(img).transform:null,img:ir?{x:ir.x,y:ir.y,w:ir.width,h:ir.height}:null,logo:lr?{x:lr.x,y:lr.y,w:lr.width,h:lr.height}:null,natural:img?{w:img.naturalWidth,h:img.naturalHeight}:null};
+            }));
+            console.log('METRICS',vp.name,JSON.stringify(metrics));
+            await section.screenshot({path:`rotc-jrotc-${vp.name}-section.png`});
+            await page.screenshot({path:`rotc-jrotc-${vp.name}-homepage.png`,fullPage:true});
+            await page.close();
+          }
+          await browser.close();
+          EOF
+          node audit.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rotc-jrotc-scale1-chromium-audit
+          path: rotc-jrotc-*.png
+          if-no-files-found: error
