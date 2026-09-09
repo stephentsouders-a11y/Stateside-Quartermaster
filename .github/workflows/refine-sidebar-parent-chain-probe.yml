@@ -1,0 +1,22 @@
+name: Refine sidebar parent chain probe
+on:
+  push:
+    paths:
+      - '.github/workflows/refine-sidebar-parent-chain-probe.yml'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - run: |
+          cat > p.mjs <<'EOF'
+          import{chromium}from'playwright';const b=await chromium.launch({headless:true});for(const route of ['/collections/alabama-state-guard-female-pt-uniform','/collections/ohmr-female-pt-uniform']){const c=await b.newContext({viewport:{width:1440,height:1100}}),p=await c.newPage(),u=new URL(route,'https://www.statesideqm.com');u.searchParams.set('preview_theme_id','158561894555');await p.goto(u.toString(),{waitUntil:'domcontentloaded'});await p.waitForTimeout(1800);console.log(JSON.stringify(await p.evaluate(route=>{const v=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};const a=[...document.querySelectorAll('.sq-third-level__type')].find(v);let chain=[],n=a;for(let i=0;n&&i<9;i++,n=n.parentElement)chain.push({tag:n.tagName,id:n.id||'',cls:typeof n.className==='string'?n.className:'',rect:(()=>{const r=n.getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height}})()});return{route,chain,layout:document.querySelector('.sq-global-refine-layout')?.outerHTML.slice(0,300)||''}},route)));await c.close()}await b.close();
+          EOF
+          node p.mjs
