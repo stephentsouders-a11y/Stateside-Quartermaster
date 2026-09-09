@@ -1,5 +1,5 @@
 name: Refine Products sidebar exhaustive certification v3
-# final-publish-candidate rerun 2026-09-09 after PBTL scheduler and visibility fixes
+# final-publish-candidate rerun 2026-09-09 after PBTL scheduler, Refine dedupe, and visible-loader fixes
 on:
   push:
     paths:
@@ -59,7 +59,7 @@ jobs:
                 const candidates=[...productCards,...categoryCards,...productLinks].filter(vis).filter(e=>!sb?.contains(e)).sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top||a.getBoundingClientRect().left-b.getBoundingClientRect().left);if(candidates[0])first=candidates[0].getBoundingClientRect();
                 if(device==='desktop'&&hasCollectionSurface&&sb&&first){overlap=!(sr.right<=first.left+8||first.right<=sr.left+8||sr.bottom<=first.top+8||first.bottom<=sr.top+8);under=first.top>sr.bottom-8;geometry=sr.left<first.left&&sr.right<=first.left+16&&!overlap&&!under}
                 const sbClip=sb?sr.left<-2||sr.right>innerWidth+2||sb.scrollWidth>sb.clientWidth+4:false,pageOverflow=document.documentElement.scrollWidth>document.documentElement.clientWidth+4;
-                const bad=/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+text),loading=/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(text);
+                const bad=/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+text),loading=[...m.querySelectorAll('[data-sqbfl-load-state],p,small,span,div')].filter(vis).some(e=>/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test((e.innerText||'').trim()));
                 return{bad,loading,hasProducts,customSurface,hasCollectionSurface,productLinks:productLinks.length,productCards:productCards.length,categoryCards:categoryCards.length,sidebarCount:side.length,sidebarHeading:sb?(sb.querySelector('.sq-global-refine-sidebar__title')?.textContent||'').trim():'',sidebarLinks:links.length,availabilityLinks:availabilityLinks.length,badLinks:badLinks.length,badCountText:badCountText.length,progressive,progressiveCountBad,nativeDesktopFilters:nativeFilterItems.length,nativeMobileFilters:nativeMobile.length,geometry,overlap,under,sbClip,pageOverflow,sidebarRect:sr?{x:sr.x,y:sr.y,w:sr.width,h:sr.height}:null,firstRect:first?{x:first.x,y:first.y,w:first.width,h:first.height}:null};
               },device);if(status===200&&d&&!d.bad)break}catch(e){error=String(e)}await p.waitForTimeout(1800*attempt)
             }
