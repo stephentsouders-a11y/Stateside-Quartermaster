@@ -1,0 +1,77 @@
+{{ 'sq-home-canonical.css' | asset_url | stylesheet_tag }}
+{% capture data %}
+/collections/stateside-quartermaster-logo-merch|Logo|Merch|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/stateside_quartermaster_exact_original_interior_6.png?v=1788197895|#57401e|Company logo products, apparel, accessories and merchandise.||
+/collections/army-national-guard-series|Army National|Guard Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-circle-army-ng.png?v=1787804088|#a30003|Army National Guard and U.S. Army apparel, insignia, patches and service gear.||
+/collections/air-national-guard-series|Air National|Guard Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-circle-air-ng.png?v=1787804097|#01236d|Air National Guard and U.S. Air Force apparel, insignia, patches and service gear.||
+/collections/state-guard-series|State Guard|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/state-guard-series-seal-final.png?v=1788122026|#2c451d|State defense force and state guard products organized by service organization.||
+/collections/products-built-for-the-line-u-s-army|U.S. Army|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-army-official-seal.png?v=1787801298|#20291b|Full U.S. Army line, including qualifying Armed Forces Gear products.||
+/collections/products-built-for-the-line-u-s-navy|U.S. Navy|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-navy-official-seal.png?v=1787801336|#071f3d|Full U.S. Navy line, including qualifying Armed Forces Gear products.||
+/collections/products-built-for-the-line-u-s-air-force|U.S. Air Force|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-air-force-official-seal.png?v=1787801344|#003087|Full U.S. Air Force line, including qualifying Armed Forces Gear products.||
+/collections/products-built-for-the-line-u-s-marine-corps|U.S. Marine Corps|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-marines-official-seal.png?v=1787801329|#8b0015|Full U.S. Marine Corps line, including qualifying Armed Forces Gear products.||
+/collections/products-built-for-the-line-u-s-coast-guard|U.S. Coast Guard|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-coast-guard-official-seal.png?v=1787801356|#003b70|Full U.S. Coast Guard line, including qualifying Armed Forces Gear products.||
+/collections/products-built-for-the-line-u-s-space-force|U.S. Space Force|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-space-force-official-seal.png?v=1787801350|#15191e|Full U.S. Space Force line, including qualifying Armed Forces Gear products.||
+/collections/rotc-series|ROTC|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-circle-rotc.png?v=1787804113|#032666|Leadership, training, apparel and equipment for ROTC.||
+/collections/jrotc-series|JROTC|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-circle-jrotc.png?v=1787804121|#9c0007|Leadership, training, apparel and equipment for JROTC.||
+/collections/military-schools-academies|Military Schools|& Academies|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-circle-military-schools.png?v=1787804129|#171717|Products for military schools and service academies.||
+/collections/law-enforcement-corrections|Law Enforcement|& Corrections|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/law-enforcement-corrections-seal-final.png?v=1788122040|#071f3d|Law enforcement and corrections apparel, insignia and field essentials.||
+/collections/firefighting-ems-search-rescue|Firefighting, EMS|& Search & Rescue|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/firefighting-ems-search-rescue-seal-final.png?v=1788122034|#8b0015|Firefighting, EMS and search & rescue products and emergency-response gear.||
+{% endcapture %}
+{% assign rows = data | strip | split: '||' %}
+<section class="sqhc sqhc-series" data-sq-line-series-root>
+  <div class="sqhc-shell">
+    <p class="sqhc-k">Built for Service</p>
+    <h2 class="sqhc-h">Products Built for the Line</h2>
+    <p class="sqhc-sub">Shop service, Guard, cadet, academy and public-safety product lines.</p>
+    <div class="sqhc-series-grid">
+      {% for row in rows %}
+        {% assign r = row | strip %}
+        {% if r != blank %}
+          {% assign p = r | split: '|' %}
+          {% assign sq_path = p[0] | split: '?' | first %}
+          {% assign sq_parts = sq_path | split: '/' %}
+          {% assign sq_handle = sq_parts | last %}
+          {% assign sq_collection = collections[sq_handle] %}
+          {% assign sq_count = 0 %}
+          {% if sq_collection != blank %}{% assign sq_count = sq_collection.products_count %}{% endif %}
+          <a class="sqhc-series-card" style="--bg:{{ p[4] }}" href="{{ p[0] }}" aria-label="Shop {{ p[1] | escape }} {{ p[2] | escape }}" data-sq-series-handle="{{ sq_handle | escape }}" data-sq-reactive-nav="true" data-sq-item-count="{{ sq_count }}">
+            <span class="sqhc-series-logo"><img src="{{ p[3] }}" alt="{{ p[1] | escape }} {{ p[2] | escape }}" loading="lazy"></span>
+            <span class="sqhc-series-title"><span>{{ p[1] }}</span><span>{{ p[2] }}</span></span>
+            <span class="sqhc-series-rule" aria-hidden="true"></span>
+            <span class="sqhc-series-desc">{{ p[5] }}</span>
+            <span class="sqhc-series-foot sqhc-series-count" data-sq-home-series-count>{{ sq_count }} {% if sq_count == 1 %}item{% else %}items{% endif %}</span>
+          </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+<style data-sq-home-series-live-look>
+[data-sq-line-series-root] .sqhc-series-card{position:relative!important;overflow:hidden!important;grid-template-rows:138px 48px 1px 64px 28px!important}
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="army-national-guard-series"] .sqhc-series-logo img{clip-path:circle(47% at 50% 46%)!important}
+[data-sq-line-series-root] .sqhc-series-desc{overflow:hidden!important;min-height:0!important}
+[data-sq-line-series-root] .sqhc-series-count{display:flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;min-height:0!important;height:100%!important;margin:0!important;padding:0!important;transform:none!important;color:#d5ab4b!important;font-size:12px!important;font-weight:800!important;letter-spacing:.02em!important;line-height:1!important;text-align:center!important;white-space:nowrap!important;overflow:hidden!important}
+[data-sq-line-series-root] .sqhc-series-count::before,
+[data-sq-line-series-root] .sqhc-series-count::after{content:""!important;display:block!important;width:26px!important;height:1px!important;background:#d5ab4b!important;flex:0 1 26px!important;min-width:10px!important;opacity:.95!important}
+@media(max-width:649px){
+  [data-sq-line-series-root] .sqhc-series-card{grid-template-rows:104px 42px 1px 51px 20px!important}
+  [data-sq-line-series-root] .sqhc-series-count{gap:4px!important;font-size:10px!important;letter-spacing:0!important}
+  [data-sq-line-series-root] .sqhc-series-count::before,[data-sq-line-series-root] .sqhc-series-count::after{width:18px!important;flex-basis:18px!important;min-width:6px!important}
+}
+</style>
+<script data-sq-home-series-reactive-counts>
+(function(){
+  if(window.__sqHomeSeriesCountsV3)return;
+  window.__sqHomeSeriesCountsV3=true;
+  function label(n){return n+' '+(n===1?'item':'items')}
+  function update(){
+    document.querySelectorAll('[data-sq-line-series-root] a[data-sq-series-handle]').forEach(function(card){
+      var el=card.querySelector('[data-sq-home-series-count]');
+      if(!el)return;
+      var n=parseInt(card.getAttribute('data-sq-item-count')||'',10);
+      if(Number.isFinite(n))el.textContent=label(n);
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',update,{once:true});else update();
+})();
+</script>
+{% schema %}{"name":"SQ Canonical Line Series","settings":[],"presets":[{"name":"SQ Canonical Line Series"}]}{% endschema %}
