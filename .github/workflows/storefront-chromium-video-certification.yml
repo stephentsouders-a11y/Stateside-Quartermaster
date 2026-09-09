@@ -51,6 +51,9 @@ jobs:
           fs.mkdirSync('out/videos',{recursive:true});
           fs.mkdirSync('out/screens',{recursive:true});
           const results=[];
+          const HARD_LOAD_LIMIT_MS=5000;
+          const TARGET_LOAD_MS=3500;
+          const lineRoots=new Set(['army','arng','air-force','ang']);
           async function run(device,viewport){
             const browser=await chromium.launch({headless:true});
             const ctx=await browser.newContext({viewport,recordVideo:{dir:'out/videos',size:viewport}});
@@ -69,12 +72,15 @@ jobs:
             const details=await page.evaluate(()=>{const main=document.querySelector('#MainContent');const text=(main?.innerText||'').replace(/\s+/g,' ').trim();const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;const side=[...(main?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis);const cards=[...(main?.querySelectorAll('.sq-subcategory-card,.sqbfl-card,.sg-entity,.sq-afg-branch-card,.sq-ts-match-card,.product-card,.product-grid__item,.sq-type-family-product')||[])].filter(vis);const first=cards.slice(0,3).map(e=>{const r=e.getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height}});return{title:document.title,url:location.href,challenge:/just a moment/i.test(document.title+' '+text),errorPage:/something went wrong|internal server error|there was a problem/i.test(document.title+' '+text),loading:/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(text),sidebarCount:side.length,cardCount:cards.length,sameRow:first.length>=3&&Math.max(...first.map(x=>x.y))-Math.min(...first.map(x=>x.y))<8,availabilityLinks:[...(main?.querySelectorAll('a[href*="filter.v.availability"]')||[])].map(a=>a.getAttribute('href')).slice(0,20),brokenImages:[...(main?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).map(i=>({alt:i.alt,src:i.currentSrc||i.src})).slice(0,20),overflowX:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,stateGuardPromoBeforeGrid:(()=>{const p=document.querySelector('[data-sq-state-guard-merch-feature]'),g=document.querySelector('[data-sq-state-guard-root] .sg-entity-grid');return !!(p&&g&&(p.compareDocumentPosition(g)&Node.DOCUMENT_POSITION_FOLLOWING))})(),text:text.slice(0,3500)}}).catch(e=>({extractError:String(e)}));
             await page.screenshot({path:`out/screens/${process.env.SLUG}-${device}.png`,fullPage:true}).catch(()=>{});
             const video=page.video(); await page.close(); await ctx.close(); let videoPath=null; if(video){const p=await video.path().catch(()=>null);if(p){videoPath=`out/videos/${process.env.SLUG}-${device}.webm`;fs.copyFileSync(p,videoPath)}}
-            results.push({device,status,error,usableMs,videoPath,...details}); await browser.close();
+            const hardSlow=usableMs===null||usableMs>HARD_LOAD_LIMIT_MS;
+            const targetSlow=usableMs===null||usableMs>TARGET_LOAD_MS;
+            const desktopGridFailure=device==='desktop'&&lineRoots.has(process.env.SLUG)&&(details.sidebarCount!==1||details.cardCount<3||details.sameRow!==true);
+            results.push({device,status,error,usableMs,hardSlow,targetSlow,desktopGridFailure,videoPath,...details}); await browser.close();
           }
           await run('desktop',{width:1440,height:1100}); await new Promise(r=>setTimeout(r,5000)); await run('mobile',{width:390,height:844});
-          fs.writeFileSync('out/report.json',JSON.stringify({slug:process.env.SLUG,route:process.env.ROUTE,results},null,2));
-          console.log(JSON.stringify({slug:process.env.SLUG,results:results.map(x=>({device:x.device,status:x.status,usableMs:x.usableMs,challenge:x.challenge,errorPage:x.errorPage,loading:x.loading,sidebar:x.sidebarCount,cards:x.cardCount,sameRow:x.sameRow,availability:x.availabilityLinks?.length||0,broken:x.brokenImages?.length||0,overflow:x.overflowX,stateGuardPromoBeforeGrid:x.stateGuardPromoBeforeGrid,video:x.videoPath}))},null,2));
-          const failed=results.some(x=>x.status!==200||x.challenge||x.errorPage||x.loading||x.overflowX||(x.brokenImages?.length||0)>0||(x.availabilityLinks?.length||0)>0||x.stateGuardPromoBeforeGrid===true);
+          fs.writeFileSync('out/report.json',JSON.stringify({slug:process.env.SLUG,route:process.env.ROUTE,hardLoadLimitMs:HARD_LOAD_LIMIT_MS,targetLoadMs:TARGET_LOAD_MS,results},null,2));
+          console.log(JSON.stringify({slug:process.env.SLUG,results:results.map(x=>({device:x.device,status:x.status,usableMs:x.usableMs,hardSlow:x.hardSlow,targetSlow:x.targetSlow,desktopGridFailure:x.desktopGridFailure,challenge:x.challenge,errorPage:x.errorPage,loading:x.loading,sidebar:x.sidebarCount,cards:x.cardCount,sameRow:x.sameRow,availability:x.availabilityLinks?.length||0,broken:x.brokenImages?.length||0,overflow:x.overflowX,stateGuardPromoBeforeGrid:x.stateGuardPromoBeforeGrid,video:x.videoPath}))},null,2));
+          const failed=results.some(x=>x.status!==200||x.challenge||x.errorPage||x.loading||x.hardSlow||x.desktopGridFailure||x.overflowX||(x.brokenImages?.length||0)>0||(x.availabilityLinks?.length||0)>0||x.stateGuardPromoBeforeGrid===true);
           if(failed)process.exitCode=2;
           EOF
           node certify.mjs
