@@ -1,0 +1,63 @@
+name: Firearm Refine fix verification
+on:
+  push:
+    paths:
+      - '.github/workflows/firearm-refine-verify.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify Firearm Accessories
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > verify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage();page.setDefaultTimeout(14000);page.setDefaultNavigationTimeout(60000);
+          const bad=[];page.on('response',r=>{if(r.status()===429||r.status()>=500)bad.push(`${r.status()} ${r.url()}`)});
+          const result={status:null,usableMs:null,outcome:'FAIL',reasons:[],vendor:null,urlFiltered:false,checked:false,bridge:false,vendors:[],allMatch:null,cleared:false,bad:[]};
+          const challenge=async()=>page.evaluate(()=>/verify you are human|just a moment|attention required|performing security verification/i.test((document.title||'')+' '+(document.body?.innerText||''))).catch(()=>false);
+          async function vendorFor(href){try{const m=new URL(href).pathname.match(/^\/products\/([^/?#]+)/);if(!m)return null;const r=await ctx.request.get(`${process.env.BASE}/products/${m[1]}.js`,{timeout:15000});if(r.status()===429||r.status()>=500)bad.push(`${r.status()} vendor:${m[1]}`);if(!r.ok())return null;return String((await r.json()).vendor||'').trim()}catch{return null}}
+          const u=new URL('/collections/firearm-accessories',process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);
+          await sleep(2500);const started=Date.now();const resp=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});result.status=resp?.status()??null;
+          if(result.status===429||result.status>=500||await challenge()){result.outcome='INFRA';result.reasons.push('initial infrastructure failure')}
+          if(result.outcome!=='INFRA'){
+            for(let i=0;i<40;i++){const ok=await page.locator('#MainContent').evaluate(m=>{const r=m.getBoundingClientRect(),s=getComputedStyle(m);return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2&&!!m.querySelector('h1,a[href*="/collections/"],a[href*="/products/"]')}).catch(()=>false);if(ok){result.usableMs=Date.now()-started;break}await sleep(250)}
+            await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:14000});
+            await page.screenshot({path:'out/base.png',fullPage:false});
+            const box=page.locator('.sq-global-refine-manufacturer-checkbox').first();result.vendor=await box.inputValue();
+            await box.evaluate(el=>{el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}))});
+            await page.waitForURL(x=>{const q=new URL(x).searchParams;return q.get('filter.p.vendor')===result.vendor&&q.get('sq_maker')===result.vendor},{timeout:18000}).catch(()=>{});await page.waitForLoadState('domcontentloaded').catch(()=>{});
+            await page.locator('[data-sq-filtered-child-union-products],[data-sq-filtered-product-surface-guard-products]').first().waitFor({state:'attached',timeout:12000}).catch(()=>{});await sleep(1000);
+            const q=new URL(page.url()).searchParams;result.urlFiltered=q.get('filter.p.vendor')===result.vendor&&q.get('sq_maker')===result.vendor;result.checked=await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().isChecked().catch(()=>false);result.bridge=await page.locator('[data-sq-filtered-child-union-products]').count()>0;
+            const sel=result.bridge?'#MainContent [data-sq-filtered-child-union-products] a[href*="/products/"]':'#MainContent [data-sq-filtered-product-surface-guard-products] a[href*="/products/"]';const links=await page.locator(sel).evaluateAll(as=>[...new Set(as.filter(a=>{const s=getComputedStyle(a),r=a.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2}).map(a=>a.href))].slice(0,3)).catch(()=>[]);for(const href of links){const v=await vendorFor(href);if(v)result.vendors.push(v)}result.allMatch=result.vendors.length?result.vendors.every(v=>v.toLowerCase()===result.vendor.toLowerCase()):null;await page.screenshot({path:'out/filtered.png',fullPage:false});
+            const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first();if(await active.count()){await active.evaluate(el=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(x=>{const z=new URL(x).searchParams;return !z.has('filter.p.vendor')&&!z.has('sq_maker')},{timeout:18000}).catch(()=>{});const z=new URL(page.url()).searchParams;result.cleared=!z.has('filter.p.vendor')&&!z.has('sq_maker')}
+          }
+          result.bad=[...new Set(bad)];if(result.bad.length||await challenge()){result.outcome='INFRA';result.reasons.push('HTTP infrastructure contamination')}
+          if(result.outcome!=='INFRA'){if(result.usableMs===null||result.usableMs>5000)result.reasons.push(`usable ${result.usableMs}ms`);if(!result.urlFiltered)result.reasons.push('dual URL failed');if(!result.checked)result.reasons.push('checkbox lost');if(!result.bridge)result.reasons.push('child union bridge missing');if(!result.vendors.length)result.reasons.push('no filtered products verified');if(result.allMatch===false)result.reasons.push(`wrong vendors ${result.vendors.join(', ')}`);if(!result.cleared)result.reasons.push('clear failed');result.outcome=result.reasons.length?'FAIL':'PASS'}
+          fs.writeFileSync('out/report.json',JSON.stringify(result,null,2));console.log('\nFIREARM RESULT\n'+JSON.stringify(result,null,2));await page.screenshot({path:'out/final.png',fullPage:false}).catch(()=>{});await ctx.close();await browser.close();if(result.outcome!=='PASS')process.exitCode=2;
+          EOF
+          node verify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: firearm-refine-fix-verification
+          path: out
+          retention-days: 7
