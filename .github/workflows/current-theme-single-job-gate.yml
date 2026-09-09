@@ -1,0 +1,50 @@
+name: Current theme sequential publish gate
+on:
+  push:
+    paths:
+      - '.github/workflows/current-theme-single-job-gate.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Certify all current draft routes sequentially
+        run: |
+          cat > gate.mjs <<'EOF'
+          import { chromium } from 'playwright'; import fs from 'fs';
+          const base='https://www.statesideqm.com',theme='158561894555';
+          const routes=[
+            ['home','/',false],['state-guard','/collections/state-guard-series',false],['state-guard-alabama','/collections/state-guard-series-alabama',false],
+            ['army','/collections/products-built-for-the-line-u-s-army',true],['arng','/collections/army-national-guard-series',true],['air-force','/collections/products-built-for-the-line-u-s-air-force',true],['ang','/collections/air-national-guard-series',true],
+            ['afg','/collections/armed-forces-gear',false],['thin-line','/collections/thin-line',false],['thin-yellow','/collections/thin-line-shop-thin-yellow-line?sq_type_family=First%20Responder%20Patches&sort_by=title-ascending',false],
+            ['sta-brite','/collections/sta-brite-insignia',false],['law','/collections/law-enforcement-corrections',false],['fire-ems-sar','/collections/firefighting-ems-search-rescue',false],
+            ['rotc','/collections/rotc-series',false],['jrotc','/collections/jrotc-series',false],['msa','/collections/military-schools-academies',false],['flashlights','/collections/flashlights-lighting',false]
+          ];
+          const results=[]; fs.mkdirSync('out',{recursive:true});
+          for(let ri=0;ri<routes.length;ri++){
+            const [slug,route,line]=routes[ri];
+            for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
+              const browser=await chromium.launch({headless:true}); const ctx=await browser.newContext({viewport}); const page=await ctx.newPage(); page.setDefaultNavigationTimeout(60000);
+              const u=new URL(route,base);u.searchParams.delete('filter.v.availability');u.searchParams.set('preview_theme_id',theme);let status=null,error=null,usable=null;const start=Date.now();
+              try{let r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null;if(status===429){await page.waitForTimeout(12000);r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});status=r?.status()??null}}catch(e){error=String(e)}
+              for(let i=0;i<40&&status===200&&!error;i++){const s=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim();return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),loading:/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(t),visible:[...(m?.querySelectorAll('a,.product-card,.product-grid__item,.sqbfl-card,.sq-subcategory-card,.sg-entity,.sq-afg-branch-card,.sq-third-level__type,.sq-ts-match-card,.sq-type-family-product')||[])].some(e=>{const r=e.getBoundingClientRect();return r.width>30&&r.height>20})}}).catch(()=>({bad:true,loading:false,visible:false}));if(!s.bad&&!s.loading&&s.visible){usable=Date.now()-start;break}await page.waitForTimeout(175)}
+              await page.waitForTimeout(500);
+              const d=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim(),vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;const side=[...(m?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis),cards=[...(m?.querySelectorAll('.sq-subcategory-card,.sqbfl-card,.sg-entity,.sq-afg-branch-card,.sq-third-level__type,.sq-ts-match-card,.product-card,.product-grid__item,.sq-type-family-product')||[])].filter(vis),first=cards.slice(0,3).map(e=>e.getBoundingClientRect());return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),loading:/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(t),sidebar:side.length,cards:cards.length,sameRow:first.length>=3&&Math.max(...first.map(x=>x.y))-Math.min(...first.map(x=>x.y))<8,availability:[...(m?.querySelectorAll('a[href*="filter.v.availability"]')||[])].length,broken:[...(m?.querySelectorAll('img')||[])].filter(x=>x.complete&&x.naturalWidth===0).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,stateGuardPromoBeforeGrid:(()=>{const p=document.querySelector('[data-sq-state-guard-merch-feature]'),g=document.querySelector('[data-sq-state-guard-root] .sg-entity-grid');return!!(p&&g&&(p.compareDocumentPosition(g)&Node.DOCUMENT_POSITION_FOLLOWING))})()}}).catch(()=>({bad:true,loading:false,sidebar:0,cards:0,sameRow:false,availability:0,broken:0,overflow:false,stateGuardPromoBeforeGrid:false}));
+              const gridFail=device==='desktop'&&line&&(d.sidebar!==1||d.cards<3||!d.sameRow);const failed=status!==200||!!error||d.bad||d.loading||usable===null||usable>5000||d.availability>0||d.broken>0||d.overflow||d.stateGuardPromoBeforeGrid||gridFail;const row={slug,device,status,error,usableMs:usable,gridFail,failed,...d};results.push(row);console.log(JSON.stringify(row));await ctx.close();await browser.close();if(device==='desktop')await new Promise(r=>setTimeout(r,2500));
+            }
+            await new Promise(r=>setTimeout(r,3500));
+          }
+          const failures=results.filter(x=>x.failed);fs.writeFileSync('out/current-gate.json',JSON.stringify({tested:results.length,passed:results.length-failures.length,failed:failures.length,failures,results},null,2));console.log(`CURRENT GATE ${results.length-failures.length}/${results.length} PASS; ${failures.length} FAIL`);if(failures.length)process.exitCode=2;
+          EOF
+          node gate.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: current-theme-sequential-gate, path: out/current-gate.json, retention-days: 7}
