@@ -47,9 +47,11 @@
 </section>
 <style data-sq-home-series-live-look>
 [data-sq-line-series-root] .sqhc-series-card{position:relative!important;overflow:hidden!important;grid-template-rows:138px 48px 1px 64px 28px!important}
-/* New Logo Merch and Army National Guard seals use transparent source canvases; render them at the natural series-logo scale with no clipping. */
-[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="stateside-quartermaster-logo-merch"] .sqhc-series-logo img,
-[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="army-national-guard-series"] .sqhc-series-logo img{transform:scale(1)!important;transform-origin:center center!important;clip-path:none!important}
+/* Match every first-row visible circle diameter to the Air National Guard reference. */
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="stateside-quartermaster-logo-merch"] .sqhc-series-logo img{transform:scale(1.3673)!important;transform-origin:center center!important;clip-path:none!important}
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="army-national-guard-series"] .sqhc-series-logo img{transform:scale(1.4255)!important;transform-origin:center center!important;clip-path:none!important}
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="state-guard-series"] .sqhc-series-logo img{transform:scale(1.0388)!important;transform-origin:center center!important}
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="products-built-for-the-line-u-s-army"] .sqhc-series-logo img{transform:scale(.971)!important;transform-origin:center center!important}
 /* Rebuilt ROTC/JROTC seals: match the visible diameter of the neighboring homepage seals. */
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="rotc-series"] .sqhc-series-logo img,
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="jrotc-series"] .sqhc-series-logo img{transform:scale(1)!important;transform-origin:center center!important}
