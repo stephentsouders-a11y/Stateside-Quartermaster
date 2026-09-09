@@ -1,4 +1,4 @@
-name: Capture Army compiled preview HTML
+name: Focused publish-readiness checks
 on:
   push:
     paths:
@@ -6,54 +6,44 @@ on:
 permissions:
   contents: read
 jobs:
-  capture:
+  focused:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {slug: ang, path: /collections/air-national-guard-series, kind: line}
+          - {slug: flashlights, path: /collections/flashlights-lighting, kind: collection}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+        with: {node-version: '20'}
       - run: |
           npm init -y
           npm install playwright@1.55.0
           npx playwright install --with-deps chromium
-      - name: Capture current Army preview timing and usability
+      - name: Certify current draft route
+        env:
+          SLUG: ${{ matrix.slug }}
+          ROUTE: ${{ matrix.path }}
+          KIND: ${{ matrix.kind }}
         run: |
-          cat > capture.mjs <<'EOF'
-          import { chromium } from 'playwright';
-          import fs from 'fs';
-          fs.mkdirSync('out',{recursive:true});
-          const url='https://www.statesideqm.com/collections/products-built-for-the-line-u-s-army?preview_theme_id=158561894555';
-          const results=[];
+          cat > focused.mjs <<'EOF'
+          import { chromium } from 'playwright'; import fs from 'fs'; fs.mkdirSync('out',{recursive:true});
+          const base='https://www.statesideqm.com', theme='158561894555', results=[];
           for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
-            const browser=await chromium.launch({headless:true});
-            const ctx=await browser.newContext({viewport});
-            const page=await ctx.newPage();
-            const start=Date.now();
-            let status=null,error=null;
-            try{const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});status=response?.status()??null}catch(e){error=String(e)}
-            const domContentLoadedMs=Date.now()-start;
-            if(device==='desktop')fs.writeFileSync('out/army-compiled.html',await page.content());
-            let usableMs=null;
-            for(let i=0;i<40;i++){
-              const state=await page.evaluate(()=>{const main=document.querySelector('#MainContent');const text=(main?.innerText||'').replace(/\s+/g,' ').trim();const blocked=/just a moment/i.test(document.title+' '+text);const loading=/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(text);const cards=[...(main?.querySelectorAll('.sqbfl-card')||[])].filter(e=>{const r=e.getBoundingClientRect();return r.width>30&&r.height>20});return{blocked,loading,cards:cards.length}}).catch(()=>({blocked:false,loading:true,cards:0}));
-              if(!state.blocked&&!state.loading&&state.cards>=3){usableMs=Date.now()-start;break}
-              await page.waitForTimeout(250);
-            }
-            const details=await page.evaluate(()=>{const main=document.querySelector('#MainContent');const text=(main?.innerText||'').replace(/\s+/g,' ').trim();const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;const side=[...(main?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis);const cards=[...(main?.querySelectorAll('.sqbfl-card')||[])].filter(vis);const first=cards.slice(0,3).map(e=>e.getBoundingClientRect());return{challenge:/just a moment/i.test(document.title+' '+text),loading:/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(text),loadState:main?.querySelector('[data-sqbfl-root]')?.getAttribute('data-sqbfl-load-state')||null,sidebar:side.length,cards:cards.length,sameRow:first.length>=3&&Math.max(...first.map(x=>x.y))-Math.min(...first.map(x=>x.y))<8,visibleCountBars:[...(main?.querySelectorAll('.sqbfl-count')||[])].filter(vis).length,availability:[...(main?.querySelectorAll('a[href*="filter.v.availability"]')||[])].length,broken:[...(main?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}});
-            const perf=await page.evaluate(()=>{const n=performance.getEntriesByType('navigation')[0];return n?{responseStart:n.responseStart,responseEnd:n.responseEnd,domContentLoadedEventEnd:n.domContentLoadedEventEnd,decodedBodySize:n.decodedBodySize}:null});
-            results.push({device,status,error,domContentLoadedMs,usableMs,...details,perf});
-            await browser.close();
+            const browser=await chromium.launch({headless:true}); const ctx=await browser.newContext({viewport}); const page=await ctx.newPage(); page.setDefaultNavigationTimeout(60000);
+            const u=new URL(process.env.ROUTE,base); u.searchParams.set('preview_theme_id',theme); const start=Date.now(); let status=null,error=null;
+            try{const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'}); status=r?.status()??null}catch(e){error=String(e)}
+            let usableMs=null; for(let i=0;i<40;i++){const s=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim();const blocked=/just a moment/i.test(document.title+' '+t),bad=/something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),loading=/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(t);const visible=[...(m?.querySelectorAll('a,.sqbfl-card,.product-card,.product-grid__item,.sq-subcategory-card')||[])].some(e=>{const r=e.getBoundingClientRect();return r.width>30&&r.height>20});return{blocked,bad,loading,visible}}).catch(()=>({blocked:false,bad:true,loading:false,visible:false}));if(!s.blocked&&!s.bad&&!s.loading&&s.visible){usableMs=Date.now()-start;break}await page.waitForTimeout(250)}
+            await page.waitForTimeout(750);
+            const d=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),t=(m?.innerText||'').replace(/\s+/g,' ').trim(),vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;const side=[...(m?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis),cards=[...(m?.querySelectorAll('.sqbfl-card,.product-card,.product-grid__item,.sq-subcategory-card')||[])].filter(vis),first=cards.slice(0,3).map(e=>e.getBoundingClientRect());return{challenge:/just a moment/i.test(document.title+' '+t),errorPage:/something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),loading:/loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(t),sidebar:side.length,cards:cards.length,sameRow:first.length>=3&&Math.max(...first.map(x=>x.y))-Math.min(...first.map(x=>x.y))<8,availability:[...(m?.querySelectorAll('a[href*="filter.v.availability"]')||[])].length,broken:[...(m?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,soldOutLabels:[...(m?.querySelectorAll('.sqbfl-soldout')||[])].filter(vis).length}});
+            await page.screenshot({path:`out/${process.env.SLUG}-${device}.png`,fullPage:true}).catch(()=>{}); results.push({device,status,error,usableMs,...d}); await browser.close();
           }
-          fs.writeFileSync('out/timing.json',JSON.stringify(results,null,2));
-          console.log(JSON.stringify(results,null,2));
-          const failed=results.some(x=>x.status!==200||x.challenge||x.loading||x.usableMs===null||x.usableMs>5000||x.availability>0||x.broken>0||x.overflow)||(results[0].sidebar!==1||results[0].cards<3||results[0].sameRow!==true);
-          if(failed)process.exitCode=2;
+          console.log(JSON.stringify(results,null,2)); fs.writeFileSync(`out/${process.env.SLUG}.json`,JSON.stringify(results,null,2));
+          const line=process.env.KIND==='line'; const failed=results.some(x=>x.status!==200||x.challenge||x.errorPage||x.loading||x.usableMs===null||x.usableMs>5000||x.availability>0||x.broken>0||x.overflow)||(line&&(results[0].sidebar!==1||results[0].cards<3||!results[0].sameRow)); if(failed)process.exitCode=2;
           EOF
-          node capture.mjs
+          node focused.mjs
       - uses: actions/upload-artifact@v4
         if: always()
-        with:
-          name: army-compiled-preview
-          path: out
-          retention-days: 2
+        with: {name: 'focused-${{ matrix.slug }}', path: out, retention-days: 2}
