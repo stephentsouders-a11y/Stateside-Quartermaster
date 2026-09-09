@@ -1,0 +1,30 @@
+name: Verify progressive to exact BFL counts
+on:
+  push:
+    paths:
+      - '.github/workflows/verify-progressive-to-exact.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Verify hidden partial counts become visible exact counts
+        run: |
+          cat > verify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const b=await chromium.launch({headless:true}),c=await b.newContext({viewport:{width:1440,height:1100}}),p=await c.newPage();
+          const u='https://www.statesideqm.com/collections/products-built-for-the-line-u-s-army?sq_bfl_category=Flags%2C+Displays+%26+Memorials&preview_theme_id=158561894555';
+          const start=Date.now();const r=await p.goto(u,{waitUntil:'domcontentloaded',timeout:30000});let progressive=null,ready=null;
+          for(let i=0;i<120;i++){const s=await p.evaluate(()=>{const root=document.querySelector('.sqbfl'),state=root?.getAttribute('data-sqbfl-load-state'),counts=[...document.querySelectorAll('.sqbfl .sq-global-refine-sidebar__item small')],visible=counts.filter(e=>{const cs=getComputedStyle(e),r=e.getBoundingClientRect();return cs.visibility!=='hidden'&&cs.display!=='none'&&r.width>0&&r.height>0}).length;return{state,countNodes:counts.length,visibleCountNodes:visible,total:document.querySelector('[data-sqbfl-total]')?.textContent?.trim()||''}});if(s.state==='progressive'&&!progressive)progressive={ms:Date.now()-start,...s};if(s.state==='ready'){ready={ms:Date.now()-start,...s};break}await p.waitForTimeout(200)}
+          console.log(JSON.stringify({status:r.status(),progressive,ready},null,2));await b.close();
+          if(r.status()!==200||!progressive||progressive.visibleCountNodes!==0||!ready||ready.visibleCountNodes===0)process.exitCode=2;
+          EOF
+          node verify.mjs
