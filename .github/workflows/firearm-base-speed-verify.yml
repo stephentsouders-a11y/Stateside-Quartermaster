@@ -1,0 +1,46 @@
+name: Firearm base speed verification
+on:
+  push:
+    paths:
+      - '.github/workflows/firearm-base-speed-verify.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify Firearm base load only
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > speed.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage();
+          const bad=[]; page.on('response',r=>{if(r.status()===429||r.status()>=500)bad.push(`${r.status()} ${r.url()}`)});
+          const u=new URL('/collections/firearm-accessories',process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);
+          const start=Date.now(); const resp=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});
+          let usable=null; for(let i=0;i<40;i++){const ok=await page.locator('#MainContent').evaluate(m=>{const r=m.getBoundingClientRect(),s=getComputedStyle(m);return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2&&!!m.querySelector('h1,a[href*="/collections/"],a[href*="/products/"]')}).catch(()=>false);if(ok){usable=Date.now()-start;break}await new Promise(r=>setTimeout(r,250))}
+          const result={status:resp?.status()??null,usableMs:usable,bad:[...new Set(bad)],pass:false};result.pass=result.status===200&&result.bad.length===0&&usable!==null&&usable<=5000;
+          console.log('\nBASE SPEED RESULT\n'+JSON.stringify(result,null,2));fs.writeFileSync('out/report.json',JSON.stringify(result,null,2));await page.screenshot({path:'out/base.png',fullPage:false});await browser.close();if(!result.pass)process.exitCode=2;
+          EOF
+          node speed.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: firearm-base-speed-verification
+          path: out
+          retention-days: 7
