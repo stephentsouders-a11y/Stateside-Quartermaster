@@ -30,3 +30,4 @@ jobs:
           name: refine-v3-route-cert-accessories
           path: cert-v3-route/
           retention-days: 7
+# trigger: accessories-1
