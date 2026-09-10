@@ -7,8 +7,13 @@ window.__sqCategoryUniverseV5=true;
 window.__sqGlobalRefineCheckboxControls=true;
 /* V3 owns these collection roots. Block the older PBTL unified-tree runtime before
    it can replace MainContent after V3 has rendered. State Guard is not in the
-   isolation root list and is therefore unaffected. */
-window.__sqBflUnifiedTree=true;
+   isolation root list and is therefore unaffected. Lock the authority flag so a
+   late recovery/replay script cannot clear it and re-enable the legacy renderer. */
+(function(){
+  try{
+    Object.defineProperty(window,'__sqBflUnifiedTree',{configurable:false,enumerable:true,get:function(){return true},set:function(){}});
+  }catch(_){window.__sqBflUnifiedTree=true}
+})();
 (function(){
   if(window.__sqRefineV3MainReplaceGuard||!window.Element)return;
   window.__sqRefineV3MainReplaceGuard=true;
