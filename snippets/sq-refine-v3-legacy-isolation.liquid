@@ -1,0 +1,11 @@
+{% assign sq_v3_isolation_roots = 'accessories-gifts-collectibles,airsoft-milsim,apparel,armed-forces-gear,art,body-armor-ballistic-protection,literature,child-safety-shop,dive-scuba,firearm-accessories,first-aid-medical-ifak,flags-patriotic-decor,flashlights-lighting,footwear-gloves-eyewear,k9-dog-gear,knives-axes-cutlery,morale-patches-tactical-id,outdoor-preparedness-gear,patriotic-american-heritage,safety-rescue-climbing,sta-brite-insignia,tactical-gear,thin-line,uniforms,watches,zippos-lighters-torches,stateside-quartermaster-logo-merch,army-national-guard-series,air-national-guard-series,products-built-for-the-line-u-s-army,products-built-for-the-line-u-s-navy,products-built-for-the-line-u-s-air-force,products-built-for-the-line-u-s-marine-corps,products-built-for-the-line-u-s-coast-guard,products-built-for-the-line-u-s-space-force,rotc-series,jrotc-series,military-schools-academies,law-enforcement-corrections,firefighting-ems-search-rescue' | split: ',' %}
+{% if request.page_type == 'collection' and sq_v3_isolation_roots contains collection.handle %}
+<script data-sq-refine-v3-legacy-isolation="{{ collection.handle | escape }}">
+/* Refine V3 owns these collection roots. The legacy global-refine/category-universe
+   engines render later in theme.liquid and must not move or rebuild the V3 surface. */
+window.__sqGlobalRefineAuthorityV2=true;
+window.__sqGlobalRefineVisibleSurfaceFix=true;
+window.__sqCategoryUniverseV5=true;
+window.__sqGlobalRefineCheckboxControls=true;
+</script>
+{% endif %}
