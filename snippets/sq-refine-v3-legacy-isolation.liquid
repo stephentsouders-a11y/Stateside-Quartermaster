@@ -5,22 +5,35 @@ window.__sqGlobalRefineAuthorityV2=true;
 window.__sqGlobalRefineVisibleSurfaceFix=true;
 window.__sqCategoryUniverseV5=true;
 window.__sqGlobalRefineCheckboxControls=true;
-/* V3 owns these collection roots. Block the older PBTL unified-tree runtime before
-   it can replace MainContent after V3 has rendered. State Guard is not in the
-   isolation root list and is therefore unaffected. */
+/* V3 owns these collection roots. Block the older PBTL unified-tree runtime and
+   its watchdog replay before either can replace MainContent. State Guard is not
+   in this root list and is therefore unaffected. */
 (function(){
   try{
     Object.defineProperty(window,'__sqBflUnifiedTree',{configurable:false,enumerable:true,get:function(){return true},set:function(){}});
   }catch(_){window.__sqBflUnifiedTree=true}
-  var main=document.getElementById('MainContent');
-  if(main&&!main.querySelector('[data-sqbfl-root]')){
-    var sentinel=document.createElement('span');
-    sentinel.hidden=true;
-    sentinel.setAttribute('aria-hidden','true');
-    sentinel.setAttribute('data-sqbfl-root','v3-watchdog-compat');
-    sentinel.setAttribute('data-sq-refine-v3-watchdog-sentinel','true');
-    main.appendChild(sentinel);
+  try{
+    Object.defineProperty(window,'__sqBflRecoveryRouteV4',{configurable:false,enumerable:true,get:function(){return '__sq_refine_v3_disabled__'},set:function(){}});
+  }catch(_){window.__sqBflRecoveryRouteV4='__sq_refine_v3_disabled__'}
+  function installSentinel(){
+    var main=document.getElementById('MainContent');if(!main)return false;
+    if(!main.querySelector('[data-sqbfl-root]')){
+      var sentinel=document.createElement('span');
+      sentinel.hidden=true;
+      sentinel.setAttribute('aria-hidden','true');
+      sentinel.setAttribute('data-sqbfl-root','v3-watchdog-compat');
+      sentinel.setAttribute('data-sq-refine-v3-watchdog-sentinel','true');
+      main.appendChild(sentinel);
+    }
+    if(!main.__sqRefineV3WatchdogObserver){
+      main.__sqRefineV3WatchdogObserver=new MutationObserver(function(){
+        if(!main.querySelector('[data-sqbfl-root]'))installSentinel();
+      });
+      main.__sqRefineV3WatchdogObserver.observe(main,{childList:true});
+    }
+    return true;
   }
+  if(!installSentinel())document.addEventListener('DOMContentLoaded',installSentinel,{once:true});
 })();
 (function(){
   if(window.__sqRefineV3MainReplaceGuard||!window.Element)return;
