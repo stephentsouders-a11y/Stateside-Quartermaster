@@ -1,0 +1,76 @@
+name: Ordinary nine current certification
+on:
+  push:
+    paths:
+      - '.github/workflows/ordinary-nine-current-certification.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - {slug: accessories-gifts-collectibles, name: 'Accessories, Gifts & Collectibles', path: /collections/accessories-gifts-collectibles}
+          - {slug: apparel-headwear, name: 'Apparel & Headwear', path: /collections/apparel}
+          - {slug: books-literature-manuals-reference, name: 'Books, Literature, Manuals & Reference', path: /collections/literature}
+          - {slug: flags-displays-memorials, name: 'Flags, Displays & Memorials', path: /collections/flags-patriotic-decor}
+          - {slug: morale-patches-tactical-id, name: 'Morale Patches, Stickers & Tactical ID', path: /collections/morale-patches-tactical-id}
+          - {slug: outdoor-survival-preparedness, name: 'Outdoor, Survival & Preparedness', path: /collections/outdoor-preparedness-gear}
+          - {slug: tactical-gear, name: 'Tactical Gear, Packs & Load Carriage', path: /collections/tactical-gear}
+          - {slug: uniforms-insignia-identification, name: 'Uniforms, Insignia & Identification', path: /collections/uniforms}
+          - {slug: zippo-lighters-fire-starters, name: 'Zippo, Lighters & Fire Starters', path: /collections/zippos-lighters-torches}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify current ordinary route
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          NAME: ${{ matrix.name }}
+          ROUTE: ${{ matrix.path }}
+        run: |
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage();page.setDefaultTimeout(16000);page.setDefaultNavigationTimeout(60000);
+          const bad429=[],bad5xx=[];page.on('response',r=>{if(r.status()===429)bad429.push(r.url());if(r.status()>=500)bad5xx.push(`${r.status()} ${r.url()}`)});
+          const o={name:process.env.NAME,status:null,usableMs:null,base:{},vendor:null,urlFiltered:false,checked:false,surface:null,productsChecked:0,vendors:[],allMatch:false,cleared:false,bad429:[],bad5xx:[],outcome:'FAIL',reasons:[]};
+          const challenge=()=>page.evaluate(()=>/verify you are human|just a moment|attention required|performing security verification/i.test((document.title||'')+' '+(document.body?.innerText||''))).catch(()=>false);
+          async function visibleProductLinks(){const sels=['#MainContent [data-sq-filtered-child-union-products] a[href*="/products/"]','#MainContent [data-sq-filtered-product-surface-guard-products] a[href*="/products/"]','#MainContent [data-sq-global-refine-products] a[href*="/products/"]','#MainContent [data-sq-category-universe-products] a[href*="/products/"]','#MainContent [data-sq-custom-color-products] a[href*="/products/"]','#MainContent .sq-custom-color-products a[href*="/products/"]','#MainContent .product-grid a[href*="/products/"]','#MainContent #product-grid a[href*="/products/"]','#MainContent collection-component a[href*="/products/"]'];for(const sel of sels){const links=await page.locator(sel).evaluateAll(as=>[...new Set(as.filter(a=>{const s=getComputedStyle(a),r=a.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2}).map(a=>a.href))].slice(0,3)).catch(()=>[]);if(links.length)return{sel,links}}return{sel:null,links:[]}}
+          async function vendorFor(href){try{const u=new URL(href,process.env.BASE),m=u.pathname.match(/^\/products\/([^/?#]+)/);if(!m)return null;const r=await ctx.request.get(`${process.env.BASE}/products/${m[1]}.js`,{timeout:15000});if(r.status()===429){bad429.push(`vendor ${m[1]}`);return null}if(r.status()>=500){bad5xx.push(`${r.status()} vendor ${m[1]}`);return null}if(!r.ok())return null;return String((await r.json()).vendor||'').trim()}catch{return null}}
+          try{
+            await sleep(4000);const prime=new URL('/',process.env.BASE);prime.searchParams.set('preview_theme_id',process.env.THEME);const pr=await page.goto(prime.toString(),{waitUntil:'domcontentloaded'});await sleep(700);bad429.length=0;bad5xx.length=0;
+            if(!pr||pr.status()===429||pr.status()>=500||await challenge()){o.outcome='INFRA';o.reasons.push(`preview infrastructure ${pr?.status()??null}`)}
+            if(o.outcome!=='INFRA'){
+              const t=Date.now(),r=await page.goto(new URL(process.env.ROUTE,process.env.BASE).toString(),{waitUntil:'domcontentloaded'});o.status=r?.status()??null;
+              if(o.status===429||o.status>=500||await challenge()){o.outcome='INFRA';o.reasons.push(`navigation ${o.status}`)}
+              if(o.outcome!=='INFRA'){
+                for(let i=0;i<30;i++){const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const r=m.getBoundingClientRect();if(r.width<3||r.height<3)return false;return [...m.querySelectorAll('h1,a[href*="/collections/"],a[href*="/products/"],.product-grid,.sq-subcategory-section,.sq-books-tree')].some(x=>{const s=getComputedStyle(x),q=x.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&q.width>2&&q.height>2})}).catch(()=>false);if(ok){o.usableMs=Date.now()-t;break}await sleep(200)}
+                await page.locator('.sq-global-refine-sidebar').first().waitFor({state:'visible',timeout:12000}).catch(()=>{});await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:12000}).catch(()=>{});
+                o.base=await page.evaluate(()=>{const m=document.querySelector('#MainContent');const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return{sidebarCount:m?[...m.querySelectorAll('.sq-global-refine-sidebar')].filter(vis).length:0,nativeFilters:m?[...m.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length:0,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,broken:m?[...m.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).length:0,manufacturer:m?[...m.querySelectorAll('.sq-global-refine-manufacturer-checkbox')].length:0,dedupe:document.querySelectorAll('script[data-sq-catalog-request-dedupe-v1]').length,v2:document.querySelectorAll('script[data-sq-filtered-product-surface-guard-v2]').length,legacyBlocked:document.querySelectorAll('script[data-sq-disable-legacy-maker-crawl]').length}}).catch(()=>({}));
+                const box=page.locator('.sq-global-refine-manufacturer-checkbox').first();if(await box.count()){
+                  o.vendor=await box.inputValue();await box.evaluate(el=>{el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(u=>{const q=new URL(u).searchParams;return q.get('filter.p.vendor')===o.vendor&&q.get('sq_maker')===o.vendor},{timeout:18000}).catch(()=>{});await page.waitForLoadState('domcontentloaded').catch(()=>{});
+                  const q=new URL(page.url()).searchParams;o.urlFiltered=q.get('filter.p.vendor')===o.vendor&&q.get('sq_maker')===o.vendor;o.checked=await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().isChecked().catch(()=>false);
+                  let sample={sel:null,links:[]};for(let i=0;i<30;i++){if(await challenge()){o.outcome='INFRA';o.reasons.push('challenge after manufacturer select');break}sample=await visibleProductLinks();if(sample.links.length)break;await sleep(300)}o.surface=sample.sel;
+                  if(o.outcome!=='INFRA')for(const href of sample.links){const v=await vendorFor(href);if(v)o.vendors.push(v)}o.productsChecked=o.vendors.length;o.allMatch=o.vendors.length>0&&o.vendors.every(v=>v.toLowerCase()===String(o.vendor).toLowerCase());
+                  const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first();if(await active.count()){await active.evaluate(el=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(u=>{const q2=new URL(u).searchParams;return !q2.has('filter.p.vendor')&&!q2.has('sq_maker')},{timeout:18000}).catch(()=>{});const q2=new URL(page.url()).searchParams;o.cleared=!q2.has('filter.p.vendor')&&!q2.has('sq_maker')}
+                }
+              }
+            }
+          }catch(e){o.reasons.push(String(e).split('\n')[0])}
+          o.bad429=[...new Set(bad429)].slice(0,30);o.bad5xx=[...new Set(bad5xx)].slice(0,30);if(o.bad429.length||o.bad5xx.length||await challenge()){o.outcome='INFRA';if(o.bad429.length)o.reasons.push(`${o.bad429.length} HTTP 429`);if(o.bad5xx.length)o.reasons.push(`${o.bad5xx.length} HTTP 5xx`)}
+          if(o.outcome!=='INFRA'){if(o.status!==200)o.reasons.push(`HTTP ${o.status}`);if(o.usableMs===null||o.usableMs>5000)o.reasons.push(`usable ${o.usableMs}ms`);if(o.base.sidebarCount!==1)o.reasons.push(`sidebar ${o.base.sidebarCount}`);if(o.base.nativeFilters!==0)o.reasons.push(`native ${o.base.nativeFilters}`);if(o.base.overflow)o.reasons.push('overflow');if(o.base.broken)o.reasons.push(`${o.base.broken} broken images`);if(!o.base.manufacturer)o.reasons.push('manufacturer empty');if(o.base.dedupe!==1)o.reasons.push(`dedupe ${o.base.dedupe}`);if(o.base.v2!==1)o.reasons.push(`v2 ${o.base.v2}`);if(o.base.legacyBlocked!==1)o.reasons.push(`legacy blocker ${o.base.legacyBlocked}`);if(!o.vendor)o.reasons.push('manufacturer not testable');else{if(!o.urlFiltered)o.reasons.push('dual URL failed');if(!o.checked)o.reasons.push('checkbox failed');if(!o.surface)o.reasons.push('no visible filtered products');if(!o.productsChecked)o.reasons.push('no product vendor verified');if(!o.allMatch)o.reasons.push(`vendor mismatch: ${o.vendors.join(', ')}`);if(!o.cleared)o.reasons.push('clear failed')}o.outcome=o.reasons.length?'FAIL':'PASS'}
+          console.log('\nCURRENT ORDINARY CERT RESULT\n'+JSON.stringify(o,null,2));await browser.close();if(o.outcome!=='PASS')process.exitCode=2;
+          EOF
+          node cert.mjs
