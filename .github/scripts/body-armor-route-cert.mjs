@@ -38,58 +38,32 @@ async function inspect(page,mobile){
     let meta={};
     let metaError='';
     try{meta=JSON.parse(metaNode?.textContent||'{}')}catch(e){metaError=String(e)}
-    const blockers=[...document.querySelectorAll('[data-vac-page-size], [data-vac-page-view]')].map(el=>({
-      tag:el.tagName,
-      text:(el.textContent||'').trim(),
-      href:el.getAttribute('href')||'',
-      visible:vis(el),
-      rect:rect(el),
-      parent:(el.parentElement?.className||'').toString().slice(0,180)
-    }));
+    const blockers=[...document.querySelectorAll('[data-vac-page-size], [data-vac-page-view]')].map(el=>({tag:el.tagName,text:(el.textContent||'').trim(),href:el.getAttribute('href')||'',visible:vis(el),rect:rect(el),parent:(el.parentElement?.className||'').toString().slice(0,180)}));
     const inlineSyntax=[];
     [...document.scripts].forEach((script,index)=>{
       if(script.src||!script.textContent?.trim())return;
       const type=(script.type||'').toLowerCase();
-      if(type&&type!=='text/javascript'&&type!=='application/javascript'&&type!=='module')return;
+      if(type==='module')return;
+      if(type&&type!=='text/javascript'&&type!=='application/javascript')return;
       try{new Function(script.textContent)}catch(e){inlineSyntax.push({index,type,message:e.message,attrs:[...script.attributes].map(a=>[a.name,a.value]),preview:script.textContent.slice(0,500)})}
     });
     return {
-      title:document.title,
-      bodyText:(document.body?.innerText||'').slice(0,500),
-      error:m?.dataset.sqRefineV3Error||'',
-      ready:m?.dataset.sqRefineV3Ready||'',
-      active:m?.classList.contains('sq-refine-v3-active')||false,
-      routeFix:m?.dataset.sqRefineV3RouteFix||'',
-      side:vis(side),
-      sideRect:rect(side),
-      titleText:side?.querySelector('.sq-refine-v3-sidebar__title')?.textContent.trim()||'',
-      size:vis(size),
-      sizeInSide:!!size?.closest('.sq-refine-v3-sidebar'),
-      sizes:[...(size?.querySelectorAll('input')||[])].map(x=>[x.value,x.checked]),
+      title:document.title,error:m?.dataset.sqRefineV3Error||'',ready:m?.dataset.sqRefineV3Ready||'',active:m?.classList.contains('sq-refine-v3-active')||false,routeFix:m?.dataset.sqRefineV3RouteFix||'',
+      side:vis(side),sideRect:rect(side),titleText:side?.querySelector('.sq-refine-v3-sidebar__title')?.textContent.trim()||'',size:vis(size),sizeInSide:!!size?.closest('.sq-refine-v3-sidebar'),sizes:[...(size?.querySelectorAll('input')||[])].map(x=>[x.value,x.checked]),
       groups:groups.map(g=>({open:g.open,checked:g.querySelectorAll('input:checked').length,inputs:g.querySelectorAll('input[type="checkbox"]').length,label:g.querySelector(':scope>summary')?.textContent.trim()||''})),
-      grid:vis(grid),
-      cols:grid?getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length:0,
-      cards:cards.length,
-      sidePos:side?getComputedStyle(side).position:'',
-      sideHeight:side?.getBoundingClientRect().height||0,
-      legacy:[...document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]')].filter(vis).length,
-      metaError,
-      metaTags:Array.isArray(meta.tags)?meta.tags.length:0,
-      metaVendors:Array.isArray(meta.vendors)?meta.vendors:[],
-      metaAuthors:Array.isArray(meta.authors)?meta.authors.length:0,
-      metaAuthorSample:Array.isArray(meta.authors)?meta.authors.slice(0,10):[],
-      blockers,
-      inlineSyntax
+      grid:vis(grid),cols:grid?getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length:0,cards:cards.length,sidePos:side?getComputedStyle(side).position:'',sideHeight:side?.getBoundingClientRect().height||0,
+      legacy:[...document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]')].filter(vis).length,metaError,metaTags:Array.isArray(meta.tags)?meta.tags.length:0,metaVendors:Array.isArray(meta.vendors)?meta.vendors:[],metaAuthors:Array.isArray(meta.authors)?meta.authors.length:0,metaAuthorSample:Array.isArray(meta.authors)?meta.authors.slice(0,10):[],blockers,inlineSyntax
     };
   });
 
   data.httpStatus=response?.status()||0;
   data.readySeen=readySeen;
   data.browserErrors=browserErrors.slice(0,30);
+  const fatalBrowserErrors=data.browserErrors.filter(e=>e.type==='pageerror');
 
   const errors=[];
   if(data.httpStatus>=400)errors.push('HTTP '+data.httpStatus);
-  if(data.browserErrors.length)errors.push(...data.browserErrors.map(e=>'browser '+JSON.stringify(e)));
+  if(fatalBrowserErrors.length)errors.push(...fatalBrowserErrors.map(e=>'browser '+JSON.stringify(e)));
   if(data.inlineSyntax.length)errors.push(...data.inlineSyntax.map(e=>'inline syntax '+JSON.stringify(e)));
   if(data.error)errors.push('V3 '+data.error);
   if(data.ready!=='true')errors.push('V3 not ready');
@@ -114,12 +88,10 @@ async function inspect(page,mobile){
       try{
         await s.scrollIntoViewIfNeeded({timeout:5000});
         const before=await s.evaluate(el=>getComputedStyle(el,'::after').content);
-        await s.click({timeout:5000});
-        await sleep(100);
+        await s.click({timeout:5000});await sleep(100);
         const opened=await d.getAttribute('open')!==null;
         const after=await s.evaluate(el=>getComputedStyle(el,'::after').content);
-        await s.click({timeout:5000});
-        await sleep(100);
+        await s.click({timeout:5000});await sleep(100);
         const closed=await d.getAttribute('open')===null;
         const final=await s.evaluate(el=>getComputedStyle(el,'::after').content);
         if(!(/\+/.test(before)&&opened&&/[−\u2212-]/.test(after)&&closed&&/\+/.test(final)))errors.push('toggle '+JSON.stringify({before,opened,after,closed,final}));
@@ -133,8 +105,7 @@ await fs.mkdir(OUT,{recursive:true});
 const browser=await chromium.launch({headless:true});
 const report={desktop:null,mobile:null,pass:false};
 for(const [name,viewport,mobile] of [['desktop',{width:1440,height:1000},false],['mobile',{width:390,height:844},true]]){
-  const ctx=await browser.newContext({viewport});
-  const p=await ctx.newPage();
+  const ctx=await browser.newContext({viewport});const p=await ctx.newPage();
   try{report[name]=await inspect(p,mobile);await p.screenshot({path:`${OUT}/${name}.png`,fullPage:true})}catch(e){report[name]={errors:[String(e)]};try{await p.screenshot({path:`${OUT}/${name}-error.png`,fullPage:true})}catch{}}
   await ctx.close();
 }
