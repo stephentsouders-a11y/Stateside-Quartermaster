@@ -12,6 +12,16 @@ if(location.pathname==='/collections/thin-line'){
   window.__sqThinStaGlobalSidebarBridge=true;
   window.__sqThinStaLegacyParentIsolationDisabled=true;
   window.__sqRefineTaxonomyPanelV1=true;
+  document.addEventListener('DOMContentLoaded',function(){
+    setTimeout(function(){
+      if(!document.body)return;
+      document.body.classList.remove('sq-ts-parent','sq-ts-parent-only');
+      document.querySelectorAll('[id^="shopify-section-template--"]').forEach(function(el){
+        el.classList.remove('sq-ts-keep-section');
+        el.style.removeProperty('display');
+      });
+    },0);
+  },{once:true});
 }
 /* V3 owns these collection roots. Block the older PBTL unified-tree runtime and
    both legacy recovery loops before they can replace MainContent. State Guard is
