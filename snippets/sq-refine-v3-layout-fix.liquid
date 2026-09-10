@@ -10,6 +10,9 @@ Keeps the V3 products-per-page control and product surface together in the right
 #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + .product-grid{grid-column:2;grid-row:2}
 #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:1;grid-row:1 / span 2;z-index:20}
 #MainContent.sq-refine-v3-active .sq-refine-v3-group>summary{position:relative;z-index:2;pointer-events:auto}
+html body #MainContent.sq-refine-v3-active [data-sq-refine-v3-hidden-nav='true']{display:none!important;visibility:hidden!important;pointer-events:none!important}
+html body #MainContent.sq-refine-v3-active .sq-refine-v3-group>summary::after{content:'+'!important}
+html body #MainContent.sq-refine-v3-active .sq-refine-v3-group[open]>summary::after{content:'−'!important}
 @media(max-width:900px){
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size,
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + collection-component,
@@ -18,6 +21,41 @@ Keeps the V3 products-per-page control and product surface together in the right
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:auto;grid-row:auto}
 }
 </style>
+<script data-sq-refine-v3-hardening>
+(function(){
+  function enforce(){
+    var main=document.getElementById('MainContent');
+    if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
+    main.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]').forEach(function(node){
+      if(node.closest('.sq-refine-v3-layout'))return;
+      node.hidden=true;
+      node.setAttribute('aria-hidden','true');
+      node.style.setProperty('display','none','important');
+      node.style.setProperty('visibility','hidden','important');
+      node.style.setProperty('pointer-events','none','important');
+    });
+    main.querySelectorAll('.sq-refine-v3-group>summary').forEach(function(summary){
+      if(summary.dataset.sqRefineV3ToggleBound==='1')return;
+      summary.dataset.sqRefineV3ToggleBound='1';
+      var details=summary.parentElement;
+      summary.setAttribute('aria-expanded',details&&details.open?'true':'false');
+      summary.addEventListener('click',function(event){
+        event.preventDefault();
+        var group=summary.parentElement;
+        if(!group||group.tagName!=='DETAILS')return;
+        group.open=!group.open;
+        summary.setAttribute('aria-expanded',group.open?'true':'false');
+      });
+    });
+    main.dataset.sqRefineV3Hardened='true';
+    return true;
+  }
+  if(enforce())return;
+  var observer=new MutationObserver(function(){if(enforce())observer.disconnect()});
+  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['data-sq-refine-v3-ready']});
+  window.addEventListener('load',enforce,{once:true});
+})();
+</script>
 {% if collection.handle == 'armed-forces-gear' %}
 <style data-sq-refine-v3-afg-mobile-grid>
 @media(max-width:900px){
