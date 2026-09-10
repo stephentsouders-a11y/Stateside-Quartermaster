@@ -24,4 +24,4 @@ jobs:
           name: art-route-cert
           path: cert-art/
           retention-days: 7
-# route: 6-art-rerun-1
+# route: 6-art-rerun-2
