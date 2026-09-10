@@ -10,18 +10,8 @@ const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
 
 async function inspect(page,mobile){
   const browserErrors=[];
-  page.on('pageerror',e=>browserErrors.push({
-    type:'pageerror',
-    message:e.message,
-    stack:e.stack||''
-  }));
-  page.on('console',m=>{
-    if(m.type()==='error')browserErrors.push({
-      type:'console',
-      message:m.text(),
-      location:m.location()
-    });
-  });
+  page.on('pageerror',e=>browserErrors.push({type:'pageerror',message:e.message,stack:e.stack||''}));
+  page.on('console',m=>{if(m.type()==='error')browserErrors.push({type:'console',message:m.text(),location:m.location()})});
 
   const response=await page.goto(URL,{waitUntil:'domcontentloaded',timeout:45000});
   let readySeen=false;
@@ -37,13 +27,32 @@ async function inspect(page,mobile){
       const s=getComputedStyle(el),r=el.getBoundingClientRect();
       return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0;
     };
+    const rect=el=>{if(!el)return null;const r=el.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height}};
     const m=document.querySelector('#MainContent');
     const side=m?.querySelector('.sq-refine-v3-sidebar');
     const size=m?.querySelector('.sq-refine-v3-page-size');
     const grid=m?.querySelector('.product-grid');
     const groups=[...(side?.querySelectorAll('.sq-refine-v3-group')||[])];
     const cards=[...(grid?.querySelectorAll(':scope>.product-grid__item')||[])].filter(x=>x.querySelector('a[href*="/products/"]'));
-    const litMeta=document.querySelector('[data-sq-literature-meta]')?.textContent||'';
+    const metaNode=document.querySelector('[data-sq-literature-meta]');
+    let meta={};
+    let metaError='';
+    try{meta=JSON.parse(metaNode?.textContent||'{}')}catch(e){metaError=String(e)}
+    const blockers=[...document.querySelectorAll('[data-vac-page-size], [data-vac-page-view]')].map(el=>({
+      tag:el.tagName,
+      text:(el.textContent||'').trim(),
+      href:el.getAttribute('href')||'',
+      visible:vis(el),
+      rect:rect(el),
+      parent:(el.parentElement?.className||'').toString().slice(0,180)
+    }));
+    const inlineSyntax=[];
+    [...document.scripts].forEach((script,index)=>{
+      if(script.src||!script.textContent?.trim())return;
+      const type=(script.type||'').toLowerCase();
+      if(type&&type!=='text/javascript'&&type!=='application/javascript'&&type!=='module')return;
+      try{new Function(script.textContent)}catch(e){inlineSyntax.push({index,type,message:e.message,attrs:[...script.attributes].map(a=>[a.name,a.value]),preview:script.textContent.slice(0,500)})}
+    });
     return {
       title:document.title,
       bodyText:(document.body?.innerText||'').slice(0,500),
@@ -52,23 +61,25 @@ async function inspect(page,mobile){
       active:m?.classList.contains('sq-refine-v3-active')||false,
       routeFix:m?.dataset.sqRefineV3RouteFix||'',
       side:vis(side),
+      sideRect:rect(side),
       titleText:side?.querySelector('.sq-refine-v3-sidebar__title')?.textContent.trim()||'',
       size:vis(size),
       sizeInSide:!!size?.closest('.sq-refine-v3-sidebar'),
       sizes:[...(size?.querySelectorAll('input')||[])].map(x=>[x.value,x.checked]),
-      groups:groups.map(g=>({
-        open:g.open,
-        checked:g.querySelectorAll('input:checked').length,
-        inputs:g.querySelectorAll('input[type="checkbox"]').length,
-        label:g.querySelector(':scope>summary')?.textContent.trim()||''
-      })),
+      groups:groups.map(g=>({open:g.open,checked:g.querySelectorAll('input:checked').length,inputs:g.querySelectorAll('input[type="checkbox"]').length,label:g.querySelector(':scope>summary')?.textContent.trim()||''})),
       grid:vis(grid),
       cols:grid?getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length:0,
       cards:cards.length,
       sidePos:side?getComputedStyle(side).position:'',
       sideHeight:side?.getBoundingClientRect().height||0,
       legacy:[...document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]')].filter(vis).length,
-      literatureMetaPreview:litMeta.slice(0,2000)
+      metaError,
+      metaTags:Array.isArray(meta.tags)?meta.tags.length:0,
+      metaVendors:Array.isArray(meta.vendors)?meta.vendors:[],
+      metaAuthors:Array.isArray(meta.authors)?meta.authors.length:0,
+      metaAuthorSample:Array.isArray(meta.authors)?meta.authors.slice(0,10):[],
+      blockers,
+      inlineSyntax
     };
   });
 
@@ -79,25 +90,21 @@ async function inspect(page,mobile){
   const errors=[];
   if(data.httpStatus>=400)errors.push('HTTP '+data.httpStatus);
   if(data.browserErrors.length)errors.push(...data.browserErrors.map(e=>'browser '+JSON.stringify(e)));
+  if(data.inlineSyntax.length)errors.push(...data.inlineSyntax.map(e=>'inline syntax '+JSON.stringify(e)));
   if(data.error)errors.push('V3 '+data.error);
   if(data.ready!=='true')errors.push('V3 not ready');
   if(!data.side||data.titleText!=='Refine Products')errors.push('sidebar');
   if(!data.size||data.sizeInSide)errors.push('page-size placement');
   if(data.sizes.map(x=>x[0]).join(',')!=='50,100,250'||!data.sizes.find(x=>x[0]==='50')?.[1])errors.push('page-size values/default');
   if(!data.groups.length)errors.push('no groups');
-  for(const g of data.groups){
-    if(!g.inputs)errors.push('empty '+g.label);
-    if(!g.checked&&g.open)errors.push('inactive open '+g.label);
-    if(g.checked&&!g.open)errors.push('active closed '+g.label);
-  }
-  for(const req of REQUIRED){
-    if(!data.groups.some(g=>norm(g.label).includes(norm(req))))errors.push('missing group '+req);
-  }
+  for(const g of data.groups){if(!g.inputs)errors.push('empty '+g.label);if(!g.checked&&g.open)errors.push('inactive open '+g.label);if(g.checked&&!g.open)errors.push('active closed '+g.label)}
+  for(const req of REQUIRED){if(!data.groups.some(g=>norm(g.label).includes(norm(req))))errors.push('missing group '+req)}
   if(data.legacy)errors.push('legacy navigation visible='+data.legacy);
   if(!data.grid||!data.cards)errors.push('product grid/cards');
   if(data.grid&&data.cols!==(mobile?2:3))errors.push('columns='+data.cols);
   if(mobile&&data.sidePos==='sticky')errors.push('mobile sticky');
   if(!mobile&&data.side&&(data.sidePos!=='sticky'||data.sideHeight<600))errors.push('desktop sidebar');
+  if(data.blockers.some(b=>b.visible))errors.push('visible legacy page-size blockers '+JSON.stringify(data.blockers.filter(b=>b.visible)));
 
   if(data.ready==='true'&&data.groups.length){
     const groups=page.locator('.sq-refine-v3-sidebar .sq-refine-v3-group');
@@ -115,12 +122,8 @@ async function inspect(page,mobile){
         await sleep(100);
         const closed=await d.getAttribute('open')===null;
         const final=await s.evaluate(el=>getComputedStyle(el,'::after').content);
-        if(!(/\+/.test(before)&&opened&&/[−\u2212-]/.test(after)&&closed&&/\+/.test(final))){
-          errors.push('toggle '+JSON.stringify({before,opened,after,closed,final}));
-        }
-      }catch(e){
-        errors.push('toggle action '+String(e));
-      }
+        if(!(/\+/.test(before)&&opened&&/[−\u2212-]/.test(after)&&closed&&/\+/.test(final)))errors.push('toggle '+JSON.stringify({before,opened,after,closed,final}));
+      }catch(e){errors.push('toggle action '+String(e))}
     }
   }
   return {data,errors};
@@ -132,13 +135,7 @@ const report={desktop:null,mobile:null,pass:false};
 for(const [name,viewport,mobile] of [['desktop',{width:1440,height:1000},false],['mobile',{width:390,height:844},true]]){
   const ctx=await browser.newContext({viewport});
   const p=await ctx.newPage();
-  try{
-    report[name]=await inspect(p,mobile);
-    await p.screenshot({path:`${OUT}/${name}.png`,fullPage:true});
-  }catch(e){
-    report[name]={errors:[String(e)]};
-    try{await p.screenshot({path:`${OUT}/${name}-error.png`,fullPage:true})}catch{}
-  }
+  try{report[name]=await inspect(p,mobile);await p.screenshot({path:`${OUT}/${name}.png`,fullPage:true})}catch(e){report[name]={errors:[String(e)]};try{await p.screenshot({path:`${OUT}/${name}-error.png`,fullPage:true})}catch{}}
   await ctx.close();
 }
 await browser.close();
