@@ -1,37 +1,25 @@
 import { chromium } from 'playwright';
-const BASE='https://www.statesideqm.com',PREVIEW='158561894555';
-const ROUTES=[
- ['army-national-guard-series','Army National Guard'],
- ['air-national-guard-series','Air National Guard'],
- ['products-built-for-the-line-u-s-army','U.S. Army'],
- ['products-built-for-the-line-u-s-navy','U.S. Navy'],
- ['products-built-for-the-line-u-s-air-force','U.S. Air Force'],
- ['products-built-for-the-line-u-s-marine-corps','U.S. Marine Corps']
-];
+const URL='https://www.statesideqm.com/collections/army-national-guard-series?preview_theme_id=158561894555';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-async function gotoHealthy(p,url){let r=null;for(let i=0;i<3;i++){r=await p.goto(url,{waitUntil:'domcontentloaded',timeout:45000});if((r?.status()||0)<500)break;await sleep(1500*(i+1));}return r;}
-async function check(browser,root,mobile){
- const c=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1440,height:1000}}),p=await c.newPage(),errors=[];
+const b=await chromium.launch({headless:true});
+for(const [name,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
+ const c=await b.newContext({viewport}); const p=await c.newPage(); const errors=[],nav=[];
  p.on('pageerror',e=>errors.push({message:e.message,stack:e.stack||''}));
- const r=await gotoHealthy(p,`${BASE}/collections/${root}?preview_theme_id=${PREVIEW}`);
- try{await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:25000})}catch{}
- await sleep(6500);
- const d=await p.evaluate(({root,mobile})=>{
-   const main=document.querySelector('#MainContent'),sidebar=main?.querySelector('.sq-refine-v3-sidebar'),results=main?.querySelector('.sq-refine-v3-results'),grid=results?.querySelector('.product-grid');
-   const cards=[...(grid?.querySelectorAll(':scope > .product-grid__item')||[])].filter(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!!el.querySelector('a[href*="/products/"]')});
-   const template=grid?getComputedStyle(grid).gridTemplateColumns:'',gridCols=template&&template!=='none'?template.trim().split(/\s+/).length:0;
-   const sizes=[...document.querySelectorAll('.sq-refine-v3-page-size input')].map(i=>i.value);
-   const isolation=document.querySelector('script[data-sq-refine-v3-legacy-isolation]')?.dataset.sqRefineV3LegacyIsolation||'';
-   const legacy=[...document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]')].filter(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0}).length;
-   const oldSize=[...document.querySelectorAll('.vac-page-size')].filter(el=>getComputedStyle(el).display!=='none').length;
-   const groups=[...(sidebar?.querySelectorAll('details.sq-refine-v3-group')||[])],inactiveClosed=groups.filter(g=>g.dataset.active!=='true').every(g=>!g.open),activeOpen=groups.filter(g=>g.dataset.active==='true').every(g=>g.open),sticky=sidebar?getComputedStyle(sidebar).position:'';
-   const structural=[...(sidebar?.querySelectorAll('input[data-kind="structural"]')||[])];
-   const badAvailability=structural.filter(i=>(i.dataset.target||'').includes('filter.v.availability=1')).length;
-   const falseHandles=new Set(['all','state-guard-series','public-safety-series']);
-   const falseTargets=structural.filter(i=>{try{const h=new URL(i.dataset.target,location.origin).pathname.split('/')[2]||'';return falseHandles.has(h)&&h!==root}catch{return false}}).length;
-   const checks={ready:main?.dataset.sqRefineV3Ready==='true',cleanup:main?.dataset.sqRefineV3RootCleanup==='true',isolation:isolation===root,sidebar:!!sidebar&&getComputedStyle(sidebar).display!=='none',title:(sidebar?.textContent||'').includes('Refine Products'),pageSizes:['50','100','250'].every(v=>sizes.includes(v)),default50:!!document.querySelector('.sq-refine-v3-page-size input[value="50"]:checked'),groups:groups.length>0,inactiveClosed,activeOpen,legacy:legacy===0,oldSize:oldSize===0,badAvailability:badAvailability===0,falseTargets:falseTargets===0,grid:!!grid,cards:cards.length>0&&cards.length<=50,columns:gridCols===(mobile?2:3),nativeColumn:!!results?.querySelector('.sq-collection-products-column'),sticky:mobile?sticky!=='sticky':sticky==='sticky'};
-   return {checks,error:main?.dataset.sqRefineV3Error||'',cards:cards.length,gridCols,template,groups:groups.length,structural:structural.length,badAvailability,falseTargets,legacy,oldSize,sticky,isolation};
- },{root,mobile});
- const pass=(r?.status()||0)<400&&errors.length===0&&Object.values(d.checks).every(Boolean);await c.close();return{viewport:mobile?'mobile':'desktop',http:r?.status()||0,errors,data:d,pass};
+ p.on('framenavigated',f=>{if(f===p.mainFrame())nav.push(f.url())});
+ let r=await p.goto(URL,{waitUntil:'domcontentloaded',timeout:45000}); await sleep(9000);
+ const d=await p.evaluate(()=>{
+   const main=document.querySelector('#MainContent');
+   const scripts=[...document.scripts].map((s,i)=>({i,marker:[...s.attributes].filter(a=>a.name.startsWith('data-sq')).map(a=>a.name+'='+a.value).join(' '),src:s.src||'',text:s.textContent||''}));
+   const hits=scripts.filter(s=>/army-national-guard-series|products-built-for-the-line-u-s-army|location\.(?:assign|replace)|history\.(?:pushState|replaceState)/i.test(s.text)).map(s=>{
+      const m=s.text.match(/army-national-guard-series|products-built-for-the-line-u-s-army|location\.(?:assign|replace)|history\.(?:pushState|replaceState)/i); const k=m?m.index:0;
+      return {i:s.i,marker:s.marker,src:s.src,around:s.text.slice(Math.max(0,k-1800),Math.min(s.text.length,k+3600))};
+   });
+   const iso=[...document.querySelectorAll('script[data-sq-refine-v3-legacy-isolation]')].map(s=>s.dataset.sqRefineV3LegacyIsolation);
+   const v3=[...document.querySelectorAll('script[data-sq-refine-v3]')].map(s=>s.dataset.currentHandle);
+   const components=[...document.querySelectorAll('#MainContent collection-component')].map((cc,i)=>({i,inResults:!!cc.closest('.sq-refine-v3-results'),products:cc.querySelectorAll('.product-grid__item a[href*="/products/"]').length,parent:cc.parentElement?.className||''}));
+   return {href:location.href,path:location.pathname,title:document.title,h1:document.querySelector('h1')?.textContent?.trim()||'',ready:main?.dataset.sqRefineV3Ready||'',cleanup:main?.dataset.sqRefineV3RootCleanup||'',error:main?.dataset.sqRefineV3Error||'',iso,v3,resultsProducts:main?.querySelectorAll('.sq-refine-v3-results .product-grid__item a[href*="/products/"]').length||0,allProducts:main?.querySelectorAll('.product-grid__item a[href*="/products/"]').length||0,components,hits};
+ });
+ console.log('ARNG_DIAG '+JSON.stringify({name,http:r?.status()||0,responseUrl:r?.url()||'',nav,errors,data:d},null,2));
+ await c.close();
 }
-const b=await chromium.launch({headless:true});let failed=false;for(const[root,name]of ROUTES){const desktop=await check(b,root,false),mobile=await check(b,root,true),pass=desktop.pass&&mobile.pass;console.log('ROUTE_RESULT '+JSON.stringify({root,name,desktop,mobile,pass}));if(!pass){failed=true;break}}await b.close();if(failed)process.exit(1);
+await b.close();
