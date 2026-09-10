@@ -1,3 +1,4 @@
+// Knives re-cert after null-safe legacy facet race repair.
 import { chromium } from 'playwright';
 const URL='https://www.statesideqm.com/collections/knives-axes-cutlery?preview_theme_id=158561894555';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -21,7 +22,6 @@ for(const [name,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{wi
     const cols=visibleCards.length?new Set(visibleCards.slice(0,8).map(el=>Math.round(el.getBoundingClientRect().left))).size:0;
     const size=[...document.querySelectorAll('input[type="radio"],select')].flatMap(el=>el.tagName==='SELECT'?[...el.options].map(o=>o.value):[el.value]).filter(v=>['50','100','250'].includes(String(v)));
     const default50=!!document.querySelector('input[value="50"]:checked')||!!document.querySelector('select option[value="50"]:checked');
-    const cat=sidebar?.querySelector('details[data-sq-group-key="category"],details[data-sq-refine-group="category"],details');
     const catChoices=[...(sidebar?.querySelectorAll('a[href*="sq_root=knives-axes-cutlery"],input[type="checkbox"]')||[])].length;
     const isolation=document.querySelector('script[data-sq-refine-v3-legacy-isolation]')?.getAttribute('data-sq-refine-v3-legacy-isolation')||'';
     const legacy=[...document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]')].filter(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0}).length;
