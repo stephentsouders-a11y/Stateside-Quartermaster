@@ -6,6 +6,22 @@ window.__sqGlobalRefineVisibleSurfaceFix=true;
 window.__sqCategoryUniverseV5=true;
 window.__sqGlobalRefineCheckboxControls=true;
 (function(){
+  if(window.__sqRefineV3MainReplaceGuard||!window.Element)return;
+  window.__sqRefineV3MainReplaceGuard=true;
+  var nativeReplace=Element.prototype.replaceChildren;
+  Element.prototype.replaceChildren=function(){
+    if(this&&this.id==='MainContent'&&this.querySelector&&this.querySelector('.sq-refine-v3-layout')){
+      var takeover=false;
+      for(var i=0;i<arguments.length;i++){
+        var n=arguments[i];
+        if(n&&n.nodeType===1&&n.classList&&n.classList.contains('sqbfl')){takeover=true;try{n.remove()}catch(_){}}
+      }
+      if(takeover)return;
+    }
+    return nativeReplace.apply(this,arguments);
+  };
+})();
+(function(){
   var q=new URLSearchParams(location.search),per=parseInt(q.get('sq_per_page')||'50',10),view=parseInt(q.get('sq_view_page')||'1',10);
   if(per!==50||view!==1||window.__sqRefineV3DefaultFetchFastPath)return;
   window.__sqRefineV3DefaultFetchFastPath=true;
