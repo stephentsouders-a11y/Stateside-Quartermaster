@@ -1,0 +1,52 @@
+name: Flags Refine diagnostic
+on:
+  push:
+    paths:
+      - '.github/workflows/flags-refine-diagnostic.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Diagnose Flags Refine
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > diag.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage(); page.setDefaultTimeout(20000); page.setDefaultNavigationTimeout(60000);
+          const req=[];page.on('response',r=>{if(/\/collections\/.*products\.json|filter\.p\.vendor|section_id/.test(r.url()))req.push({status:r.status(),url:r.url()})});
+          const prime=new URL('/',process.env.BASE);prime.searchParams.set('preview_theme_id',process.env.THEME);await page.goto(prime.toString(),{waitUntil:'domcontentloaded'});await sleep(1000);
+          await page.goto(new URL('/collections/flags-patriotic-decor',process.env.BASE).toString(),{waitUntil:'domcontentloaded'});await sleep(4500);
+          const snap=async(label)=>console.log(label,JSON.stringify(await page.evaluate(()=>({
+            url:location.href,
+            directLen:window.__sqDirectFacetUniverse?.products?.length||0,
+            categoryV3:!!window.__sqCategoryUniverseV3,
+            guardV2:!!window.__sqFilteredProductSurfaceGuardV2,
+            guardNodes:document.querySelectorAll('#MainContent [data-sq-filtered-product-surface-guard-products]').length,
+            guardActive:document.querySelector('#MainContent')?.classList.contains('sq-filtered-result-guard-active')||false,
+            categoryUniverseScripts:document.querySelectorAll('script[data-sq-category-universe-v3]').length,
+            refineScripts:document.querySelectorAll('script[data-sq-filtered-product-surface-guard-v2]').length,
+            manufacturers:document.querySelectorAll('.sq-global-refine-manufacturer-checkbox').length,
+            selected:new URL(location.href).searchParams.get('sq_maker')||'',
+            gridVendors:[...document.querySelectorAll('#MainContent .sq-custom-color-product__vendor')].slice(0,8).map(x=>(x.textContent||'').trim())
+          })),null,2));
+          await snap('BEFORE');
+          const box=page.locator('.sq-global-refine-manufacturer-checkbox').first();console.log('BOX_COUNT',await box.count());if(await box.count()){console.log('BOX_VALUE',await box.inputValue());await box.evaluate(el=>{el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}))});}
+          await sleep(6000);await snap('AFTER');console.log('NETWORK',JSON.stringify(req,null,2));
+          await browser.close();
+          EOF
+          node diag.mjs
