@@ -1,6 +1,14 @@
-{% if request.page_type == 'collection' %}{% render 'sq-catalog-request-dedupe' %}{% endif %}
+{% if request.page_type == 'collection' %}
+  {% render 'sq-catalog-request-dedupe' %}
+  {% assign sq_keep_legacy_maker_sync = false %}
+  {% case collection.handle %}
+    {% when 'products-built-for-the-line-u-s-army', 'army-national-guard-series', 'products-built-for-the-line-u-s-air-force', 'air-national-guard-series', 'products-built-for-the-line-u-s-navy', 'products-built-for-the-line-u-s-marine-corps', 'products-built-for-the-line-u-s-coast-guard', 'products-built-for-the-line-u-s-space-force', 'state-guard-series', 'rotc-series', 'jrotc-series', 'military-schools-academies', 'law-enforcement-corrections', 'firefighting-ems-search-rescue' %}
+      {% assign sq_keep_legacy_maker_sync = true %}
+  {% endcase %}
+  {% unless sq_keep_legacy_maker_sync %}<script data-sq-disable-legacy-maker-crawl>window.__sqCategoryMakerColorSyncV1=true;</script>{% endunless %}
+{% endif %}
 {% doc %}
-Preserves the established PBTL semantic resilience layer while fixing the Army/ARNG request scheduler. Product-feed request starts are paced 250 milliseconds apart, but the scheduler no longer waits for each network response to finish before allowing the next request to start. The existing product-feed transport guard still caps concurrent requests, while v17 response normalization, session caching, canonical Army reuse, retries, and semantic fixes remain intact.
+Preserves the established PBTL semantic resilience layer while fixing the Army/ARNG request scheduler. Product-feed request starts are paced 250 milliseconds apart, but the scheduler no longer waits for each network response to finish before allowing the next request to start. The existing product-feed transport guard still caps concurrent requests, while v17 response normalization, session caching, canonical Army reuse, retries, and semantic fixes remain intact. Ordinary collection roots also suppress the obsolete standalone Maker/Color catalog crawler before content renders; the modern Refine authority and deferred Category Universe remain responsible for those pages.
 {% enddoc %}
 {% capture sq_resilience_v17 %}{% render 'sq-pbtl-fetch-resilience-base-v17' %}{% endcapture %}
 {% assign sq_serial_fetch = 'var run=function(){var wait=Math.max(0,1500-(Date.now()-armyLastStart));return new Promise(function(resolve){setTimeout(resolve,wait)}).then(function(){var secondHit=readCache(key);if(secondHit)return cachedResponse(secondHit);armyLastStart=Date.now();return priorFetch(canon,init).then(function(r){if(r&&r.ok){r.clone().text().then(function(text){writeCache(key,text)}).catch(function(){})}return r})})};var result=armyQueue.then(run,run);armyQueue=result.then(function(){},function(){});return result' %}
