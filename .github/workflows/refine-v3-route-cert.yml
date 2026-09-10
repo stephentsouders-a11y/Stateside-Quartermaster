@@ -27,7 +27,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: refine-v3-route-cert-armed-forces-gear-rerun
+          name: refine-v3-route-cert-armed-forces-gear-post-sync
           path: cert-v3-route-v2/
           retention-days: 7
-# route: 4-armed-forces-gear-rerun
+# route: 4-armed-forces-gear-post-sync-3
