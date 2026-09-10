@@ -12,6 +12,16 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+      - name: Locate broken storefront script sources
+        run: |
+          echo '=== thin/stabrite bridge ==='
+          grep -R -n -F 'data-sq-thin-stabrite-global-sidebar-bridge' . --exclude-dir=.git || true
+          echo '=== wording gate ==='
+          grep -R -n -F 'data-sq-listed-universe-wording-gate-v2' . --exclude-dir=.git || true
+          echo '=== PBTL controls ==='
+          grep -R -n -F 'data-sq-pbtl-result-controls-v1' . --exclude-dir=.git || true
+          echo '=== vac page size ==='
+          grep -R -n -F 'data-vac-page-size' . --exclude-dir=.git || true
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -24,4 +34,4 @@ jobs:
           name: literature-route-cert
           path: cert-literature/
           retention-days: 7
-# route: 8-literature-rerun-1
+# route: 8-literature-source-locate
