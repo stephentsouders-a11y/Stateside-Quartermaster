@@ -1,0 +1,23 @@
+name: Refine V3 customer journey certification v2
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/scripts/refine-v3-customer-journey-v2.mjs'
+      - '.github/workflows/refine-v3-customer-journey-v2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  customer-journey-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Run corrected customer journey
+        run: |
+          sed -i '1i globalThis.CSS={escape:(s)=>String(s)};' .github/scripts/refine-v3-customer-journey-v2.mjs
+          node .github/scripts/refine-v3-customer-journey-v2.mjs
