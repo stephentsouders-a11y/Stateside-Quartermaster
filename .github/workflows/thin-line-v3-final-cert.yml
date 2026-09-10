@@ -1,0 +1,83 @@
+name: Thin Line V3 final certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/thin-line-v3-final-cert.yml'
+      - 'snippets/sq-refine-v3-legacy-isolation.liquid'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify Thin Line desktop and mobile
+        run: |
+          cat > thin-line-cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          async function check(device,width,height,wantCols,wantSticky){
+            const page=await browser.newPage({viewport:{width,height}});
+            const errors=[];page.on('pageerror',e=>errors.push(e.message));
+            const u='https://www.statesideqm.com/collections/thin-line?preview_theme_id=158561894555';
+            let r,attempt=0;
+            for(let i=0;i<5;i++){
+              attempt=i+1;r=await page.goto(u,{waitUntil:'domcontentloaded',timeout:60000});
+              if(r?.status()===200)break;
+              if(![429,500,502,503,504].includes(r?.status()||0))break;
+              await page.waitForTimeout([5000,10000,15000,20000,25000][i]);
+            }
+            try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:45000})}catch{}
+            await page.waitForTimeout(4000);
+            const d=await page.evaluate((wantCols)=>{
+              const main=document.querySelector('#MainContent');
+              const side=main?.querySelector('.sq-refine-v3-sidebar');
+              const grid=main?.querySelector('.sq-refine-v3-results .product-grid');
+              const cards=grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(x=>!!x.querySelector('a[href*="/products/"]')):[];
+              const rects=cards.slice(0,12).map(x=>{const r=x.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width)}});
+              const firstY=rects[0]?.y;
+              const firstRow=rects.filter(x=>Math.abs(x.y-firstY)<=3);
+              const hiddenTemplateSections=[...document.querySelectorAll('[id^="shopify-section-template--"]')].filter(el=>getComputedStyle(el).display==='none'&&el.querySelector('.sq-refine-v3-shell,.sq-refine-v3-sidebar,.sq-refine-v3-results')).length;
+              return {
+                ready:main?.dataset.sqRefineV3Ready==='true',
+                error:main?.dataset.sqRefineV3Error||'',
+                sidebar:!!side,
+                results:!!main?.querySelector('.sq-refine-v3-results'),
+                cards:cards.length,
+                firstRowCount:firstRow.length,
+                firstRowXs:firstRow.map(x=>x.x),
+                gridTemplate:grid?getComputedStyle(grid).gridTemplateColumns:'',
+                sidebarPosition:side?getComputedStyle(side).position:'',
+                bodyParent:document.body.classList.contains('sq-ts-parent')||document.body.classList.contains('sq-ts-parent-only'),
+                legacyDark:document.querySelectorAll('.sq-refine-taxonomy-panel,.sq-collection-facet-sidebar,.sqbfl').length,
+                hiddenTemplateSections,
+                isolation:document.querySelector('[data-sq-refine-v3-legacy-isolation]')?.getAttribute('data-sq-refine-v3-legacy-isolation')||'',
+                pageSizes:[...document.querySelectorAll('[data-sq-page-size]')].map(x=>x.textContent.trim()).filter(Boolean)
+              };
+            },wantCols);
+            const ok=r?.status()===200&&errors.length===0&&d.ready&&!d.error&&d.sidebar&&d.results&&d.cards===50&&d.firstRowCount===wantCols&&d.sidebarPosition===wantSticky&&!d.bodyParent&&d.hiddenTemplateSections===0&&d.isolation==='thin-line';
+            console.log('THIN_LINE '+JSON.stringify({device,http:r?.status()||0,attempt,errors,d,ok}));
+            await page.screenshot({path:`thin-line-${device}.png`,fullPage:true});
+            await page.close();return ok;
+          }
+          const desktop=await check('desktop',1440,1000,3,'sticky');
+          const mobile=await check('mobile',390,844,2,'static');
+          await browser.close();
+          if(!(desktop&&mobile))process.exit(1);
+          EOF
+          node thin-line-cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: thin-line-v3-final-cert
+          path: thin-line-*.png
+          retention-days: 7
