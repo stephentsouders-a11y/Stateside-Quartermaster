@@ -27,7 +27,10 @@
         return !node.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results')&&hasProducts(node);
       });
       var chosen=candidates.find(function(node){return !!node.closest('.sq-collection-products-column')})||candidates[0];
-      if(chosen)results.appendChild(chosen);
+      if(chosen){
+        var host=chosen.closest('.sq-collection-products-column')||chosen;
+        if(host!==results&&!host.contains(results))results.appendChild(host);
+      }
     }
     main.dataset.sqRefineV3RootCleanup='true';
     return true;
@@ -35,7 +38,7 @@
   function queue(){clearTimeout(timer);timer=setTimeout(clean,30)}
   clean();
   var observer=new MutationObserver(queue);observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['data-sq-refine-v3-hidden-nav','data-sq-refine-v3-ready']});
-  [100,300,700,1500,3000,6000,10000].forEach(function(ms){setTimeout(clean,ms)});
+  [100,300,700,1500,3000,6000,10000,15000].forEach(function(ms){setTimeout(clean,ms)});
 })();
 </script>
 {% endif %}
