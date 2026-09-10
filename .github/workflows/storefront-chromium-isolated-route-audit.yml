@@ -1,18 +1,23 @@
 name: Storefront Chromium isolated route audit
 on:
+  workflow_dispatch:
   push:
     paths:
       - '.github/workflows/storefront-chromium-isolated-route-audit.yml'
       - 'snippets/sq-global-refine-direct-data.liquid'
+      - 'snippets/sq-global-refine-checkbox-controls.liquid'
+      - 'snippets/sq-category-universe-facet-authority.liquid'
+      - 'snippets/sq-filtered-product-surface-guard.liquid'
       - 'snippets/sq-storefront-content-guard.liquid'
-  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 1
       matrix:
         include:
           - {slug: accessories-gifts-collectibles, name: 'Accessories, Gifts & Collectibles', path: /collections/accessories-gifts-collectibles, type: collection}
@@ -57,8 +62,6 @@ jobs:
           - {slug: military-schools-academies, name: 'Military Schools & Academies', path: /collections/military-schools-academies, type: collection}
           - {slug: law-enforcement-corrections, name: 'Law Enforcement & Corrections', path: /collections/law-enforcement-corrections, type: collection}
           - {slug: firefighting-ems-sar, name: 'Firefighting, EMS & Search & Rescue', path: /collections/firefighting-ems-search-rescue, type: collection}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -67,7 +70,7 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Certify one route in a fresh runner
+      - name: Certify route
         env:
           BASE: https://www.statesideqm.com
           THEME: '158561894555'
@@ -79,106 +82,39 @@ jobs:
           cat > audit.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'fs';
-          fs.mkdirSync('out',{recursive:true});
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          const challengeText=/verify you are human|just a moment|attention required|performing security verification/i;
           const browser=await chromium.launch({headless:true});
           const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
-          const page=await ctx.newPage();
-          page.setDefaultTimeout(12000); page.setDefaultNavigationTimeout(60000);
-          const rate429=[]; const consoleErrors=[];
-          page.on('response',r=>{if(r.status()===429)rate429.push(r.url())});
-          page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
-          const target=new URL(process.env.ROUTE,process.env.BASE); target.searchParams.delete('filter.v.availability'); target.searchParams.set('preview_theme_id',process.env.THEME);
-          const result={name:process.env.NAME,slug:process.env.SLUG,path:process.env.ROUTE,type:process.env.TYPE,status:null,usableMs:null,outcome:'FAIL',reasons:[],base:{},refine:{expected:process.env.TYPE==='collection',attempted:false,vendor:null,urlFiltered:false,checked:false,sampleSelector:null,productsChecked:0,vendors:[],allMatch:null,cleared:false},rateLimitUrls:[],consoleErrors:[]};
-          const isChallenge=async()=>page.evaluate(()=>/verify you are human|just a moment|attention required|performing security verification/i.test((document.title||'')+' '+(document.body?.innerText||''))).catch(()=>false);
-          async function visibleProductLinks(){
-            const selectors=['#MainContent [data-sq-category-universe-products] a[href*="/products/"]','#MainContent [data-sq-custom-color-products] a[href*="/products/"]','#MainContent .sq-custom-color-products a[href*="/products/"]','#MainContent .sqbfl-products a[href*="/products/"]','#MainContent .sqsg-products a[href*="/products/"]','#MainContent .sq-type-family-products__grid a[href*="/products/"]','#MainContent .product-grid a[href*="/products/"]','#MainContent #product-grid a[href*="/products/"]','#MainContent collection-component a[href*="/products/"]'];
-            for(const sel of selectors){const links=await page.locator(sel).evaluateAll(as=>[...new Set(as.filter(a=>{const s=getComputedStyle(a),r=a.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2}).map(a=>a.href))].slice(0,2)).catch(()=>[]);if(links.length)return {selector:sel,links}}
-            return {selector:null,links:[]};
-          }
-          async function vendorFor(href){
-            try{const u=new URL(href,process.env.BASE),m=u.pathname.match(/^\/products\/([^/?#]+)/);if(!m)return {vendor:null,status:null};for(const d of [0,5000]){if(d)await sleep(d);const r=await ctx.request.get(`${process.env.BASE}/products/${m[1]}.js`,{timeout:15000});if(r.status()===429)continue;if(!r.ok())return {vendor:null,status:r.status()};return {vendor:String((await r.json()).vendor||'').trim(),status:r.status()}}return {vendor:null,status:429}}catch{return {vendor:null,status:null}}
-          }
+          const page=await ctx.newPage();page.setDefaultTimeout(16000);page.setDefaultNavigationTimeout(60000);
+          const bad429=[],bad5xx=[];page.on('response',r=>{if(r.status()===429)bad429.push(r.url());if(r.status()>=500)bad5xx.push(`${r.status()} ${r.url()}`)});
+          const out={name:process.env.NAME,slug:process.env.SLUG,status:null,usableMs:null,base:{},vendor:null,urlFiltered:false,checked:false,surface:false,surfaceKind:null,vendors:[],handles:[],allMatch:false,cleared:false,bad429:[],bad5xx:[],outcome:'FAIL',reasons:[]};
+          const challenge=()=>page.evaluate(()=>/verify you are human|just a moment|attention required|performing security verification/i.test((document.title||'')+' '+(document.body?.innerText||''))).catch(()=>false);
+          const visibleHandles=()=>page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return{kind:null,handles:[]};const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};const sels=[['guard','[data-sq-filtered-product-surface-guard-products] a[href*="/products/"]'],['category','[data-sq-category-universe-products] a[href*="/products/"]'],['custom','[data-sq-custom-color-products] a[href*="/products/"]'],['grid','collection-component a[href*="/products/"],.product-grid a[href*="/products/"],product-card a[href*="/products/"]']];for(const [kind,sel] of sels){const hs=[];for(const a of m.querySelectorAll(sel)){if(!vis(a))continue;try{const h=new URL(a.href,location.origin).pathname.match(/^\/products\/([^/?#]+)/)?.[1]||'';if(h&&!hs.includes(h))hs.push(decodeURIComponent(h))}catch{}if(hs.length>=8)break}if(hs.length)return{kind,handles:hs}}return{kind:null,handles:[]}});
+          const vendorsFor=hs=>page.evaluate(handles=>{const ps=window.__sqDirectFacetUniverse&&Array.isArray(window.__sqDirectFacetUniverse.products)?window.__sqDirectFacetUniverse.products:[];const map=new Map(ps.map(p=>[String(p.handle||''),String(p.vendor||'').trim()]));return handles.map(h=>map.get(h)||'').filter(Boolean)},hs).catch(()=>[]);
           try{
-            await sleep(2500);
-            const started=Date.now(); const resp=await page.goto(target.toString(),{waitUntil:'domcontentloaded'}); result.status=resp?.status()??null;
-            if(result.status===429||result.status>=500){result.outcome='INFRA';result.reasons.push(`navigation status ${result.status}`)}
-            if(result.outcome!=='INFRA'&&await isChallenge()){result.outcome='INFRA';result.reasons.push('anti-bot challenge page')}
-            if(result.outcome!=='INFRA'){
-              for(let i=0;i<60;i++){
-                if(await isChallenge()){result.outcome='INFRA';result.reasons.push('anti-bot challenge during load');break}
-                const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const ms=getComputedStyle(m),mr=m.getBoundingClientRect();if(ms.display==='none'||ms.visibility==='hidden'||mr.width<3||mr.height<3)return false;return [...m.querySelectorAll('h1,.collection-title,.title,.product-grid,#product-grid,.sqbfl-products,.sq-type-family-products,.sq-subcategory-section,.sq-books-tree,.sq-custom-color-products,collection-component,[data-sqsg-view],.rte,a[href*="/collections/"],a[href*="/products/"]')].some(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2})}).catch(()=>false);
-                if(ok){result.usableMs=Date.now()-started;break} await sleep(250);
-              }
-            }
-            if(result.outcome!=='INFRA'){
-              if(process.env.TYPE==='collection')await page.locator('.sq-global-refine-sidebar').first().waitFor({state:'visible',timeout:12000}).catch(()=>{});
-              if(process.env.TYPE==='collection')await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:14000}).catch(()=>{});
+            await sleep(7000);
+            const prime=new URL('/',process.env.BASE);prime.searchParams.set('preview_theme_id',process.env.THEME);const pr=await page.goto(prime.toString(),{waitUntil:'domcontentloaded'});await sleep(1000);bad429.length=0;bad5xx.length=0;
+            if(!pr||pr.status()===429||pr.status()>=500||await challenge()){out.outcome='INFRA';out.reasons.push('preview infrastructure')}
+            if(out.outcome!=='INFRA'){
+              const started=Date.now();const r=await page.goto(new URL(process.env.ROUTE,process.env.BASE).toString(),{waitUntil:'domcontentloaded'});out.status=r?.status()??null;
+              if(out.status===429||out.status>=500||await challenge()){out.outcome='INFRA';out.reasons.push(`navigation ${out.status}`)}
+              if(out.outcome!=='INFRA')for(let i=0;i<35;i++){const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const mr=m.getBoundingClientRect();if(mr.width<3||mr.height<3)return false;return [...m.querySelectorAll('h1,a[href*="/collections/"],a[href*="/products/"],.product-grid,.sq-custom-color-products,.rte')].some(x=>{const s=getComputedStyle(x),r=x.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2})});if(ok){out.usableMs=Date.now()-started;break}await sleep(200)}
+              if(process.env.TYPE==='collection'&&out.outcome!=='INFRA'){await page.locator('.sq-global-refine-sidebar').first().waitFor({state:'visible',timeout:12000}).catch(()=>{});await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:12000}).catch(()=>{})}
               await sleep(500);
-              if(await isChallenge()){result.outcome='INFRA';result.reasons.push('anti-bot challenge after load')}
+              out.base=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return{sidebarCount:m?[...m.querySelectorAll('.sq-global-refine-sidebar')].filter(vis).length:0,nativeFilters:m?[...m.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length:0,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,broken:m?[...m.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).length:0,manufacturer:m?[...m.querySelectorAll('.sq-global-refine-manufacturer-checkbox')].length:0,dedupe:document.querySelectorAll('script[data-sq-catalog-request-dedupe-v1]').length,guard:document.querySelectorAll('script[data-sq-filtered-product-surface-guard-v2]').length,directV5:document.querySelectorAll('script[data-sq-global-refine-direct-data-v5]').length,checkboxV3:document.querySelectorAll('script[data-sq-refine-checkbox-navigation="history-v3"]').length}});
+              if(process.env.TYPE==='collection'&&out.outcome!=='INFRA'){
+                const md=page.locator('.sq-global-refine-sidebar details').filter({hasText:/Manufacturer/i}).first();if(await md.count()){if((await md.getAttribute('open').catch(()=>null))===null)await md.locator('summary').click().catch(()=>{});const box=md.locator('.sq-global-refine-manufacturer-checkbox').first();if(await box.count()){out.vendor=await box.inputValue().catch(()=>null);if(out.vendor){await box.evaluate(el=>{el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(u=>{const q=new URL(u).searchParams;return q.get('filter.p.vendor')===out.vendor&&q.get('sq_maker')===out.vendor},{timeout:5000}).catch(()=>{});await page.locator('[data-sq-filtered-product-surface-guard-products]').first().waitFor({state:'attached',timeout:6000}).catch(()=>{});await sleep(300);const q=new URL(page.url()).searchParams;out.urlFiltered=q.get('filter.p.vendor')===out.vendor&&q.get('sq_maker')===out.vendor;out.checked=await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().isChecked().catch(()=>false);const s=await visibleHandles();out.surface=!!s.handles.length;out.surfaceKind=s.kind;out.handles=s.handles.slice(0,8);out.vendors=await vendorsFor(out.handles);if(!out.vendors.length&&s.kind==='guard')out.vendors=await page.locator('[data-sq-filtered-product-surface-guard-products] .sq-custom-color-product__vendor').evaluateAll(xs=>xs.slice(0,8).map(x=>(x.textContent||'').trim()).filter(Boolean)).catch(()=>[]);out.allMatch=out.vendors.length>0&&out.vendors.every(v=>v.toLowerCase()===String(out.vendor).toLowerCase());const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first();if(await active.count()){await active.evaluate(el=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(u=>{const q2=new URL(u).searchParams;return !q2.has('filter.p.vendor')&&!q2.has('sq_maker')},{timeout:5000}).catch(()=>{});const q2=new URL(page.url()).searchParams;out.cleared=!q2.has('filter.p.vendor')&&!q2.has('sq_maker')}}}}}
             }
-            if(result.outcome!=='INFRA'){
-              result.base=await page.evaluate(()=>{const main=document.querySelector('#MainContent');if(!main)return {main:false};const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return {main:true,sidebarCount:[...main.querySelectorAll('.sq-global-refine-sidebar')].filter(vis).length,nativeFilters:[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,brokenImages:[...main.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.currentSrc||i.src).filter(Boolean),manufacturerDetails:[...main.querySelectorAll('.sq-global-refine-sidebar details')].filter(d=>/manufacturer/i.test(d.querySelector(':scope>summary')?.textContent||'')).length,checkboxes:[...main.querySelectorAll('.sq-global-refine-manufacturer-checkbox')].length}}).catch(()=>({main:false}));
-              await page.screenshot({path:'out/base.png',fullPage:false}).catch(()=>{});
-              if(process.env.TYPE==='collection'&&result.base.main){
-                const md=page.locator('.sq-global-refine-sidebar details').filter({hasText:/Manufacturer/i}).first();
-                if(await md.count()){
-                  if((await md.getAttribute('open'))===null)await md.locator('summary').click().catch(()=>{});
-                  const box=md.locator('.sq-global-refine-manufacturer-checkbox').first();
-                  if(await box.count()){
-                    result.refine.attempted=true; result.refine.vendor=await box.inputValue();
-                    await box.evaluate(el=>{setTimeout(()=>{el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}))},0)}).catch(()=>result.reasons.push('select dispatch failed'));
-                    await page.waitForURL(u=>{const q=new URL(u).searchParams;return q.get('filter.p.vendor')===result.refine.vendor&&q.get('sq_maker')===result.refine.vendor},{timeout:18000}).catch(()=>{});
-                    await page.waitForLoadState('domcontentloaded').catch(()=>{}); await sleep(1200);
-                    if(await isChallenge()){result.outcome='INFRA';result.reasons.push('anti-bot challenge after manufacturer select')}
-                    if(result.outcome!=='INFRA'){
-                      const q=new URL(page.url()).searchParams; result.refine.urlFiltered=q.get('filter.p.vendor')===result.refine.vendor&&q.get('sq_maker')===result.refine.vendor;
-                      await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().waitFor({state:'attached',timeout:12000}).catch(()=>{}); result.refine.checked=await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().isChecked().catch(()=>false);
-                      let sample={selector:null,links:[]};for(let i=0;i<12;i++){sample=await visibleProductLinks();if(sample.links.length)break;await sleep(500)}result.refine.sampleSelector=sample.selector;
-                      for(const href of sample.links){const r=await vendorFor(href);if(r.vendor)result.refine.vendors.push(r.vendor);if(r.status===429)result.reasons.push('vendor verification API rate-limited')}
-                      result.refine.productsChecked=result.refine.vendors.length; result.refine.allMatch=result.refine.vendors.length?result.refine.vendors.every(v=>v.toLowerCase()===String(result.refine.vendor).toLowerCase()):null;
-                      await page.screenshot({path:'out/filtered.png',fullPage:false}).catch(()=>{});
-                      const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first(); if(await active.count()){await active.evaluate(el=>{setTimeout(()=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}))},0)}).catch(()=>result.reasons.push('clear dispatch failed'));await page.waitForURL(u=>{const q2=new URL(u).searchParams;return !q2.has('filter.p.vendor')&&!q2.has('sq_maker')},{timeout:18000}).catch(()=>{});const q2=new URL(page.url()).searchParams;result.refine.cleared=!q2.has('filter.p.vendor')&&!q2.has('sq_maker')}
-                    }
-                  }
-                }
-              }
-            }
-          }catch(e){result.reasons.push(`route exception: ${String(e).split('\n')[0]}`)}
-          result.rateLimitUrls=[...new Set(rate429)].slice(0,20); result.consoleErrors=consoleErrors.filter(x=>!x.includes('shop.app')).slice(0,10);
-          if(await isChallenge()){result.outcome='INFRA';if(!result.reasons.some(x=>x.includes('challenge')))result.reasons.push('anti-bot challenge at final state')}
-          if(result.outcome!=='INFRA'&&result.rateLimitUrls.length){result.outcome='INFRA';result.reasons.push(`${result.rateLimitUrls.length} HTTP 429 response(s) contaminated this attempt`)}
-          if(result.outcome!=='INFRA'){
-            if(result.status!==200)result.reasons.push(`HTTP ${result.status}`);
-            if(result.usableMs===null||result.usableMs>5000)result.reasons.push(`usable ${result.usableMs}ms`);
-            if(!result.base.main)result.reasons.push('#MainContent missing');
-            if(result.base.overflow)result.reasons.push('horizontal overflow');
-            if(result.base.brokenImages?.length)result.reasons.push(`${result.base.brokenImages.length} broken image(s)`);
-            if(process.env.TYPE==='collection'){
-              if(result.base.sidebarCount!==1)result.reasons.push(`refine sidebar count ${result.base.sidebarCount}`);
-              if(result.base.nativeFilters!==0)result.reasons.push(`duplicate native filters ${result.base.nativeFilters}`);
-              if((result.base.manufacturerDetails??0)<1||!result.refine.attempted)result.reasons.push('Manufacturer checkbox surface missing/not testable');
-              else{
-                if(!result.refine.urlFiltered)result.reasons.push('dual manufacturer filter URL did not apply');
-                if(!result.refine.checked)result.reasons.push('manufacturer checkbox did not remain checked');
-                if(result.refine.productsChecked<1)result.reasons.push('no visible filtered products could be vendor-verified');
-                if(result.refine.allMatch===false)result.reasons.push(`visible filtered results include wrong manufacturer(s): ${result.refine.vendors.join(', ')}`);
-                if(!result.refine.cleared)result.reasons.push('manufacturer filter did not clear');
-              }
-            }
-            result.outcome=result.reasons.length?'FAIL':'PASS';
-          }
-          await page.screenshot({path:'out/final.png',fullPage:false}).catch(()=>{});
-          fs.writeFileSync('out/report.json',JSON.stringify(result,null,2));
-          console.log('\nCERTIFICATION RESULT\n'+JSON.stringify(result,null,2));
-          await ctx.close(); await browser.close();
-          if(result.outcome!=='PASS')process.exitCode=2;
+            out.bad429=[...new Set(bad429)];out.bad5xx=[...new Set(bad5xx)];if(out.bad429.length||out.bad5xx.length||await challenge()){out.outcome='INFRA';if(out.bad429.length)out.reasons.push(`${out.bad429.length} HTTP 429`);if(out.bad5xx.length)out.reasons.push(`${out.bad5xx.length} HTTP 5xx`)}
+            if(out.outcome!=='INFRA'){if(out.status!==200)out.reasons.push(`HTTP ${out.status}`);if(out.usableMs===null||out.usableMs>5000)out.reasons.push(`usable ${out.usableMs}ms`);if(out.base.overflow)out.reasons.push('horizontal overflow');if(out.base.broken)out.reasons.push(`${out.base.broken} broken images`);if(process.env.TYPE==='page'){if(out.base.sidebarCount!==0)out.reasons.push(`unexpected sidebar ${out.base.sidebarCount}`)}else{if(out.base.sidebarCount!==1)out.reasons.push(`sidebar ${out.base.sidebarCount}`);if(out.base.nativeFilters!==0)out.reasons.push(`native filters ${out.base.nativeFilters}`);if(!out.base.manufacturer)out.reasons.push('manufacturer empty');if(out.base.dedupe!==1)out.reasons.push(`dedupe marker ${out.base.dedupe}`);if(out.base.guard!==1)out.reasons.push(`guard marker ${out.base.guard}`);if(out.base.directV5!==1)out.reasons.push(`direct v5 marker ${out.base.directV5}`);if(out.base.checkboxV3!==1)out.reasons.push(`checkbox v3 marker ${out.base.checkboxV3}`);if(!out.vendor)out.reasons.push('manufacturer unavailable');if(!out.urlFiltered)out.reasons.push('dual URL failed');if(!out.checked)out.reasons.push('checkbox failed');if(!out.surface)out.reasons.push('filtered surface missing');if(!out.allMatch)out.reasons.push(`vendor mismatch/empty: ${out.vendors.join(', ')}`);if(!out.cleared)out.reasons.push('clear failed')}out.outcome=out.reasons.length?'FAIL':'PASS'}
+          }catch(err){out.reasons.push(String(err&&err.stack||err));if(out.outcome!=='INFRA')out.outcome='FAIL'}
+          fs.mkdirSync('out',{recursive:true});fs.writeFileSync(`out/${process.env.SLUG}.json`,JSON.stringify(out,null,2));await page.screenshot({path:`out/${process.env.SLUG}.png`,fullPage:false}).catch(()=>{});console.log('\nFINAL ROUTE CERT RESULT\n'+JSON.stringify(out,null,2));await browser.close();if(out.outcome!=='PASS')process.exitCode=2;
           EOF
           node audit.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cert-${{ matrix.slug }}
-          path: out
+          name: storefront-cert-${{ matrix.slug }}
+          path: out/
+          if-no-files-found: ignore
           retention-days: 7
