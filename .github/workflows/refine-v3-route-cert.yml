@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/refine-v3-route-cert.yml'
       - '.github/scripts/body-armor-route-cert.mjs'
+      - '.github/scripts/navy-v3-diagnostic.mjs'
   workflow_dispatch:
 jobs:
   certify:
@@ -16,12 +17,12 @@ jobs:
         with:
           node-version: 24
       - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Run route certification
-        run: node .github/scripts/body-armor-route-cert.mjs
+      - name: Run Navy lifecycle diagnostic
+        run: node .github/scripts/navy-v3-diagnostic.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: refine-v3-route-cert
-          path: cert-*/
+          path: navy-*.png
           retention-days: 7
-# route-cert-generic-v1
+# route-cert-navy-diagnostic-v1
