@@ -1,0 +1,45 @@
+name: Accessories request origin live trace
+on:
+  push:
+    paths:
+      - '.github/workflows/accessories-request-origin-live-trace.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Trace Accessories request origin
+        run: |
+          cat > trace.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage();page.setDefaultNavigationTimeout(60000);
+          const cdp=await ctx.newCDPSession(page);await cdp.send('Network.enable');
+          const rows=[];
+          cdp.on('Network.requestWillBeSent',e=>{
+            if(/accessories-gifts-collectibles|filter\.v\.availability/i.test(e.request.url)) rows.push({kind:'request',url:e.request.url,type:e.type,documentURL:e.documentURL,initiator:e.initiator,redirect:e.redirectResponse?{status:e.redirectResponse.status,url:e.redirectResponse.url,location:e.redirectResponse.headers?.location||null}:null});
+          });
+          cdp.on('Network.responseReceived',e=>{if(/accessories-gifts-collectibles|filter\.v\.availability/i.test(e.response.url))rows.push({kind:'response',url:e.response.url,status:e.response.status,type:e.type,fromServiceWorker:e.response.fromServiceWorker})});
+          await page.addInitScript(()=>{
+            window.__sqOrigin=[];const rec=(kind,data)=>window.__sqOrigin.push({kind,...data,stack:new Error().stack});
+            const of=window.fetch;window.fetch=function(input,init){const u=String(typeof input==='string'?input:input?.url||input);if(/filter\.v\.availability|accessories-gifts-collectibles/i.test(u))rec('fetch',{url:u});return of.apply(this,arguments)};
+            const xo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){if(/filter\.v\.availability|accessories-gifts-collectibles/i.test(String(u)))rec('xhr',{method:m,url:String(u)});return xo.apply(this,arguments)};
+            const pa=history.pushState.bind(history),ra=history.replaceState.bind(history);history.pushState=function(s,t,u){if(/filter\.v\.availability/i.test(String(u||'')))rec('pushState',{url:String(u)});return pa(s,t,u)};history.replaceState=function(s,t,u){if(/filter\.v\.availability/i.test(String(u||'')))rec('replaceState',{url:String(u)});return ra(s,t,u)};
+          });
+          await new Promise(r=>setTimeout(r,7000));
+          await page.goto('https://www.statesideqm.com/?preview_theme_id=158561894555',{waitUntil:'domcontentloaded'});await new Promise(r=>setTimeout(r,900));rows.length=0;
+          const r=await page.goto('https://www.statesideqm.com/collections/accessories-gifts-collectibles',{waitUntil:'domcontentloaded'}).catch(()=>null);await new Promise(r=>setTimeout(r,10000));
+          const state=await page.evaluate(()=>({url:location.href,title:document.title,origin:window.__sqOrigin||[],body:(document.body?.innerText||'').slice(0,300),markers:{dedupe:!!document.querySelector('script[data-sq-catalog-request-dedupe-v1]'),guard:!!document.querySelector('script[data-sq-filtered-product-surface-guard-v2]'),sidebar:document.querySelectorAll('.sq-global-refine-sidebar').length},availability:[...document.querySelectorAll('a[href*="filter.v.availability"],input[name="filter.v.availability"]')].slice(0,15).map(x=>({tag:x.tagName,href:x.href||'',name:x.name||'',value:x.value||'',checked:x.checked||false,outer:x.outerHTML.slice(0,600)}))})).catch(e=>({error:String(e)}));
+          console.log('\nACCESSORIES ORIGIN TRACE\n'+JSON.stringify({status:r?.status()??null,rows,state},null,2));await browser.close();
+          EOF
+          node trace.mjs
