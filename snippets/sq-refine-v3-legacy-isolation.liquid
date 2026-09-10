@@ -5,6 +5,10 @@ window.__sqGlobalRefineAuthorityV2=true;
 window.__sqGlobalRefineVisibleSurfaceFix=true;
 window.__sqCategoryUniverseV5=true;
 window.__sqGlobalRefineCheckboxControls=true;
+/* V3 owns these collection roots. Block the older PBTL unified-tree runtime before
+   it can replace MainContent after V3 has rendered. State Guard is not in the
+   isolation root list and is therefore unaffected. */
+window.__sqBflUnifiedTree=true;
 (function(){
   if(window.__sqRefineV3MainReplaceGuard||!window.Element)return;
   window.__sqRefineV3MainReplaceGuard=true;
