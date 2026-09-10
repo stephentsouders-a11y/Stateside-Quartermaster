@@ -1,0 +1,62 @@
+{% doc %}
+Guarantees that Refine V3 exposes the assembled product cards in the visible V3 results column. Some legacy-heavy routes contain an earlier hidden .product-grid; the core assembler can populate that hidden grid first. This rescue runs only when V3 is ready but has no visible product grid with cards, copies the already-assembled cards into the V3 results surface, and marks that surface authoritative. State Guard remains untouched.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<script data-sq-refine-v3-visible-grid-rescue>
+(function(){
+  const main=document.getElementById('MainContent');
+  if(!main)return;
+  function visible(el){
+    if(!el)return false;
+    const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+    return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0;
+  }
+  function cards(grid){
+    return grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(function(item){return item.querySelector('a[href*="/products/"]')}):[];
+  }
+  function expose(node,stop){
+    for(let el=node;el&&el!==stop;el=el.parentElement){
+      el.hidden=false;
+      el.removeAttribute('aria-hidden');
+      if(el.classList&&el.classList.contains('product-grid'))el.style.setProperty('display','grid','important');
+      else el.style.setProperty('display','block','important');
+      el.style.setProperty('visibility','visible','important');
+    }
+  }
+  function repair(){
+    if(main.dataset.sqRefineV3Ready!=='true')return false;
+    const results=main.querySelector('.sq-refine-v3-results');
+    if(!results)return false;
+    const resultGrids=[...results.querySelectorAll('.product-grid')];
+    const already=resultGrids.find(function(g){return visible(g)&&cards(g).some(visible)});
+    if(already){already.classList.add('sq-v3-authoritative-grid');return true;}
+    const all=[...main.querySelectorAll('.product-grid')];
+    const source=all.find(function(g){return cards(g).length>0});
+    if(!source)return false;
+    let target=resultGrids[0];
+    if(!target){
+      target=document.createElement(source.tagName&&source.tagName.toLowerCase()==='ol'?'ol':'ul');
+      target.className=source.className||'product-grid';
+      const control=results.querySelector('.sq-refine-v3-page-size');
+      if(control&&control.nextSibling)results.insertBefore(target,control.nextSibling);else results.appendChild(target);
+    }
+    if(target!==source){
+      const frag=document.createDocumentFragment();
+      cards(source).forEach(function(card){frag.appendChild(card.cloneNode(true))});
+      target.replaceChildren(frag);
+    }
+    target.classList.add('product-grid','sq-v3-authoritative-grid');
+    expose(target,results);
+    main.dataset.sqRefineV3VisibleGridRescued='true';
+    return visible(target)&&cards(target).some(visible);
+  }
+  if(repair())return;
+  let tries=0;
+  const timer=setInterval(function(){if(repair()||++tries>=80)clearInterval(timer)},100);
+  window.addEventListener('load',repair,{once:true});
+  setTimeout(repair,750);
+  setTimeout(repair,1500);
+  setTimeout(repair,3000);
+})();
+</script>
+{% endif %}
