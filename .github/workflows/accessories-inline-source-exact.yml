@@ -1,0 +1,41 @@
+name: Accessories inline source exact
+on:
+  push:
+    paths:
+      - '.github/workflows/accessories-inline-source-exact.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Extract inline source
+        run: |
+          cat > trace.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage();page.setDefaultNavigationTimeout(60000);
+          await page.goto('https://www.statesideqm.com/?preview_theme_id=158561894555',{waitUntil:'domcontentloaded'});await page.waitForTimeout(1000);
+          const cdp=await ctx.newCDPSession(page);await cdp.send('Debugger.enable');
+          const scripts=new Map();
+          cdp.on('Debugger.scriptParsed',e=>{if(e.url.includes('/collections/accessories-gifts-collectibles'))scripts.set(e.scriptId,e)});
+          await page.addInitScript(()=>{Object.defineProperty(window,'__sqStopAvailabilityNav',{value:true});const oa=Location.prototype.assign,or=Location.prototype.replace;try{Location.prototype.assign=function(u){if(/filter\.v\.availability=1/.test(String(u)))return;return oa.call(this,u)};Location.prototype.replace=function(u){if(/filter\.v\.availability=1/.test(String(u)))return;return or.call(this,u)}}catch(_){}});
+          await page.goto('https://www.statesideqm.com/collections/accessories-gifts-collectibles',{waitUntil:'domcontentloaded'}).catch(()=>null);await page.waitForTimeout(2500);
+          const html=await page.content().catch(()=> '');
+          const lines=html.split('\n');
+          console.log('HTML_LINES',lines.length);
+          for(let i=0;i<lines.length;i++){if(/filter\.v\.availability|availability=1/.test(lines[i]))console.log('\nHTML MATCH '+(i+1)+'\n'+lines.slice(Math.max(0,i-8),Math.min(lines.length,i+9)).join('\n'))}
+          const all=[...scripts.entries()];console.log('\nSCRIPT_COUNT',all.length);
+          for(const [id,meta] of all){try{const {scriptSource}=await cdp.send('Debugger.getScriptSource',{scriptId:id});if(/filter\.v\.availability|availability=1/.test(scriptSource)){console.log('\nSCRIPT_MATCH id='+id+' startLine='+meta.startLine+' url='+meta.url+'\n'+scriptSource)}}catch(e){}}
+          await browser.close();
+          EOF
+          node trace.mjs
