@@ -1,0 +1,31 @@
+{% doc %}
+Makes the Refine Products sidebar tall, sticky, and independently scrollable on desktop while preserving normal document flow on mobile.
+{% enddoc %}
+{% if request.page_type == 'collection' %}
+<style data-sq-refine-tall-sidebar>
+@media (min-width: 901px){
+  #MainContent .sq-global-refine-sidebar{
+    position:sticky!important;
+    top:18px!important;
+    align-self:flex-start!important;
+    height:calc(100vh - 36px)!important;
+    min-height:720px!important;
+    max-height:calc(100vh - 36px)!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    overscroll-behavior:contain!important;
+    scrollbar-gutter:stable!important;
+    padding-bottom:28px!important;
+  }
+}
+@media (max-width: 900px){
+  #MainContent .sq-global-refine-sidebar{
+    position:static!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+  }
+}
+</style>
+{% endif %}
