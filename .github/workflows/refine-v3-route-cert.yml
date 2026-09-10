@@ -4,7 +4,7 @@ on:
     branches: [refine-restart-v3]
     paths:
       - '.github/workflows/refine-v3-route-cert.yml'
-      - '.github/scripts/armored-vehicles-page-cert.mjs'
+      - '.github/scripts/art-route-cert.mjs'
   workflow_dispatch:
 jobs:
   certify:
@@ -16,12 +16,12 @@ jobs:
         with:
           node-version: 24
       - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Run Armored Vehicles preservation certification
-        run: node .github/scripts/armored-vehicles-page-cert.mjs
+      - name: Run Art certification
+        run: node .github/scripts/art-route-cert.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: armored-vehicles-page-cert
-          path: cert-armored-vehicles/
+          name: art-route-cert
+          path: cert-art/
           retention-days: 7
-# route: 5-armored-vehicles
+# route: 6-art
