@@ -9,7 +9,8 @@ Keeps the V3 products-per-page control and product surface together in the right
   "vendors": {{ collection.all_vendors | json }},
   "authors": [
     {% for product in collection.products %}
-      {% assign sq_author = product.description | split: '(Author)' | first | split: 'infringementby ' | last | strip %}
+      {% assign sq_author_source = product.description | strip_html %}
+      {% assign sq_author = sq_author_source | split: '(Author)' | first | split: 'by ' | last | strip %}
       {% unless forloop.first %},{% endunless %}{{ sq_author | json }}
     {% endfor %}
   ]
@@ -25,6 +26,7 @@ Keeps the V3 products-per-page control and product surface together in the right
 #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:1;grid-row:1 / span 2;z-index:20}
 #MainContent.sq-refine-v3-active .sq-refine-v3-group>summary{position:relative;z-index:2;pointer-events:auto}
 html body #MainContent.sq-refine-v3-active [data-sq-refine-v3-hidden-nav='true']{display:none!important;visibility:hidden!important;pointer-events:none!important}
+html body #MainContent.sq-refine-v3-active .vac-page-size{display:none!important;visibility:hidden!important;pointer-events:none!important}
 html body #MainContent.sq-refine-v3-active .sq-refine-v3-group>summary::after{content:'+'!important}
 html body #MainContent.sq-refine-v3-active .sq-refine-v3-group[open]>summary::after{content:'−'!important}
 @media(max-width:900px){
@@ -42,6 +44,13 @@ html body #MainContent.sq-refine-v3-active .sq-refine-v3-group[open]>summary::af
     if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
     main.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]').forEach(function(node){
       if(node.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results,.sq-refine-v3-page-size'))return;
+      node.hidden=true;
+      node.setAttribute('aria-hidden','true');
+      node.style.setProperty('display','none','important');
+      node.style.setProperty('visibility','hidden','important');
+      node.style.setProperty('pointer-events','none','important');
+    });
+    main.querySelectorAll('.vac-page-size').forEach(function(node){
       node.hidden=true;
       node.setAttribute('aria-hidden','true');
       node.style.setProperty('display','none','important');
