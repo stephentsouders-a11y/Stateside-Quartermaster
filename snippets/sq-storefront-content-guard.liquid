@@ -41,8 +41,10 @@
     {% render 'sq-refine-taxonomy-panel' %}
     {% render 'sq-refine-tall-sidebar' %}
   {% else %}
+    {% render 'sq-refine-v3-legacy-isolation' %}
     {% render 'sq-refine-v3' %}
     {% render 'sq-refine-v3-layout-fix' %}
+    {% render 'sq-refine-v3-root-cleanup' %}
     {% render 'sq-refine-v3-child-safety-fix' %}
   {% endif %}
 {% endif %}
