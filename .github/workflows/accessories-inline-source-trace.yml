@@ -1,0 +1,59 @@
+name: Accessories inline redirect source trace
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/accessories-inline-source-trace.yml'
+permissions:
+  contents: read
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Capture initial draft HTML without executing page JavaScript
+        run: |
+          cat > trace.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const browser=await chromium.launch({headless:true});
+          const warm=await browser.newContext({viewport:{width:1280,height:900}});
+          const p=await warm.newPage();
+          await new Promise(r=>setTimeout(r,7000));
+          await p.goto('https://www.statesideqm.com/?preview_theme_id=158561894555',{waitUntil:'domcontentloaded',timeout:60000});
+          await new Promise(r=>setTimeout(r,700));
+          const cookies=await warm.cookies();
+          const cold=await browser.newContext({javaScriptEnabled:false,viewport:{width:1280,height:900}});
+          await cold.addCookies(cookies);
+          const q=await cold.newPage();
+          const r=await q.goto('https://www.statesideqm.com/collections/accessories-gifts-collectibles',{waitUntil:'domcontentloaded',timeout:60000});
+          const html=await q.content();
+          const lines=html.split(/\r?\n/);
+          const hits=[];
+          lines.forEach((line,i)=>{if(/filter\.v\.availability|availability=1|location\.|location\s*=|replace\(|assign\(|reload\(|URLSearchParams|available/i.test(line))hits.push({line:i+1,text:line.slice(0,5000)})});
+          const around=[];for(let i=3290;i<=3370&&i<=lines.length;i++)around.push(`${i}: ${lines[i-1]}`);
+          const scripts=[...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map((m,i)=>({i:i+1,text:m[1]})).filter(x=>/availability|filter\.v|location\.|reload\(|URLSearchParams/i.test(x.text)).map(x=>({i:x.i,text:x.text.slice(0,12000)}));
+          const report={status:r?.status(),url:q.url(),lineCount:lines.length,around,hits:hits.slice(0,100),scripts};
+          fs.mkdirSync('trace-out',{recursive:true});
+          fs.writeFileSync('trace-out/report.json',JSON.stringify(report,null,2));
+          fs.writeFileSync('trace-out/initial.html',html);
+          console.log('STATUS',report.status,'URL',report.url,'LINES',report.lineCount);
+          console.log('\nAROUND 3290-3370\n'+around.join('\n'));
+          console.log('\nMATCHING SCRIPTS\n'+JSON.stringify(scripts,null,2));
+          console.log('\nHITS\n'+JSON.stringify(hits.slice(0,60),null,2));
+          await browser.close();
+          EOF
+          node trace.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accessories-inline-redirect-source
+          path: trace-out
+          retention-days: 7
