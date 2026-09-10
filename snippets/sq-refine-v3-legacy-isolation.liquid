@@ -5,5 +5,22 @@ window.__sqGlobalRefineAuthorityV2=true;
 window.__sqGlobalRefineVisibleSurfaceFix=true;
 window.__sqCategoryUniverseV5=true;
 window.__sqGlobalRefineCheckboxControls=true;
+(function(){
+  var q=new URLSearchParams(location.search),per=parseInt(q.get('sq_per_page')||'50',10),view=parseInt(q.get('sq_view_page')||'1',10);
+  if(per!==50||view!==1||window.__sqRefineV3DefaultFetchFastPath)return;
+  window.__sqRefineV3DefaultFetchFastPath=true;
+  var nativeFetch=window.fetch.bind(window),used=false;
+  window.fetch=function(input,init){
+    try{
+      var u=new URL(typeof input==='string'?input:(input&&input.url)||'',location.origin);
+      if(!used&&u.origin===location.origin&&u.pathname===location.pathname&&u.searchParams.get('view')==='sq-refine-v3-products'&&String(u.searchParams.get('page')||'1')==='1'&&document.querySelector('.product-grid .product-grid__item a[href*="/products/"]')){
+        used=true;
+        var html='<!doctype html>'+document.documentElement.outerHTML;
+        return Promise.resolve(new Response(html,{status:200,headers:{'Content-Type':'text/html'}}));
+      }
+    }catch(_){ }
+    return nativeFetch(input,init);
+  };
+})();
 </script>
 {% endif %}
