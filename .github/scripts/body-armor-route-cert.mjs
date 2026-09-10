@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import { chromium } from 'playwright';
-const ROOT='firearm-accessories';
-const ROUTE='Firearm Accessories';
+const ROOT='first-aid-medical-ifak';
+const ROUTE='First Aid / Medical / IFAK';
 const URL=`https://www.statesideqm.com/collections/${ROOT}?preview_theme_id=158561894555`;
 const OUT=`cert-${ROOT}`;
 const BAD=new Set(['all','stateside-quartermaster-logo-merch','air-national-guard-series','state-guard-series','rotc-series','jrotc-series','military-schools-academies','public-safety-series','army-national-guard-series']);
