@@ -17,6 +17,16 @@ Keeps the V3 products-per-page control and product surface together in the right
 }
 </script>
 {% endif %}
+{% if collection.handle == 'child-safety-shop' %}
+<script data-sq-refine-v3-child-safety-legacy-isolation>
+/* Child Safety is now owned by Refine V3. Prevent the later legacy collection
+   authorities from rebuilding or moving its product surface. State Guard is
+   unaffected because this script renders on Child Safety only. */
+window.__sqGlobalRefineAuthorityV2=true;
+window.__sqGlobalRefineVisibleSurfaceFix=true;
+window.__sqCategoryUniverseV5=true;
+</script>
+{% endif %}
 <style data-sq-refine-v3-layout-fix>
 #MainContent .sq-refine-v3-products{min-width:0}
 #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size{grid-column:2;grid-row:1;margin-bottom:0}
@@ -35,6 +45,7 @@ html body #MainContent.sq-refine-v3-active .sq-refine-v3-group[open]>summary::af
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + #ResultsList,
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + .product-grid,
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:auto;grid-row:auto}
+  html body #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
 }
 </style>
 <script data-sq-refine-v3-hardening>
@@ -76,8 +87,8 @@ html body #MainContent.sq-refine-v3-active .sq-refine-v3-group[open]>summary::af
   window.addEventListener('load',enforce,{once:true});
 })();
 </script>
-{% if collection.handle == 'armed-forces-gear' %}
-<style data-sq-refine-v3-afg-mobile-grid>
+{% if collection.handle == 'armed-forces-gear' or collection.handle == 'child-safety-shop' %}
+<style data-sq-refine-v3-route-mobile-grid="{{ collection.handle | escape }}">
 @media(max-width:900px){
   html body #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{
     display:grid!important;
@@ -86,7 +97,7 @@ html body #MainContent.sq-refine-v3-active .sq-refine-v3-group[open]>summary::af
 }
 </style>
 {% endif %}
-{% if collection.handle == 'accessories-gifts-collectibles' or collection.handle == 'airsoft-milsim' or collection.handle == 'apparel' or collection.handle == 'armed-forces-gear' or collection.handle == 'art' or collection.handle == 'body-armor-ballistic-protection' or collection.handle == 'literature' %}
+{% if collection.handle == 'accessories-gifts-collectibles' or collection.handle == 'airsoft-milsim' or collection.handle == 'apparel' or collection.handle == 'armed-forces-gear' or collection.handle == 'art' or collection.handle == 'body-armor-ballistic-protection' or collection.handle == 'literature' or collection.handle == 'child-safety-shop' %}
 <script data-sq-refine-v3-route-fix="{{ collection.handle | escape }}">
 (function(){
   var route='{{ collection.handle | escape }}';
