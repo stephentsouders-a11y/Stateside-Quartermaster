@@ -6,15 +6,16 @@ window.__sqGlobalRefineVisibleSurfaceFix=true;
 window.__sqCategoryUniverseV5=true;
 window.__sqGlobalRefineCheckboxControls=true;
 /* V3 owns these collection roots. Block the older PBTL unified-tree runtime and
-   its watchdog replay before either can replace MainContent. State Guard is not
-   in this root list and is therefore unaffected. */
+   both legacy recovery loops before they can replace MainContent. State Guard is
+   not in this root list and is therefore unaffected. */
 (function(){
-  try{
-    Object.defineProperty(window,'__sqBflUnifiedTree',{configurable:false,enumerable:true,get:function(){return true},set:function(){}});
-  }catch(_){window.__sqBflUnifiedTree=true}
-  try{
-    Object.defineProperty(window,'__sqBflRecoveryRouteV4',{configurable:false,enumerable:true,get:function(){return '__sq_refine_v3_disabled__'},set:function(){}});
-  }catch(_){window.__sqBflRecoveryRouteV4='__sq_refine_v3_disabled__'}
+  function lock(name,value){
+    try{Object.defineProperty(window,name,{configurable:false,enumerable:true,get:function(){return value},set:function(){}})}
+    catch(_){try{window[name]=value}catch(__){}}
+  }
+  lock('__sqBflUnifiedTree',true);
+  lock('__sqBflRecoveryRouteV4','__sq_refine_v3_disabled__');
+  lock('__sqBflServerRecoveryRouteV3','__sq_refine_v3_disabled__');
   function installSentinel(){
     var main=document.getElementById('MainContent');if(!main)return false;
     if(!main.querySelector('[data-sqbfl-root]')){
@@ -39,14 +40,18 @@ window.__sqGlobalRefineCheckboxControls=true;
   if(window.__sqRefineV3MainReplaceGuard||!window.Element)return;
   window.__sqRefineV3MainReplaceGuard=true;
   var nativeReplace=Element.prototype.replaceChildren;
+  function isLegacyTakeoverNode(n){
+    if(!n)return false;
+    if(n.nodeType===1){
+      if((n.classList&&n.classList.contains('sqbfl'))||(n.matches&&n.matches('[data-sqbfl-root]')))return true;
+      if(n.querySelector&&n.querySelector('.sqbfl,[data-sqbfl-root]'))return true;
+    }
+    if(n.nodeType===11&&n.querySelector&&n.querySelector('.sqbfl,[data-sqbfl-root]'))return true;
+    return false;
+  }
   Element.prototype.replaceChildren=function(){
-    if(this&&this.id==='MainContent'&&this.querySelector&&this.querySelector('.sq-refine-v3-layout')){
-      var takeover=false;
-      for(var i=0;i<arguments.length;i++){
-        var n=arguments[i];
-        if(n&&n.nodeType===1&&n.classList&&n.classList.contains('sqbfl')){takeover=true;try{n.remove()}catch(_){}}
-      }
-      if(takeover)return;
+    if(this&&this.id==='MainContent'){
+      for(var i=0;i<arguments.length;i++)if(isLegacyTakeoverNode(arguments[i]))return;
     }
     return nativeReplace.apply(this,arguments);
   };
