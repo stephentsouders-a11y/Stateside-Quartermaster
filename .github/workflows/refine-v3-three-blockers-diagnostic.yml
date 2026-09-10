@@ -1,4 +1,5 @@
 name: Refine V3 final three blocker diagnostics
+# deployed-theme retest: 2026-09-10 final blocker pass
 on:
   push:
     branches: [refine-restart-v3]
@@ -37,7 +38,7 @@ jobs:
               const sr=side?.getBoundingClientRect(), tr=title?.getBoundingClientRect(); let n=sr?document.elementFromPoint(sr.right-3,sr.top+3):null, chain=[]; let x=n; while(x&&chain.length<6){chain.push({tag:x.tagName,id:x.id||'',cls:typeof x.className==='string'?x.className:'',bg:getComputedStyle(x).backgroundColor,pos:getComputedStyle(x).position,z:getComputedStyle(x).zIndex});x=x.parentElement}
               let anc=[],g=grid; while(g&&anc.length<9){let r=g.getBoundingClientRect(),cs=getComputedStyle(g);anc.push({tag:g.tagName,id:g.id||'',cls:typeof g.className==='string'?g.className:'',w:r.width,cw:cs.width,max:cs.maxWidth,display:cs.display,justify:cs.justifyContent,overflow:cs.overflow});g=g.parentElement}
               let parsed={};try{parsed=JSON.parse(meta?.textContent||'{}')}catch(e){};
-              return {handle:document.querySelector('script[data-sq-refine-v3]')?.dataset.currentHandle||'',polished:side?.dataset.sqRefineV3Polished||'',rescued:side?.dataset.sqRefineV3PolishRescued||'',polishError:main?.dataset.sqRefineV3PolishError||'',sidebar:{position:side?getComputedStyle(side).position:'',w:sr?.width||0},title:{w:tr?.width||0,gap:sr&&tr?sr.right-tr.right:null,cornerChain:chain},groups:side?[...side.querySelectorAll(':scope > details.sq-refine-v3-group')].map(v=>({label:v.querySelector('summary')?.textContent.trim(),inputs:v.querySelectorAll('input').length})):[],gridAncestors:anc,tags:(parsed.tags||[]).slice(0,120)}
+              return {handle:document.querySelector('script[data-sq-refine-v3]')?.dataset.currentHandle||'',polished:side?.dataset.sqRefineV3Polished||'',rescued:side?.dataset.sqRefineV3PolishRescued||'',polishError:main?.dataset.sqRefineV3PolishError||'',sidebar:{position:side?getComputedStyle(side).position:'',w:sr?.width||0},title:{w:tr?.width||0,gap:sr&&tr?sr.right-tr.right:null,cornerChain:chain},groups:side?[...side.querySelectorAll(':scope > details.sq-refine-v3-group')].map(v=>({label:v.querySelector('summary')?.textContent.trim(),inputs:v.querySelectorAll('input').length})):[],gridAncestors:anc,tags:(parsed.tags||[]).slice(0,120),types:(parsed.types||[]).slice(0,160)}
             }); console.log('TRACE '+path+' '+JSON.stringify({http,d})); await page.close();
           }
           for(const p of ['/collections/apparel','/collections/literature','/collections/firearm-accessories']){await run(p);await sleep(7000)} await browser.close();
