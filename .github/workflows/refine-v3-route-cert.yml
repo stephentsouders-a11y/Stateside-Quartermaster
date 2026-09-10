@@ -12,26 +12,16 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Locate broken storefront script sources
-        run: |
-          echo '=== thin/stabrite bridge ==='
-          grep -R -n -F 'data-sq-thin-stabrite-global-sidebar-bridge' . --exclude-dir=.git || true
-          echo '=== wording gate ==='
-          grep -R -n -F 'data-sq-listed-universe-wording-gate-v2' . --exclude-dir=.git || true
-          echo '=== PBTL controls ==='
-          grep -R -n -F 'data-sq-pbtl-result-controls-v1' . --exclude-dir=.git || true
-          echo '=== vac page size ==='
-          grep -R -n -F 'data-vac-page-size' . --exclude-dir=.git || true
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Run Literature certification
+      - name: Run route certification
         run: node .github/scripts/body-armor-route-cert.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: literature-route-cert
-          path: cert-literature/
+          name: refine-v3-route-cert
+          path: cert-*/
           retention-days: 7
-# route: 8-literature-source-locate
+# route-cert-generic-v1
