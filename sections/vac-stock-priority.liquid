@@ -1,0 +1,53 @@
+{% render 'sq-line-series-categories' %}
+{% liquid
+  assign vac_is_uniform_collection = false
+  if collection
+    if collection.handle contains '-ocp-uniform' or collection.handle contains '-service-uniform' or collection.handle contains '-green-service-uniform' or collection.handle contains '-pt-uniform'
+      assign vac_is_uniform_collection = true
+    endif
+  endif
+%}
+
+{% if request.page_type == 'collection' and vac_is_uniform_collection == false %}
+<style>
+  .vac-unified-uniform-builder,
+  .vac-uniform-checklist--generated,
+  .vac-uniform-checklist[data-vac-pt-checklist] { display:none!important; }
+  {% if collection.handle == 'literature' %}
+  .sq-subcategory-section { display:none!important; }
+  {% endif %}
+</style>
+<script>
+(function(){
+  function sqEnforceCollectionScope(){
+    document.documentElement.classList.remove('vac-unified-uniform-active','vac-service-uniform-active','sq-green-service-uniform-organized');
+    document.querySelectorAll('.vac-unified-uniform-builder,.vac-uniform-checklist--generated,[data-vac-pt-checklist]').forEach(function(el){
+      el.hidden=true;
+      el.setAttribute('aria-hidden','true');
+    });
+  }
+  sqEnforceCollectionScope();
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',sqEnforceCollectionScope,{once:true});
+  window.setTimeout(sqEnforceCollectionScope,0);
+  window.setTimeout(sqEnforceCollectionScope,250);
+})();
+</script>
+{% endif %}
+
+{%- comment -%}
+Legacy forced in-stock-only navigation intentionally disabled. Collection pages preserve the full catalog,
+including sold-out products, unless the customer explicitly selects Shopify's Availability filter.
+{%- endcomment -%}
+<script src="{{ 'vac-stock-priority.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "In-stock products first",
+  "settings": [],
+  "presets": [
+    {
+      "name": "In-stock products first"
+    }
+  ]
+}
+{% endschema %}
