@@ -1,5 +1,5 @@
 {% doc %}
-Makes the Refine Products sidebar tall, sticky, and independently scrollable on desktop while preserving normal document flow on mobile.
+Makes the Refine Products sidebar tall, sticky, and independently scrollable on desktop. Its option trees start collapsed, use plus/minus disclosure controls, and automatically open when they contain an active checkbox or radio selection. Mobile remains in normal document flow.
 {% enddoc %}
 {% if request.page_type == 'collection' %}
 <style data-sq-refine-tall-sidebar>
@@ -27,5 +27,92 @@ Makes the Refine Products sidebar tall, sticky, and independently scrollable on 
     overflow:visible!important;
   }
 }
+
+#MainContent .sq-global-refine-sidebar details>summary{
+  position:relative;
+  padding-right:2rem!important;
+  cursor:pointer;
+  list-style:none;
+}
+#MainContent .sq-global-refine-sidebar details>summary::-webkit-details-marker{display:none}
+#MainContent .sq-global-refine-sidebar details>summary::marker{content:''}
+#MainContent .sq-global-refine-sidebar details>summary .icon-caret{display:none!important}
+#MainContent .sq-global-refine-sidebar details>summary::after{
+  content:'+';
+  position:absolute;
+  right:.25rem;
+  top:50%;
+  transform:translateY(-50%);
+  width:1.5rem;
+  height:1.5rem;
+  display:grid;
+  place-items:center;
+  font-size:1.35rem;
+  line-height:1;
+  font-weight:900;
+  pointer-events:none;
+}
+#MainContent .sq-global-refine-sidebar details[open]>summary::after{content:'\2212'}
+#MainContent .sq-global-refine-sidebar details[data-sq-refine-has-active='true']>summary{font-weight:900}
+#MainContent .sq-global-refine-sidebar details:not([data-sq-refine-collapse-ready='true'])>:not(summary){display:none!important}
 </style>
+<script data-sq-refine-collapse-v3>
+(function(){
+  if(window.__sqRefineCollapseV3)return;
+  window.__sqRefineCollapseV3=true;
+
+  var SIDEBAR='.sq-global-refine-sidebar';
+
+  function isManaged(details){
+    return details instanceof HTMLDetailsElement&&!!details.closest(SIDEBAR)&&!!details.querySelector(':scope>summary');
+  }
+
+  function hasActive(details){
+    return !!details.querySelector('input[type="checkbox"]:checked,input[type="radio"]:checked');
+  }
+
+  function initialize(details){
+    if(!isManaged(details)||details.dataset.sqRefineCollapseReady==='true')return;
+    var active=hasActive(details);
+    details.dataset.sqRefineHasActive=active?'true':'false';
+    details.open=active;
+    details.dataset.sqRefineCollapseReady='true';
+  }
+
+  function initializeAll(root){
+    if(root instanceof HTMLDetailsElement)initialize(root);
+    if(root&&root.querySelectorAll)root.querySelectorAll(SIDEBAR+' details').forEach(initialize);
+  }
+
+  document.addEventListener('change',function(event){
+    var input=event.target;
+    if(!(input instanceof HTMLInputElement))return;
+    if(!input.matches(SIDEBAR+' input[type="checkbox"],'+SIDEBAR+' input[type="radio"]'))return;
+    var details=input.closest('details');
+    while(isManaged(details)){
+      var active=hasActive(details);
+      details.dataset.sqRefineHasActive=active?'true':'false';
+      if(active)details.open=true;
+      details=details.parentElement&&details.parentElement.closest('details');
+    }
+  },true);
+
+  var observer=new MutationObserver(function(records){
+    records.forEach(function(record){
+      record.addedNodes.forEach(function(node){
+        if(!(node instanceof Element))return;
+        if(node.matches(SIDEBAR)||node.closest(SIDEBAR)||node.querySelector(SIDEBAR))initializeAll(node);
+      });
+    });
+  });
+
+  function start(){
+    initializeAll(document);
+    observer.observe(document.documentElement,{childList:true,subtree:true});
+  }
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
+  else start();
+})();
+</script>
 {% endif %}
