@@ -4,41 +4,29 @@ Locks V3 product-card sizing so every desktop three-column collection uses the s
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 <style data-sq-refine-v3-product-scale-lock>
 @media (min-width:901px){
-  #MainContent.sq-refine-v3-active .sq-refine-v3-layout{
-    width:min(calc(100% - 32px),1440px)!important;
-    grid-template-columns:270px minmax(0,1fr)!important;
-    gap:22px!important;
-  }
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout{width:min(calc(100% - 32px),1440px)!important;grid-template-columns:270px minmax(0,1fr)!important;gap:22px!important}
   #MainContent.sq-refine-v3-active .sq-refine-v3-results,
   #MainContent.sq-refine-v3-active .sq-refine-v3-results>collection-component,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .sq-collection-layout,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .sq-collection-products-column,
   #MainContent.sq-refine-v3-active .sq-refine-v3-results results-list,
   #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid-container,
   #MainContent.sq-refine-v3-active .sq-refine-v3-results .collection-wrapper,
   #MainContent.sq-refine-v3-active .sq-refine-v3-results #ResultsList,
-  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{
-    width:100%!important;
-    max-width:none!important;
-    min-width:0!important;
-    box-sizing:border-box!important;
-  }
-  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{
-    display:grid!important;
-    grid-template-columns:repeat(3,minmax(0,1fr))!important;
-    justify-content:stretch!important;
-    column-gap:28px!important;
-    row-gap:34px!important;
-  }
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .sq-collection-layout{display:block!important;grid-template-columns:minmax(0,1fr)!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .sq-collection-layout>.sq-collection-products-column{width:100%!important;max-width:none!important;margin:0!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results results-list{padding-inline:0!important;margin-inline:0!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;justify-content:stretch!important;column-gap:28px!important;row-gap:34px!important}
   #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item{min-width:0!important;width:auto!important;max-width:none!important}
   #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item product-card,
-  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item .product-card{width:100%!important;max-width:none!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item .product-card,
   #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item .card-gallery,
   #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item [class*="card-gallery"],
   #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item [class*="product-card__media"],
   #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item [class*="card__media"]{width:100%!important;max-width:none!important}
   #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item img{max-width:100%!important;object-fit:contain!important}
 }
-@media (max-width:900px){
-  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
-}
+@media (max-width:900px){#MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 </style>
 {% endif %}
