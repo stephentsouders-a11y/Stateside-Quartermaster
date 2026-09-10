@@ -2,6 +2,7 @@
 Ensures the V3 Refine Products navy title bar reaches both rounded top corners with no white scrollbar-gutter or corner seam while preserving the sticky desktop sidebar.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+{% render 'sq-refine-v3-sidebar-polish-rescue' %}
 <style data-sq-refine-v3-header-edge-fix>
 #MainContent .sq-refine-v3-sidebar{
   background:linear-gradient(to bottom,#08283f 0,#08283f 40px,#fff 40px,#fff 100%)!important;
