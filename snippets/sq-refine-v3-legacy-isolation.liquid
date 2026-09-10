@@ -75,4 +75,15 @@ if(location.pathname==='/collections/military-schools-academies')window.__sqAcad
   };
 })();
 </script>
+{% if collection.handle == 'law-enforcement-corrections' or collection.handle == 'firefighting-ems-search-rescue' %}
+<style data-sq-refine-v3-public-safety-product-visibility>
+/* The legacy public-safety root template hides every collection-component while
+   .sq-ps-root exists. V3 imports its product surface as a collection-component,
+   so restore visibility only inside V3 results on these two roots. */
+html:has(.sq-ps-root) body #MainContent.sq-refine-v3-active .sq-refine-v3-results collection-component{
+  display:block!important;
+  visibility:visible!important;
+}
+</style>
+{% endif %}
 {% endif %}
