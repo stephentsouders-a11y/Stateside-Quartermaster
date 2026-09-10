@@ -1,5 +1,5 @@
 {% doc %}
-Keeps the V3 products-per-page control and product surface together in the right-hand product column. This is deliberately inactive on State Guard Series.
+Keeps the V3 products-per-page control and product surface together in the right-hand product column. This is deliberately inactive on State Guard Series. Includes route-specific cleanup for certified collection roots.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 <style data-sq-refine-v3-layout-fix>
@@ -8,7 +8,8 @@ Keeps the V3 products-per-page control and product surface together in the right
 #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + collection-component,
 #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + #ResultsList,
 #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + .product-grid{grid-column:2;grid-row:2}
-#MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:1;grid-row:1 / span 2}
+#MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:1;grid-row:1 / span 2;z-index:20}
+#MainContent.sq-refine-v3-active .sq-refine-v3-group>summary{position:relative;z-index:2;pointer-events:auto}
 @media(max-width:900px){
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size,
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + collection-component,
@@ -17,4 +18,29 @@ Keeps the V3 products-per-page control and product surface together in the right
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:auto;grid-row:auto}
 }
 </style>
+{% if collection.handle == 'accessories-gifts-collectibles' %}
+<script data-sq-refine-v3-route-fix="accessories-gifts-collectibles">
+(function(){
+  var falseHandles=new Set(['all','stateside-quartermaster-logo-merch','air-national-guard-series','state-guard-series','rotc-series','jrotc-series','military-schools-academies','public-safety-series','army-national-guard-series']);
+  function targetHandle(raw){try{var m=new URL(raw,location.origin).pathname.match(/^\/collections\/([^/?#]+)/);return m?decodeURIComponent(m[1]):''}catch(_){return''}}
+  function clean(){
+    var main=document.getElementById('MainContent');
+    if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
+    document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]').forEach(function(node){if(!main.contains(node))node.removeAttribute('data-sq-refine-v3-hidden-nav')});
+    var sidebar=main.querySelector('.sq-refine-v3-sidebar');
+    if(!sidebar)return false;
+    sidebar.querySelectorAll('input[data-kind="structural"]').forEach(function(input){
+      if(falseHandles.has(targetHandle(input.dataset.target||''))){var row=input.closest('.sq-refine-v3-choice');if(row)row.remove()}
+    });
+    sidebar.querySelectorAll('.sq-refine-v3-group').forEach(function(group){if(!group.querySelector('input[type="checkbox"]'))group.remove()});
+    main.dataset.sqRefineV3RouteFix='accessories-gifts-collectibles';
+    return true;
+  }
+  if(clean())return;
+  var observer=new MutationObserver(function(){if(clean())observer.disconnect()});
+  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['data-sq-refine-v3-ready']});
+  window.addEventListener('load',clean,{once:true});
+})();
+</script>
+{% endif %}
 {% endif %}
