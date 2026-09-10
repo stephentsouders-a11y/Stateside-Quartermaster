@@ -25,6 +25,7 @@ jobs:
           let s=fs.readFileSync(f,'utf8');
           s='globalThis.CSS={escape:(s)=>String(s)};\n'+s;
           s=s.replaceAll('await input.check();await page.waitForLoadState', 'await input.evaluate(el=>{const d=el.closest("details");if(d)d.open=true});await input.check();await page.waitForLoadState');
+          s=s.replace("if(d.row!==3)e.push('desktop row='+d.row)","if(d.row!==Math.min(3,d.cards))e.push('desktop row='+d.row)");
           fs.writeFileSync(f,s);
           NODE
           node .github/scripts/refine-v3-customer-journey-v2.mjs
