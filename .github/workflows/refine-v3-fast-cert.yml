@@ -26,3 +26,4 @@ jobs:
           name: refine-v3-fast-cert
           path: cert-v3-fast/
           retention-days: 7
+# trigger: fast-v3-cert-1
