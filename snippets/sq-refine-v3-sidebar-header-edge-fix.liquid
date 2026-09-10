@@ -1,10 +1,36 @@
 {% doc %}
-Ensures the V3 Refine Products navy title bar visually reaches the sidebar's right border, including the desktop scrollbar gutter.
+Ensures the V3 Refine Products navy title bar reaches both rounded top corners with no white scrollbar-gutter or corner seam.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 <style data-sq-refine-v3-header-edge-fix>
-#MainContent .sq-refine-v3-sidebar__title{position:relative!important;width:calc(100% + 28px)!important;max-width:none!important;box-sizing:border-box!important;padding-right:40px!important;margin-right:-28px!important;background:#08283f!important}
-#MainContent .sq-refine-v3-sidebar__title::after{content:'';position:absolute;top:0;bottom:0;right:-28px;width:28px;background:#08283f;pointer-events:none}
-@media (max-width:900px){#MainContent .sq-refine-v3-sidebar__title{width:100%!important;margin-right:0!important;padding-right:12px!important}#MainContent .sq-refine-v3-sidebar__title::after{display:none!important}}
+#MainContent .sq-refine-v3-sidebar{
+  position:relative!important;
+  background:linear-gradient(to bottom,#08283f 0,#08283f 40px,#fff 40px,#fff 100%)!important;
+  scrollbar-gutter:auto!important;
+  scrollbar-width:thin;
+  scrollbar-color:#7b8790 transparent;
+}
+#MainContent .sq-refine-v3-sidebar::-webkit-scrollbar{width:7px}
+#MainContent .sq-refine-v3-sidebar::-webkit-scrollbar-track{background:transparent}
+#MainContent .sq-refine-v3-sidebar::-webkit-scrollbar-thumb{background:#7b8790;border-radius:999px}
+#MainContent .sq-refine-v3-sidebar__title{
+  position:relative!important;
+  z-index:2!important;
+  display:flex!important;
+  align-items:center!important;
+  width:100%!important;
+  max-width:none!important;
+  min-height:40px!important;
+  box-sizing:border-box!important;
+  margin:0!important;
+  padding:0 12px!important;
+  border-radius:9px 9px 0 0!important;
+  background:#08283f!important;
+  color:#fff!important;
+}
+#MainContent .sq-refine-v3-sidebar__title::after{display:none!important;content:none!important}
+@media (max-width:900px){
+  #MainContent .sq-refine-v3-sidebar{background:linear-gradient(to bottom,#08283f 0,#08283f 40px,#fff 40px,#fff 100%)!important}
+}
 </style>
 {% endif %}
