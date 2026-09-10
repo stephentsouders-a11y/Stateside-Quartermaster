@@ -7,12 +7,20 @@ window.__sqCategoryUniverseV5=true;
 window.__sqGlobalRefineCheckboxControls=true;
 /* V3 owns these collection roots. Block the older PBTL unified-tree runtime before
    it can replace MainContent after V3 has rendered. State Guard is not in the
-   isolation root list and is therefore unaffected. Lock the authority flag so a
-   late recovery/replay script cannot clear it and re-enable the legacy renderer. */
+   isolation root list and is therefore unaffected. */
 (function(){
   try{
     Object.defineProperty(window,'__sqBflUnifiedTree',{configurable:false,enumerable:true,get:function(){return true},set:function(){}});
   }catch(_){window.__sqBflUnifiedTree=true}
+  var main=document.getElementById('MainContent');
+  if(main&&!main.querySelector('[data-sqbfl-root]')){
+    var sentinel=document.createElement('span');
+    sentinel.hidden=true;
+    sentinel.setAttribute('aria-hidden','true');
+    sentinel.setAttribute('data-sqbfl-root','v3-watchdog-compat');
+    sentinel.setAttribute('data-sq-refine-v3-watchdog-sentinel','true');
+    main.appendChild(sentinel);
+  }
 })();
 (function(){
   if(window.__sqRefineV3MainReplaceGuard||!window.Element)return;
