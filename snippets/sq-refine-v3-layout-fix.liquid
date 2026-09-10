@@ -18,7 +18,7 @@ Keeps the V3 products-per-page control and product surface together in the right
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:auto;grid-row:auto}
 }
 </style>
-{% if collection.handle == 'accessories-gifts-collectibles' or collection.handle == 'airsoft-milsim' %}
+{% if collection.handle == 'accessories-gifts-collectibles' or collection.handle == 'airsoft-milsim' or collection.handle == 'apparel' %}
 <script data-sq-refine-v3-route-fix="{{ collection.handle | escape }}">
 (function(){
   var route='{{ collection.handle | escape }}';
