@@ -8,7 +8,7 @@ if(window.__sqCategoryUniverseV5)return;window.__sqCategoryUniverseV5=true;
 var boot=document.currentScript,rootHandle=boot&&boot.dataset.handle||'',main=document.getElementById('MainContent');if(!main||main.querySelector('.sqbfl'))return;
 function c(x){return String(x==null?'':x).trim()}
 function n(x){return c(x).toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ')}
-function e(x){return c(x).replace(/[&<>"']/g,function(k){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[k]})}
+function e(x){return c(x).replace(/[&<>"']/g,function(k){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[k]})}
 function tags(p){return Array.isArray(p&&p.tags)?p.tags:[]}
 function hidden(p){var t=n(p&&p.product_type);return !p||t==='options hidden product'||t==='options_hidden_product'}
 function root(){var r=(window.Shopify&&Shopify.routes&&Shopify.routes.root)||'/';return r.slice(-1)==='/'?r:r+'/'}
