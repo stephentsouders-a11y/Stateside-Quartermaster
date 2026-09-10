@@ -1,0 +1,30 @@
+name: Thin Line V3 focused certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/thin-line-v3-focused-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify-thin-line:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify Thin Line desktop and mobile
+        run: |
+          cat > thin.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});const sleep=ms=>new Promise(r=>setTimeout(r,ms));let failed=false;
+          async function check(device,viewport,wantCols){const page=await browser.newPage({viewport});const errors=[];page.on('pageerror',e=>errors.push(e.message));const u='https://www.statesideqm.com/collections/thin-line?preview_theme_id=158561894555';let r;for(let i=0;i<5;i++){r=await page.goto(u,{waitUntil:'domcontentloaded',timeout:90000});if(r?.status()===200)break;if(![429,500,502,503,504].includes(r?.status()||0))break;await sleep([5000,10000,15000,22000,30000][i])}try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:45000})}catch{}await page.waitForTimeout(5000);const d=await page.evaluate(()=>{const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-refine-v3-sidebar'),grid=main?.querySelector('.sq-refine-v3-results .product-grid'),cards=grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(x=>!!x.querySelector('a[href*="/products/"]')):[];const visible=cards.filter(el=>{const s=getComputedStyle(el),b=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&b.width>0&&b.height>0});const rects=visible.slice(0,8).map(x=>{const r=x.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y)}}),y=rects[0]?.y;return{ready:main?.dataset.sqRefineV3Ready==='true',error:main?.dataset.sqRefineV3Error||'',sidebar:!!side&&getComputedStyle(side).display!=='none',title:(side?.querySelector('.sq-refine-v3-sidebar__title')?.textContent||'').trim(),sizes:[...document.querySelectorAll('.sq-refine-v3-page-size input')].map(i=>i.value),default50:!!document.querySelector('.sq-refine-v3-page-size input[value="50"]:checked'),groups:side?.querySelectorAll('.sq-refine-v3-group').length||0,cards:visible.length,firstRow:rects.filter(x=>Math.abs(x.y-y)<=3).length,position:side?getComputedStyle(side).position:'',legacyVisible:[...document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]')].filter(el=>{const s=getComputedStyle(el),b=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&b.width>0&&b.height>0}).length}});const stickyOk=device==='mobile'?d.position!=='sticky':d.position==='sticky';const ok=r?.status()===200&&errors.length===0&&d.ready&&!d.error&&d.sidebar&&d.title==='Refine Products'&&d.sizes.join(',')==='50,100,250'&&d.default50&&d.groups>0&&d.cards===50&&d.firstRow===wantCols&&stickyOk&&d.legacyVisible===0;console.log('THIN_LINE '+JSON.stringify({device,http:r?.status()||0,errors,d,ok}));if(!ok)failed=true;await page.close()}
+          await check('desktop',{width:1440,height:1000},3);await sleep(8000);await check('mobile',{width:390,height:844},2);await browser.close();if(failed)process.exit(1);
+          EOF
+          node thin.mjs
