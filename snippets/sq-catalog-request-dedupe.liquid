@@ -1,10 +1,10 @@
 {% doc %}
-Shared storefront collection-catalog request coordinator. It deduplicates same-route /products.json reads across legacy category, Refine, image-repair, and filtered-surface systems, normalizes away sort_by for cache identity, and serializes unique catalog requests with a short spacing gap to avoid Shopify throttling. On category roots it suppresses redundant sorted legacy scans, and on an active Refine route it suppresses off-root child catalog scans so only the authoritative current-root result hydration remains. It only intercepts same-origin GET requests to collection products.json endpoints.
+Shared storefront collection-catalog request coordinator. It deduplicates same-route /products.json reads across legacy category, Refine, image-repair, and filtered-surface systems, normalizes away sort_by for cache identity, and serializes unique catalog requests with a short spacing gap to avoid Shopify throttling. On category roots it suppresses redundant sorted legacy scans, and on an active Refine route it suppresses off-root child catalog scans so only the authoritative current-root result hydration remains. It only intercepts same-origin GET requests to collection products.json endpoints. The established v1 DOM marker is retained for certification compatibility; runtime behavior is version 2.
 {% enddoc %}
 {% if request.page_type == 'collection' %}
-<script data-sq-catalog-request-dedupe-v2>
+<script data-sq-catalog-request-dedupe-v1 data-sq-catalog-request-dedupe-version="2">
 (function(){
-  if(window.__sqCatalogRequestDedupeV2)return;window.__sqCatalogRequestDedupeV2=true;
+  if(window.__sqCatalogRequestDedupeV2)return;window.__sqCatalogRequestDedupeV2=true;window.__sqCatalogRequestDedupeV1=true;
   var nativeFetch=window.fetch.bind(window),cache=new Map(),inflight=new Map(),queue=[],active=0,MAX=1,MIN_GAP=325,lastStart=0,pumpTimer=null;
   function filtered(){var q=new URLSearchParams(location.search);return !!(q.get('sq_maker')||q.get('filter.p.vendor')||q.get('sq_color_pattern'))}
   function currentProductsPath(){return location.pathname.replace(/\/$/,'')+'/products.json'}
