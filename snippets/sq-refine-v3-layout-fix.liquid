@@ -1,0 +1,20 @@
+{% doc %}
+Keeps the V3 products-per-page control and product surface together in the right-hand product column. This is deliberately inactive on State Guard Series.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<style data-sq-refine-v3-layout-fix>
+#MainContent .sq-refine-v3-products{min-width:0}
+#MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size{grid-column:2;grid-row:1;margin-bottom:0}
+#MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + collection-component,
+#MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + #ResultsList,
+#MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + .product-grid{grid-column:2;grid-row:2}
+#MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:1;grid-row:1 / span 2}
+@media(max-width:900px){
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + collection-component,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + #ResultsList,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + .product-grid,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:auto;grid-row:auto}
+}
+</style>
+{% endif %}
