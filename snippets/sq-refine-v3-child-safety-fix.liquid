@@ -1,0 +1,49 @@
+{% if request.page_type == 'collection' and collection.handle == 'child-safety-shop' %}
+<script data-sq-refine-v3-child-safety-taxonomy>
+(function(){
+  function esc(v){return String(v||'').replace(/[&<>"']/g,function(k){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[k]})}
+  function cleanLabel(card){
+    var n=card.querySelector('.sq-subcategory-name,.sq-third-level__name,[data-sq-nav-name]');
+    var label=String((n&&n.textContent)||card.getAttribute('aria-label')||'').replace(/^Shop\s+/i,'').trim();
+    return label;
+  }
+  function target(card){
+    try{
+      var u=new URL(card.href,location.origin);
+      if(u.pathname.indexOf('/collections/child-safety-shop/')!==0)return'';
+      u.searchParams.delete('filter.v.availability');
+      u.searchParams.delete('page');
+      u.searchParams.set('sq_root','child-safety-shop');
+      var preview=new URLSearchParams(location.search).get('preview_theme_id');
+      if(preview)u.searchParams.set('preview_theme_id',preview);
+      return u.pathname+'?'+u.searchParams.toString();
+    }catch(_){return''}
+  }
+  function build(){
+    var main=document.getElementById('MainContent');
+    if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
+    var side=main.querySelector('.sq-refine-v3-sidebar');
+    if(!side)return false;
+    var existing=[].slice.call(side.querySelectorAll('.sq-refine-v3-group>summary')).find(function(s){return /shop by category/i.test(s.textContent||'')});
+    if(existing&&existing.parentElement.querySelectorAll('input').length){main.dataset.sqChildSafetyTaxonomy='native';return true}
+    var seen=new Set(),rows=[];
+    main.querySelectorAll('a.sq-subcategory-card[href*="/collections/child-safety-shop/"],a.sq-third-level__type[href*="/collections/child-safety-shop/"]').forEach(function(card){
+      var href=target(card),label=cleanLabel(card),key=label.toLowerCase();
+      if(!href||!label||seen.has(key))return;
+      seen.add(key);rows.push({label:label,href:href});
+    });
+    if(!rows.length)return false;
+    rows.sort(function(a,b){return a.label.localeCompare(b.label,undefined,{numeric:true,sensitivity:'base'})});
+    var d=document.createElement('details');d.className='sq-refine-v3-group';d.dataset.active='false';
+    d.innerHTML='<summary>Shop by Category</summary><div class="sq-refine-v3-choices">'+rows.map(function(x){return '<label class="sq-refine-v3-choice"><input type="checkbox" data-kind="structural" data-target="'+esc(x.href)+'"><span>'+esc(x.label)+'</span></label>'}).join('')+'</div>';
+    var first=side.querySelector('.sq-refine-v3-group');
+    if(first)side.insertBefore(d,first);else side.appendChild(d);
+    d.querySelectorAll('input[data-target]').forEach(function(input){input.addEventListener('change',function(){if(input.checked)location.assign(input.dataset.target)})});
+    main.dataset.sqChildSafetyTaxonomy=String(rows.length);
+    return true;
+  }
+  if(build())return;
+  var tries=0,t=setInterval(function(){tries++;if(build()||tries>80)clearInterval(t)},100);
+})();
+</script>
+{% endif %}
