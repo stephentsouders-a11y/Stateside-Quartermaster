@@ -18,9 +18,10 @@ Keeps the V3 products-per-page control and product surface together in the right
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:auto;grid-row:auto}
 }
 </style>
-{% if collection.handle == 'accessories-gifts-collectibles' %}
-<script data-sq-refine-v3-route-fix="accessories-gifts-collectibles">
+{% if collection.handle == 'accessories-gifts-collectibles' or collection.handle == 'airsoft-milsim' %}
+<script data-sq-refine-v3-route-fix="{{ collection.handle | escape }}">
 (function(){
+  var route='{{ collection.handle | escape }}';
   var falseHandles=new Set(['all','stateside-quartermaster-logo-merch','air-national-guard-series','state-guard-series','rotc-series','jrotc-series','military-schools-academies','public-safety-series','army-national-guard-series']);
   function targetHandle(raw){try{var m=new URL(raw,location.origin).pathname.match(/^\/collections\/([^/?#]+)/);return m?decodeURIComponent(m[1]):''}catch(_){return''}}
   function clean(){
@@ -33,7 +34,7 @@ Keeps the V3 products-per-page control and product surface together in the right
       if(falseHandles.has(targetHandle(input.dataset.target||''))){var row=input.closest('.sq-refine-v3-choice');if(row)row.remove()}
     });
     sidebar.querySelectorAll('.sq-refine-v3-group').forEach(function(group){if(!group.querySelector('input[type="checkbox"]'))group.remove()});
-    main.dataset.sqRefineV3RouteFix='accessories-gifts-collectibles';
+    main.dataset.sqRefineV3RouteFix=route;
     return true;
   }
   if(clean())return;
