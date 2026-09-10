@@ -1,0 +1,76 @@
+name: Refine taxonomy 42 progress
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/refine-taxonomy-42-progress.yml'
+      - '.github/scripts/refine-taxonomy-route-cert.mjs'
+permissions:
+  contents: read
+jobs:
+  certify-42:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Install Chromium once
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - {name: '01 Accessories, Gifts & Collectibles', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 1 'Accessories, Gifts & Collectibles' '/collections/accessories-gifts-collectibles' collection"}
+      - {name: '02 Airsoft & Milsim', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 2 'Airsoft & Milsim' '/collections/airsoft-milsim' collection"}
+      - {name: '03 Apparel & Headwear', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 3 'Apparel & Headwear' '/collections/apparel' collection"}
+      - {name: '04 Armed Forces Gear', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 4 'Armed Forces Gear' '/collections/armed-forces-gear' collection"}
+      - {name: '05 Armored Vehicles', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 5 'Armored Vehicles' '/pages/armored-vehicles-purchase-inquiry' page"}
+      - {name: '06 Art & Military Prints', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 6 'Art & Military Prints' '/collections/art' collection"}
+      - {name: '07 Body Armor & Ballistic Protection', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 7 'Body Armor & Ballistic Protection' '/collections/body-armor-ballistic-protection' collection"}
+      - {name: '08 Books, Literature, Manuals & Reference', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 8 'Books, Literature, Manuals & Reference' '/collections/literature' collection"}
+      - {name: '09 Child Safety Shop', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 9 'Child Safety Shop' '/collections/child-safety-shop' collection"}
+      - {name: '10 DIVE / SCUBA', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 10 'DIVE / SCUBA' '/collections/dive-scuba' collection"}
+      - {name: '11 Firearm Accessories, Holsters & Shooting Gear', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 11 'Firearm Accessories, Holsters & Shooting Gear' '/collections/firearm-accessories' collection"}
+      - {name: '12 First Aid, Medical & IFAK', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 12 'First Aid, Medical & IFAK' '/collections/first-aid-medical-ifak' collection"}
+      - {name: '13 Flags, Displays & Memorials', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 13 'Flags, Displays & Memorials' '/collections/flags-patriotic-decor' collection"}
+      - {name: '14 Flashlights, Lighting & Power', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 14 'Flashlights, Lighting & Power' '/collections/flashlights-lighting' collection"}
+      - {name: '15 Footwear, Gloves & Eyewear', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 15 'Footwear, Gloves & Eyewear' '/collections/footwear-gloves-eyewear' collection"}
+      - {name: '16 K9 & Working Dog Gear', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 16 'K9 & Working Dog Gear' '/collections/k9-dog-gear' collection"}
+      - {name: '17 Knives, Axes & Multi-Tools', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 17 'Knives, Axes & Multi-Tools' '/collections/knives-axes-cutlery' collection"}
+      - {name: '18 Morale Patches, Stickers & Tactical ID', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 18 'Morale Patches, Stickers & Tactical ID' '/collections/morale-patches-tactical-id' collection"}
+      - {name: '19 Outdoor, Survival & Preparedness', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 19 'Outdoor, Survival & Preparedness' '/collections/outdoor-preparedness-gear' collection"}
+      - {name: '20 Patriotic & American Heritage', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 20 'Patriotic & American Heritage' '/collections/patriotic-american-heritage' collection"}
+      - {name: '21 Safety, Rescue & Climbing', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 21 'Safety, Rescue & Climbing' '/collections/safety-rescue-climbing' collection"}
+      - {name: '22 Sta-Brite Insignia', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 22 'Sta-Brite Insignia' '/collections/sta-brite-insignia' collection"}
+      - {name: '23 Tactical Gear, Packs & Load Carriage', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 23 'Tactical Gear, Packs & Load Carriage' '/collections/tactical-gear' collection"}
+      - {name: '24 Thin Line Shop', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 24 'Thin Line Shop' '/collections/thin-line' collection"}
+      - {name: '25 Uniforms, Insignia & Identification', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 25 'Uniforms, Insignia & Identification' '/collections/uniforms' collection"}
+      - {name: '26 Watches & Timepieces', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 26 'Watches & Timepieces' '/collections/watches' collection"}
+      - {name: '27 Zippo, Lighters & Fire Starters', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 27 'Zippo, Lighters & Fire Starters' '/collections/zippos-lighters-torches' collection"}
+      - {name: '28 Logo Merch', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 28 'Logo Merch' '/collections/stateside-quartermaster-logo-merch' collection"}
+      - {name: '29 Army National Guard Series', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 29 'Army National Guard Series' '/collections/army-national-guard-series' collection"}
+      - {name: '30 Air National Guard Series', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 30 'Air National Guard Series' '/collections/air-national-guard-series' collection"}
+      - {name: '31 State Guard Series', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 31 'State Guard Series' '/collections/state-guard-series' collection"}
+      - {name: '32 U.S. Army Series', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 32 'U.S. Army Series' '/collections/products-built-for-the-line-u-s-army' collection"}
+      - {name: '33 U.S. Navy Series', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 33 'U.S. Navy Series' '/collections/products-built-for-the-line-u-s-navy' collection"}
+      - {name: '34 U.S. Air Force Series', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 34 'U.S. Air Force Series' '/collections/products-built-for-the-line-u-s-air-force' collection"}
+      - {name: '35 U.S. Marine Corps Series', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 35 'U.S. Marine Corps Series' '/collections/products-built-for-the-line-u-s-marine-corps' collection"}
+      - {name: '36 U.S. Coast Guard Series', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 36 'U.S. Coast Guard Series' '/collections/products-built-for-the-line-u-s-coast-guard' collection"}
+      - {name: '37 U.S. Space Force Series', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 37 'U.S. Space Force Series' '/collections/products-built-for-the-line-u-s-space-force' collection"}
+      - {name: '38 ROTC Series', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 38 'ROTC Series' '/collections/rotc-series' collection"}
+      - {name: '39 JROTC Series', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 39 'JROTC Series' '/collections/jrotc-series' collection"}
+      - {name: '40 Military Schools & Academies', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 40 'Military Schools & Academies' '/collections/military-schools-academies' collection"}
+      - {name: '41 Law Enforcement & Corrections', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 41 'Law Enforcement & Corrections' '/collections/law-enforcement-corrections' collection"}
+      - {name: '42 Firefighting, EMS & Search & Rescue', continue-on-error: true, run: "node .github/scripts/refine-taxonomy-route-cert.mjs 42 'Firefighting, EMS & Search & Rescue' '/collections/firefighting-ems-search-rescue' collection"}
+      - name: Final gate
+        run: |
+          node - <<'EOF'
+          const fs=require('fs');const files=fs.existsSync('taxonomy-cert')?fs.readdirSync('taxonomy-cert').filter(x=>x.endsWith('.json')).sort():[];const rows=files.map(f=>JSON.parse(fs.readFileSync('taxonomy-cert/'+f)));for(const r of rows)console.log(`${String(r.idx).padStart(2,'0')} ${r.outcome} ${r.name}${r.reasons.length?' :: '+r.reasons.join('; '):''}`);if(rows.length!==42||rows.some(r=>r.outcome!=='PASS'))process.exit(1)
+          EOF
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine-taxonomy-42-results
+          path: taxonomy-cert/
+          if-no-files-found: warn
+          retention-days: 7
