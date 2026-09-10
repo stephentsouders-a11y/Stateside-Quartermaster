@@ -1,0 +1,82 @@
+name: Refine settled surface certification
+on:
+  push:
+    paths:
+      - '.github/workflows/refine-settled-surface-certification.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - {slug: body-armor-ballistic-protection, name: 'Body Armor & Ballistic Protection', path: /collections/body-armor-ballistic-protection}
+          - {slug: flags-displays-memorials, name: 'Flags, Displays & Memorials', path: /collections/flags-patriotic-decor}
+          - {slug: morale-patches-tactical-id, name: 'Morale Patches, Stickers & Tactical ID', path: /collections/morale-patches-tactical-id}
+          - {slug: outdoor-survival-preparedness, name: 'Outdoor, Survival & Preparedness', path: /collections/outdoor-preparedness-gear}
+          - {slug: watches-timepieces, name: 'Watches & Timepieces', path: /collections/watches}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify settled filtered surface
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          SLUG: ${{ matrix.slug }}
+          NAME: ${{ matrix.name }}
+          ROUTE: ${{ matrix.path }}
+        run: |
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage(); page.setDefaultTimeout(15000); page.setDefaultNavigationTimeout(60000);
+          const bad429=[],bad5xx=[];
+          page.on('response',r=>{if(r.status()===429)bad429.push(r.url());if(r.status()>=500)bad5xx.push(`${r.status()} ${r.url()}`)});
+          const out={name:process.env.NAME,status:null,usableMs:null,draftV2:false,base:{},vendor:null,urlFiltered:false,checked:false,surface:false,vendors:[],allMatch:false,cleared:false,bad429:[],bad5xx:[],outcome:'FAIL',reasons:[]};
+          const challenge=()=>page.evaluate(()=>/verify you are human|just a moment|attention required|performing security verification/i.test((document.title||'')+' '+(document.body?.innerText||''))).catch(()=>false);
+          await sleep(5000);
+          const prime=new URL('/',process.env.BASE);prime.searchParams.set('preview_theme_id',process.env.THEME);
+          const pr=await page.goto(prime.toString(),{waitUntil:'domcontentloaded'});
+          await sleep(700); bad429.length=0; bad5xx.length=0;
+          if(!pr||pr.status()===429||pr.status()>=500||await challenge()){out.outcome='INFRA';out.reasons.push('preview infrastructure')}
+          if(out.outcome!=='INFRA'){
+            const t=Date.now();const r=await page.goto(new URL(process.env.ROUTE,process.env.BASE).toString(),{waitUntil:'domcontentloaded'});out.status=r?.status()??null;
+            if(out.status===429||out.status>=500||await challenge()){out.outcome='INFRA';out.reasons.push(`navigation ${out.status}`)}
+            if(out.outcome!=='INFRA'){
+              for(let i=0;i<32;i++){const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),s=document.querySelector('.sq-global-refine-sidebar');if(!m||!s)return false;const mr=m.getBoundingClientRect(),sr=s.getBoundingClientRect();return mr.width>2&&mr.height>2&&sr.width>2&&sr.height>2});if(ok){out.usableMs=Date.now()-t;break}await sleep(200)}
+              out.draftV2=await page.locator('script[data-sq-filtered-product-surface-guard-v2]').count()>0;
+              out.base=await page.evaluate(()=>{const m=document.querySelector('#MainContent');const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return{sidebarCount:m?[...m.querySelectorAll('.sq-global-refine-sidebar')].filter(vis).length:0,nativeFilters:m?[...m.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length:0,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,broken:m?[...m.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).length:0,manufacturer:m?[...m.querySelectorAll('.sq-global-refine-manufacturer-checkbox')].length:0}});
+              const md=page.locator('.sq-global-refine-sidebar details').filter({hasText:/Manufacturer/i}).first();if((await md.getAttribute('open'))===null)await md.locator('summary').click().catch(()=>{});
+              const box=md.locator('.sq-global-refine-manufacturer-checkbox').first();out.vendor=await box.inputValue();
+              await box.evaluate(el=>{el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}))});
+              await page.waitForURL(u=>{const q=new URL(u).searchParams;return q.get('filter.p.vendor')===out.vendor&&q.get('sq_maker')===out.vendor},{timeout:18000}).catch(()=>{});
+              // Critical: do not judge the stale pre-filter grid. Wait for the v2 authoritative surface.
+              const guard=page.locator('#MainContent [data-sq-filtered-product-surface-guard-products]');
+              await guard.waitFor({state:'attached',timeout:7000}).catch(()=>{}); await sleep(700);
+              const q=new URL(page.url()).searchParams;out.urlFiltered=q.get('filter.p.vendor')===out.vendor&&q.get('sq_maker')===out.vendor;
+              out.checked=await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().isChecked().catch(()=>false);
+              out.surface=await guard.count()>0;
+              out.vendors=await guard.locator('.sq-custom-color-product__vendor').evaluateAll(xs=>xs.slice(0,5).map(x=>(x.textContent||'').trim()).filter(Boolean)).catch(()=>[]);
+              out.allMatch=out.vendors.length>0&&out.vendors.every(v=>v.toLowerCase()===String(out.vendor).toLowerCase());
+              const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first();if(await active.count()){await active.evaluate(el=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(u=>{const q2=new URL(u).searchParams;return !q2.has('filter.p.vendor')&&!q2.has('sq_maker')},{timeout:18000}).catch(()=>{});await sleep(500);const q2=new URL(page.url()).searchParams;out.cleared=!q2.has('filter.p.vendor')&&!q2.has('sq_maker')&&await page.locator('[data-sq-filtered-product-surface-guard-products]').count()===0}
+            }
+          }
+          out.bad429=[...new Set(bad429)];out.bad5xx=[...new Set(bad5xx)];
+          if(out.bad429.length||out.bad5xx.length||await challenge()){out.outcome='INFRA';if(out.bad429.length)out.reasons.push(`${out.bad429.length} HTTP 429`);if(out.bad5xx.length)out.reasons.push(`${out.bad5xx.length} HTTP 5xx`)}
+          if(out.outcome!=='INFRA'){
+            if(out.status!==200)out.reasons.push(`HTTP ${out.status}`);if(out.usableMs===null||out.usableMs>5000)out.reasons.push(`usable ${out.usableMs}ms`);if(!out.draftV2)out.reasons.push('v2 draft marker missing');if(out.base.sidebarCount!==1)out.reasons.push(`sidebar ${out.base.sidebarCount}`);if(out.base.nativeFilters!==0)out.reasons.push(`native filters ${out.base.nativeFilters}`);if(out.base.overflow)out.reasons.push('overflow');if(out.base.broken)out.reasons.push(`${out.base.broken} broken images`);if(!out.base.manufacturer)out.reasons.push('manufacturer empty');if(!out.urlFiltered)out.reasons.push('dual URL failed');if(!out.checked)out.reasons.push('checkbox failed');if(!out.surface)out.reasons.push('v2 filtered surface missing');if(!out.allMatch)out.reasons.push(`filtered vendors mismatch: ${out.vendors.join(', ')}`);if(!out.cleared)out.reasons.push('clear failed');out.outcome=out.reasons.length?'FAIL':'PASS';
+          }
+          console.log('\nSETTLED CERT RESULT\n'+JSON.stringify(out,null,2));await browser.close();if(out.outcome!=='PASS')process.exitCode=2;
+          EOF
+          node cert.mjs
