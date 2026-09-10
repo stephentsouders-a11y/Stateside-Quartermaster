@@ -1,12 +1,11 @@
 {% doc %}
-Shared storefront collection-catalog request coordinator. It deduplicates same-route /products.json reads across legacy category, Refine, image-repair, and filtered-surface systems, normalizes away sort_by for cache identity, and serializes unique catalog requests with a short spacing gap to avoid Shopify throttling. On category roots it suppresses redundant sorted legacy scans, and on an active Refine route it suppresses off-root child catalog scans so only the authoritative current-root result hydration remains. It only intercepts same-origin GET requests to collection products.json endpoints. The established v1 DOM marker is retained for certification compatibility; runtime behavior is version 2.
+Shared storefront collection-catalog request coordinator. It deduplicates same-route /products.json reads across legacy category, Refine, image-repair, and filtered-surface systems, normalizes away sort_by for cache identity, and serializes unique catalog requests with a short spacing gap to avoid Shopify throttling. On category roots it suppresses redundant sorted legacy scans and all off-root child collection catalog scans so Refine hydrates only from the authoritative current-root collection. This prevents image-repair/category fallback traffic from cascading into Shopify 429s while keeping sold-out root products eligible. It only intercepts same-origin GET requests to collection products.json endpoints. The established v1 DOM marker is retained for certification compatibility; runtime behavior is version 3.
 {% enddoc %}
 {% if request.page_type == 'collection' %}
-<script data-sq-catalog-request-dedupe-v1 data-sq-catalog-request-dedupe-version="2">
+<script data-sq-catalog-request-dedupe-v1 data-sq-catalog-request-dedupe-version="3">
 (function(){
-  if(window.__sqCatalogRequestDedupeV2)return;window.__sqCatalogRequestDedupeV2=true;window.__sqCatalogRequestDedupeV1=true;
+  if(window.__sqCatalogRequestDedupeV3)return;window.__sqCatalogRequestDedupeV3=true;window.__sqCatalogRequestDedupeV2=true;window.__sqCatalogRequestDedupeV1=true;
   var nativeFetch=window.fetch.bind(window),cache=new Map(),inflight=new Map(),queue=[],active=0,MAX=1,MIN_GAP=325,lastStart=0,pumpTimer=null;
-  function filtered(){var q=new URLSearchParams(location.search);return !!(q.get('sq_maker')||q.get('filter.p.vendor')||q.get('sq_color_pattern'))}
   function currentProductsPath(){return location.pathname.replace(/\/$/,'')+'/products.json'}
   function info(input,init){
     try{
@@ -15,7 +14,7 @@ Shared storefront collection-catalog request coordinator. It deduplicates same-r
       var u=new URL(raw,location.origin);if(u.origin!==location.origin||!/^\/collections\/.+\/products\.json$/.test(u.pathname))return null;
       var categoryRoot=!!document.querySelector('#MainContent .sq-subcategory-card[href*="/collections/"]');
       var blockSorted=categoryRoot&&u.searchParams.has('sort_by');
-      var blockOffRoot=filtered()&&u.pathname!==currentProductsPath();
+      var blockOffRoot=categoryRoot&&u.pathname!==currentProductsPath();
       var keyUrl=new URL(u.href);keyUrl.searchParams.delete('sort_by');keyUrl.searchParams.sort();
       return{key:keyUrl.pathname+(keyUrl.search?'?'+keyUrl.searchParams.toString():''),url:u.href,blocked:blockSorted||blockOffRoot};
     }catch(_){return null}
@@ -34,7 +33,7 @@ Shared storefront collection-catalog request coordinator. It deduplicates same-r
     var base=scheduled(input,init).then(function(r){if(r&&r.ok){try{cache.set(meta.key,r.clone())}catch(_){}}return r}).finally(function(){inflight.delete(meta.key)});
     inflight.set(meta.key,base);return base.then(function(r){return r.clone()});
   };
-  window.__sqCatalogRequestDedupe={cache:cache,inflight:inflight,queue:queue,get active(){return active},max:MAX,minGap:MIN_GAP,version:2};
+  window.__sqCatalogRequestDedupe={cache:cache,inflight:inflight,queue:queue,get active(){return active},max:MAX,minGap:MIN_GAP,version:3};
 })();
 </script>
 {% endif %}
