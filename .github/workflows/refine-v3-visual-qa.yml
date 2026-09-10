@@ -1,0 +1,36 @@
+name: Refine V3 visual QA
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-visual-qa.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Capture high-risk customer views
+        run: |
+          mkdir -p visual-qa
+          cat > visual.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const B='https://www.statesideqm.com',T='158561894555';
+          const routes=[['accessories','/collections/accessories-gifts-collectibles',1440,1000],['literature','/collections/literature',1440,1000],['firearm','/collections/firearm-accessories',1440,1000],['logo-merch','/collections/stateside-quartermaster-logo-merch',1440,1000],['army','/collections/products-built-for-the-line-u-s-army',1440,1000],['navy-mobile','/collections/products-built-for-the-line-u-s-navy',390,844]];
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const browser=await chromium.launch({headless:true});
+          async function go(page,path){let last;for(let i=0;i<4;i++){try{const u=new URL(path,B);u.searchParams.set('preview_theme_id',T);const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:90000});if(r?.status()===200){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});await sleep(1500);return}last=new Error('HTTP '+r?.status())}catch(e){last=e}await sleep([3000,6000,10000,15000][i])}throw last}
+          for(const [name,path,w,h] of routes){const page=await browser.newPage({viewport:{width:w,height:h}});await go(page,path);await page.screenshot({path:`visual-qa/${name}.png`,fullPage:true});const d=await page.evaluate(()=>{const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'};const m=document.querySelector('#MainContent');return{visibleSidebars:[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis).length,visibleLegacy:[...m.querySelectorAll('.sq-global-refine-sidebar,.sq-collection-sidebar,.facets-block-wrapper,.facets-container,.facets-wrapper,[class*="filter-sidebar"]')].filter(e=>vis(e)&&!e.classList.contains('sq-refine-v3-sidebar')).length}});console.log('SHOT '+name+' '+JSON.stringify(d));await page.close()}
+          await browser.close();
+          EOF
+          node visual.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine-v3-visual-qa
+          path: visual-qa/
+          retention-days: 7
