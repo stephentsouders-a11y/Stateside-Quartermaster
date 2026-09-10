@@ -1,0 +1,42 @@
+{% doc %}
+Provides a deterministic Firearm Accessories Make / Model refinement directly from Shopify collection product types. This avoids depending on the later polish metadata race and guarantees the customer sees one functional Make / Model group. State Guard and all other routes are untouched.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle == 'firearm-accessories' %}
+<script type="application/json" data-sq-refine-v3-firearm-types>{{ collection.all_types | json }}</script>
+<script data-sq-refine-v3-firearm-make-model>
+(function(){
+  const main=document.getElementById('MainContent');
+  if(!main)return;
+  let types=[];try{types=JSON.parse(document.querySelector('[data-sq-refine-v3-firearm-types]')?.textContent||'[]')}catch(_e){}
+  const rx=/(glock|1911|ar[- ]?15|ar[- ]?10|m4\b|m16\b|ak[- ]?47|ak[- ]?74|sig(?:\s+sauer)?|p320|p365|smith(?:\s*&\s*|\s+and\s+)?wesson|m&p|springfield|beretta|ruger|remington\s*870|mossberg\s*(?:500|590)|benelli|walther|\bcz\b|fn\s*509|\bhk\b|vp9|taurus)/i;
+  const values=[...new Set(types.map(v=>String(v||'').trim()).filter(v=>v&&rx.test(v)))];
+  function install(){
+    if(main.dataset.sqRefineV3Ready!=='true')return false;
+    const side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;
+    const groups=[...side.querySelectorAll(':scope > details.sq-refine-v3-group')];
+    let group=groups.find(d=>/shop by (?:firearm )?make\s*\/\s*model/i.test((d.querySelector(':scope > summary')?.textContent||'').trim()));
+    if(group){const s=group.querySelector(':scope > summary');if(s)s.textContent='Shop by Make / Model';return true;}
+    if(!values.length)return true;
+    group=document.createElement('details');group.className='sq-refine-v3-group';group.dataset.sqRefineV3FirearmMakeModel='true';
+    const summary=document.createElement('summary');summary.textContent='Shop by Make / Model';
+    const choices=document.createElement('div');choices.className='sq-refine-v3-choices';
+    const selected=new Set(new URLSearchParams(location.search).getAll('filter.p.product_type'));
+    values.slice(0,80).forEach(function(value){
+      const row=document.createElement('label');row.className='sq-refine-v3-choice';
+      const input=document.createElement('input');input.type='checkbox';input.dataset.kind='native';input.dataset.filterName='filter.p.product_type';input.dataset.filterValue=value;input.checked=selected.has(value);
+      const span=document.createElement('span');span.textContent=value;row.append(input,span);choices.appendChild(row);
+      input.addEventListener('change',function(){
+        const url=new URL(location.href),name=input.dataset.filterName,val=input.dataset.filterValue;
+        let vals=url.searchParams.getAll(name).filter(v=>v!==val);if(input.checked)vals.push(val);
+        url.searchParams.delete(name);[...new Set(vals)].forEach(v=>url.searchParams.append(name,v));url.searchParams.delete('page');url.searchParams.delete('sq_view_page');location.assign(url.pathname+'?'+url.searchParams.toString());
+      });
+    });
+    group.append(summary,choices);
+    const typeGroup=groups.find(d=>/^shop by type$/i.test((d.querySelector(':scope > summary')?.textContent||'').trim()));
+    if(typeGroup&&typeGroup.nextSibling)side.insertBefore(group,typeGroup.nextSibling);else side.appendChild(group);
+    return true;
+  }
+  if(install())return;let n=0,t=setInterval(()=>{if(install()||++n>180)clearInterval(t)},250);
+})();
+</script>
+{% endif %}
