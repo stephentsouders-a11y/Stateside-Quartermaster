@@ -1,0 +1,61 @@
+name: Refine V3 sidebar polish 41 certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-sidebar-polish-41-cert.yml'
+      - 'snippets/sq-refine-v3-sidebar-polish.liquid'
+      - 'layout/theme.liquid'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Chromium certify polished V3 sidebars
+        run: |
+          cat > cert.mjs <<'EOF'
+          import fs from 'node:fs/promises';
+          import { chromium } from 'playwright';
+          const BASE='https://www.statesideqm.com',THEME='158561894555';
+          const routes=[
+          ['Accessories','accessories-gifts-collectibles'],['Airsoft','airsoft-milsim'],['Apparel','apparel'],['Armed Forces Gear','armed-forces-gear'],['Art','art'],['Body Armor','body-armor-ballistic-protection'],['Books','literature'],['Child Safety','child-safety-shop'],['DIVE SCUBA','dive-scuba'],['Firearm Accessories','firearm-accessories'],['First Aid','first-aid-medical-ifak'],['Flags','flags-patriotic-decor'],['Flashlights','flashlights-lighting'],['Footwear','footwear-gloves-eyewear'],['K9','k9-dog-gear'],['Knives','knives-axes-cutlery'],['Morale Patches','morale-patches-tactical-id'],['Outdoor','outdoor-preparedness-gear'],['Patriotic','patriotic-american-heritage'],['Safety Rescue','safety-rescue-climbing'],['Sta-Brite','sta-brite-insignia'],['Tactical Gear','tactical-gear'],['Thin Line','thin-line'],['Uniforms','uniforms'],['Watches','watches'],['Zippo','zippos-lighters-torches'],['Logo Merch','stateside-quartermaster-logo-merch'],['Army National Guard','army-national-guard-series'],['Air National Guard','air-national-guard-series'],['Army','products-built-for-the-line-u-s-army'],['Navy','products-built-for-the-line-u-s-navy'],['Air Force','products-built-for-the-line-u-s-air-force'],['Marine Corps','products-built-for-the-line-u-s-marine-corps'],['Coast Guard','products-built-for-the-line-u-s-coast-guard'],['Space Force','products-built-for-the-line-u-s-space-force'],['ROTC','rotc-series'],['JROTC','jrotc-series'],['Military Schools','military-schools-academies'],['Law Enforcement','law-enforcement-corrections'],['Fire EMS SAR','firefighting-ems-search-rescue']];
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const url=h=>`${BASE}/collections/${h}?preview_theme_id=${THEME}`;
+          async function nav(page,u){let last;for(let i=0;i<5;i++){try{let r=await page.goto(u,{waitUntil:'domcontentloaded',timeout:90000}),s=r?.status()||0;if(s===200){await sleep(1800);return s}last=new Error('HTTP '+s);if(![429,500,502,503,504].includes(s))break}catch(e){last=e}await sleep([5000,10000,15000,22000,30000][i])}throw last||new Error('navigation failed')}
+          function slug(s){return s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}
+          async function inspect(page){return await page.evaluate(()=>{
+            const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-refine-v3-sidebar');
+            const grid=main?.querySelector('.sq-refine-v3-results .product-grid');
+            const cards=grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(x=>!!x.querySelector('a[href*="/products/"]')):[];
+            const rs=cards.slice(0,12).map(x=>{let r=x.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y)}}),y=rs[0]?.y,row=rs.filter(r=>Math.abs(r.y-y)<=3);
+            const groups=side?[...side.querySelectorAll(':scope > details.sq-refine-v3-group')].map(d=>({label:(d.querySelector(':scope > summary')?.textContent||'').trim(),inputs:d.querySelectorAll('input[type="checkbox"]').length,open:d.open,checked:d.querySelectorAll('input:checked').length})):[];
+            const title=side?.querySelector('.sq-refine-v3-sidebar__title'),cs=title?getComputedStyle(title):null;
+            const vis=e=>{if(!e)return false;let c=getComputedStyle(e),r=e.getBoundingClientRect();return c.display!=='none'&&c.visibility!=='hidden'&&r.width>0&&r.height>0};
+            const legacy=[...main.querySelectorAll('[class*="button-tree"],[class*="root-categories"],[class*="third-level"],[class*="branch-grid"],[class*="type-grid"],[class*="program-tree"],[class*="category-grid"],[class*="navigation-grid"]')].filter(e=>!e.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results')&&vis(e)).length;
+            return {ready:main?.dataset.sqRefineV3Ready==='true',polished:side?.dataset.sqRefineV3Polished==='true',title:title?.textContent.trim()||'',bg:cs?.backgroundColor||'',fg:cs?.color||'',sticky:side?getComputedStyle(side).position:'',height:side?Math.round(side.getBoundingClientRect().height):0,cards:cards.length,row:row.length,groups,legacy,error:main?.dataset.sqRefineV3Error||''};
+          })}
+          function has(d,label){return d.groups.some(g=>g.label.toLowerCase()===label.toLowerCase()&&g.inputs>0)}
+          await fs.mkdir('sidebar-polish-shots',{recursive:true});
+          const browser=await chromium.launch({headless:true}),page=await browser.newPage({viewport:{width:1440,height:1000}});let failed=0;
+          for(let i=0;i<routes.length;i++){let [name,h]=routes[i],errs=[];try{await nav(page,url(h));await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:45000});await page.waitForFunction(()=>document.querySelector('.sq-refine-v3-sidebar')?.dataset.sqRefineV3Polished==='true',{timeout:15000});await sleep(900);let d=await inspect(page);if(!d.ready||!d.polished||d.error)errs.push('V3/polish not ready');if(d.title!=='REFINE PRODUCTS')errs.push('title');if(d.bg!=='rgb(8, 40, 63)'||d.fg!=='rgb(255, 255, 255)')errs.push(`header colors ${d.bg}/${d.fg}`);if(d.sticky!=='sticky'||d.height<700)errs.push(`sidebar geometry ${d.sticky}/${d.height}`);if(d.cards&&d.row!==3)errs.push(`desktop row ${d.row}`);if(d.legacy)errs.push(`visible legacy nav ${d.legacy}`);if(!has(d,'Shop by Type'))errs.push('missing Shop by Type');if(!has(d,'Shop by Manufacturers'))errs.push('missing Shop by Manufacturers');if(d.groups.some(g=>/^shop by (color|pattern)$/i.test(g.label)))errs.push('unmerged color/pattern');if(h==='literature'&&(!has(d,'Shop by Author')||!has(d,'Shop by Publishers')))errs.push('missing book author/publishers');if(h==='firearm-accessories'&&!has(d,'Shop by Firearm Make / Model'))errs.push('missing firearm make/model');for(const g of d.groups){if(!g.inputs)errs.push(`empty ${g.label}`);if(g.checked===0&&g.open)errs.push(`inactive open ${g.label}`)}console.log('ROUTE '+JSON.stringify({i:i+1,name,h,errs,d:{title:d.title,bg:d.bg,fg:d.fg,sticky:d.sticky,height:d.height,cards:d.cards,row:d.row,legacy:d.legacy,groups:d.groups.map(g=>g.label)}}));if(['accessories-gifts-collectibles','literature','firearm-accessories','products-built-for-the-line-u-s-navy','thin-line','firefighting-ems-search-rescue'].includes(h))await page.screenshot({path:`sidebar-polish-shots/${slug(name)}-desktop.png`,fullPage:true});}catch(e){errs.push(String(e));console.log('ROUTE_ERROR '+JSON.stringify({i:i+1,name,h,error:String(e)}))}if(errs.length)failed++;await sleep(2500)}
+          for(const h of ['accessories-gifts-collectibles','literature','firearm-accessories','products-built-for-the-line-u-s-navy']){const p=await browser.newPage({viewport:{width:390,height:844}}),errs=[];try{await nav(p,url(h));await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:45000});await p.waitForFunction(()=>document.querySelector('.sq-refine-v3-sidebar')?.dataset.sqRefineV3Polished==='true',{timeout:15000});let d=await inspect(p);if(d.sticky==='sticky')errs.push('mobile sticky');if(d.cards&&d.row!==2)errs.push(`mobile row ${d.row}`);console.log('MOBILE '+JSON.stringify({h,errs,d:{sticky:d.sticky,row:d.row,title:d.title}}));await p.screenshot({path:`sidebar-polish-shots/${h}-mobile.png`,fullPage:true})}catch(e){errs.push(String(e))}if(errs.length)failed++;await p.close();await sleep(2000)}
+          for(const [label,u] of [['STATE_GUARD',`${BASE}/collections/state-guard-series?preview_theme_id=${THEME}`],['ARMORED',`${BASE}/pages/armored-vehicles-purchase-inquiry?preview_theme_id=${THEME}`]]){const p=await browser.newPage({viewport:{width:1440,height:1000}});let errs=[];try{await nav(p,u);let d=await p.evaluate(()=>({v3:!!document.querySelector('script[data-sq-refine-v3]'),polish:!!document.querySelector('script[data-sq-refine-v3-sidebar-polish]'),sidebar:!!document.querySelector('.sq-refine-v3-sidebar')}));if(d.v3||d.polish||d.sidebar)errs.push('unexpected V3/polish');console.log(label+' '+JSON.stringify({errs,d}))}catch(e){errs.push(String(e))}if(errs.length)failed++;await p.close()}
+          await browser.close();console.log('FINAL '+JSON.stringify({failed,total:routes.length+4+2}));if(failed)process.exit(1);
+          EOF
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine-v3-sidebar-polish-41-cert
+          path: sidebar-polish-shots/
+          retention-days: 7
