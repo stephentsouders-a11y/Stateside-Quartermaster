@@ -5,32 +5,32 @@ Ensures the V3 Refine Products navy title bar reaches both rounded top corners w
 {% render 'sq-refine-v3-sidebar-polish-rescue' %}
 <style data-sq-refine-v3-header-edge-fix>
 #MainContent .sq-refine-v3-sidebar{
-  background:linear-gradient(to bottom,#08283f 0,#08283f 40px,#fff 40px,#fff 100%)!important;
+  background-color:#08283f!important;
+  background-image:none!important;
   scrollbar-gutter:auto!important;
   scrollbar-width:none!important;
 }
+#MainContent .sq-refine-v3-sidebar::before{
+  content:""!important;
+  position:absolute!important;
+  z-index:0!important;
+  left:1px!important;
+  right:1px!important;
+  top:40px!important;
+  bottom:1px!important;
+  background:#fff!important;
+  border-radius:0 0 8px 8px!important;
+  pointer-events:none!important;
+}
+#MainContent .sq-refine-v3-sidebar>*{position:relative;z-index:1}
 #MainContent .sq-refine-v3-sidebar::-webkit-scrollbar{width:0!important;height:0!important;display:none!important}
 #MainContent .sq-refine-v3-sidebar__title{
-  position:relative!important;
-  z-index:2!important;
-  display:flex!important;
-  align-items:center!important;
-  width:100%!important;
-  max-width:none!important;
-  min-height:40px!important;
-  box-sizing:border-box!important;
-  margin:0!important;
-  padding:0 12px!important;
-  border-radius:9px 9px 0 0!important;
-  background:#08283f!important;
-  color:#fff!important;
+  position:relative!important;z-index:2!important;display:flex!important;align-items:center!important;
+  width:100%!important;max-width:none!important;min-height:40px!important;box-sizing:border-box!important;
+  margin:0!important;padding:0 12px!important;border-radius:9px 9px 0 0!important;background:#08283f!important;color:#fff!important;
 }
 #MainContent .sq-refine-v3-sidebar__title::after{display:none!important;content:none!important}
-@media (min-width:901px){
-  #MainContent.sq-refine-v3-active .sq-refine-v3-sidebar{position:sticky!important;top:18px!important}
-}
-@media (max-width:900px){
-  #MainContent.sq-refine-v3-active .sq-refine-v3-sidebar{position:static!important;background:linear-gradient(to bottom,#08283f 0,#08283f 40px,#fff 40px,#fff 100%)!important}
-}
+@media (min-width:901px){#MainContent.sq-refine-v3-active .sq-refine-v3-sidebar{position:sticky!important;top:18px!important}}
+@media (max-width:900px){#MainContent.sq-refine-v3-active .sq-refine-v3-sidebar{position:static!important}}
 </style>
 {% endif %}
