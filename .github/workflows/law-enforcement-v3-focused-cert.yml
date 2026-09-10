@@ -1,0 +1,73 @@
+name: Law Enforcement V3 focused certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/law-enforcement-v3-focused-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify-law:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify Law Enforcement desktop
+        run: |
+          cat > law.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1000}});
+          const page=await ctx.newPage();
+          const errors=[]; page.on('pageerror',e=>errors.push(e.message));
+          const u='https://www.statesideqm.com/collections/law-enforcement-corrections?preview_theme_id=158561894555';
+          let r;
+          for(let i=0;i<5;i++){
+            r=await page.goto(u,{waitUntil:'domcontentloaded',timeout:60000});
+            if((r?.status()||0)===200)break;
+            if(![429,500,502,503,504].includes(r?.status()||0))break;
+            await new Promise(x=>setTimeout(x,[3000,6000,10000,15000,20000][i]));
+          }
+          try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:30000})}catch{}
+          await page.waitForTimeout(5000);
+          const d=await page.evaluate(()=>{
+            const main=document.querySelector('#MainContent');
+            const side=main?.querySelector('.sq-refine-v3-sidebar');
+            const results=main?.querySelector('.sq-refine-v3-results');
+            const grid=results?.querySelector('.product-grid');
+            const all=grid?[...grid.querySelectorAll(':scope > .product-grid__item')]:[];
+            const visible=all.filter(el=>{const s=getComputedStyle(el),b=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&b.width>0&&b.height>0&&!!el.querySelector('a[href*="/products/"]')});
+            const cc=results?.querySelector('collection-component');
+            const cs=cc?getComputedStyle(cc):null;
+            const tpl=grid?getComputedStyle(grid).gridTemplateColumns:'';
+            return {
+              path:location.pathname,
+              ready:main?.dataset.sqRefineV3Ready==='true',
+              error:main?.dataset.sqRefineV3Error||'',
+              cleanup:main?.dataset.sqRefineV3RootCleanup==='true',
+              isolation:document.querySelector('script[data-sq-refine-v3-legacy-isolation]')?.dataset.sqRefineV3LegacyIsolation||'',
+              override:!!document.querySelector('style[data-sq-refine-v3-public-safety-product-visibility]'),
+              psRoot:!!document.querySelector('.sq-ps-root'),
+              sidebar:!!side&&getComputedStyle(side).display!=='none',
+              sticky:side?getComputedStyle(side).position:'',
+              allCards:all.length,
+              visibleCards:visible.length,
+              collectionComponentDisplay:cs?.display||'',
+              collectionComponentVisibility:cs?.visibility||'',
+              cols:tpl&&tpl!=='none'?tpl.trim().split(/\s+/).length:0,
+              legacyVisible:[...document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]')].filter(el=>{const s=getComputedStyle(el),b=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&b.width>0&&b.height>0}).length
+            };
+          });
+          const ok=r?.status()===200&&errors.length===0&&d.path==='/collections/law-enforcement-corrections'&&d.ready&&!d.error&&d.cleanup&&d.isolation==='law-enforcement-corrections'&&d.override&&d.sidebar&&d.sticky==='sticky'&&d.allCards===50&&d.visibleCards===50&&d.collectionComponentDisplay!=='none'&&d.collectionComponentVisibility!=='hidden'&&d.cols===3&&d.legacyVisible===0;
+          console.log('LAW_FOCUSED '+JSON.stringify({http:r?.status()||0,errors,d,ok}));
+          await browser.close();
+          if(!ok)process.exit(1);
+          EOF
+          node law.mjs
