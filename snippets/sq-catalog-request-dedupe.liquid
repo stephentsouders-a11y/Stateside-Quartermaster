@@ -1,11 +1,11 @@
 {% doc %}
-Shared storefront collection-catalog request coordinator. It deduplicates same-route /products.json reads across legacy category, Refine, image-repair, and filtered-surface systems, normalizes away sort_by for cache identity, and limits unique catalog requests to two concurrent calls. It only intercepts same-origin GET requests to collection products.json endpoints.
+Shared storefront collection-catalog request coordinator. It deduplicates same-route /products.json reads across legacy category, Refine, image-repair, and filtered-surface systems, normalizes away sort_by for cache identity, and serializes unique catalog requests with a short spacing gap to avoid Shopify throttling. It only intercepts same-origin GET requests to collection products.json endpoints.
 {% enddoc %}
 {% if request.page_type == 'collection' %}
 <script data-sq-catalog-request-dedupe-v1>
 (function(){
   if(window.__sqCatalogRequestDedupeV1)return;window.__sqCatalogRequestDedupeV1=true;
-  var nativeFetch=window.fetch.bind(window),cache=new Map(),inflight=new Map(),queue=[],active=0,MAX=2;
+  var nativeFetch=window.fetch.bind(window),cache=new Map(),inflight=new Map(),queue=[],active=0,MAX=1,MIN_GAP=275,lastStart=0,pumpTimer=null;
   function info(input,init){
     try{
       var method=String((init&&init.method)||(input&&input.method)||'GET').toUpperCase();if(method!=='GET')return null;
@@ -16,9 +16,8 @@ Shared storefront collection-catalog request coordinator. It deduplicates same-r
     }catch(_){return null}
   }
   function pump(){
-    while(active<MAX&&queue.length){
-      (function(job){active++;nativeFetch(job.input,job.init).then(function(resp){job.resolve(resp)}).catch(job.reject).finally(function(){active--;pump()})})(queue.shift());
-    }
+    if(active>=MAX||!queue.length)return;
+    var delay=Math.max(0,MIN_GAP-(Date.now()-lastStart));clearTimeout(pumpTimer);pumpTimer=setTimeout(function(){if(active>=MAX||!queue.length)return;var job=queue.shift();active++;lastStart=Date.now();nativeFetch(job.input,job.init).then(job.resolve).catch(job.reject).finally(function(){active--;pump()})},delay);
   }
   function scheduled(input,init){return new Promise(function(resolve,reject){queue.push({input:input,init:init,resolve:resolve,reject:reject});pump()})}
   window.fetch=function(input,init){
@@ -28,7 +27,7 @@ Shared storefront collection-catalog request coordinator. It deduplicates same-r
     var base=scheduled(input,init).then(function(r){if(r&&r.ok){try{cache.set(meta.key,r.clone())}catch(_){}}return r}).finally(function(){inflight.delete(meta.key)});
     inflight.set(meta.key,base);return base.then(function(r){return r.clone()});
   };
-  window.__sqCatalogRequestDedupe={cache:cache,inflight:inflight,queue:queue,get active(){return active},max:MAX};
+  window.__sqCatalogRequestDedupe={cache:cache,inflight:inflight,queue:queue,get active(){return active},max:MAX,minGap:MIN_GAP};
 })();
 </script>
 {% endif %}
