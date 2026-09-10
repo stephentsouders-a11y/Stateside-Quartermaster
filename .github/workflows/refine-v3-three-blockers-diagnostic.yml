@@ -1,13 +1,9 @@
-name: Refine V3 final three blocker diagnostics
-# deployed-theme retest: 2026-09-10 final blocker pass
+name: Refine V3 route failure diagnostics
 on:
   push:
     branches: [refine-restart-v3]
     paths:
       - '.github/workflows/refine-v3-three-blockers-diagnostic.yml'
-      - 'snippets/sq-refine-v3-sidebar-polish-rescue.liquid'
-      - 'snippets/sq-refine-v3-sidebar-header-edge-fix.liquid'
-      - 'snippets/sq-refine-v3-product-scale-lock.liquid'
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,25 +18,16 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Diagnose current V3 blockers
+      - name: Diagnose failed V3 routes
         run: |
           cat > diag.mjs <<'EOF'
           import { chromium } from 'playwright';
-          const browser=await chromium.launch({headless:true}); const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          const THEME='158561894555',BASE='https://www.statesideqm.com';
-          function url(path){const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()}
-          async function nav(page,path){let last;for(let i=0;i<5;i++){try{const r=await page.goto(url(path),{waitUntil:'domcontentloaded',timeout:90000});const s=r?.status()||0;if(s===200)return r;last=new Error('HTTP '+s)}catch(e){last=e}await sleep([5000,9000,15000,22000,30000][i])}throw last||new Error('navigation failed')}
-          async function run(path){
-            const page=await browser.newPage({viewport:{width:1440,height:1000}}); let http=0; try{http=(await nav(page,path)).status()}catch(e){}
-            try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000})}catch(e){} await sleep(2500);
-            const d=await page.evaluate(()=>{
-              const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-refine-v3-sidebar'),title=side?.querySelector('.sq-refine-v3-sidebar__title'),grid=main?.querySelector('.sq-refine-v3-results .product-grid'),meta=document.querySelector('[data-sq-refine-v3-polish-meta]');
-              const sr=side?.getBoundingClientRect(), tr=title?.getBoundingClientRect(); let n=sr?document.elementFromPoint(sr.right-3,sr.top+3):null, chain=[]; let x=n; while(x&&chain.length<6){chain.push({tag:x.tagName,id:x.id||'',cls:typeof x.className==='string'?x.className:'',bg:getComputedStyle(x).backgroundColor,pos:getComputedStyle(x).position,z:getComputedStyle(x).zIndex});x=x.parentElement}
-              let anc=[],g=grid; while(g&&anc.length<9){let r=g.getBoundingClientRect(),cs=getComputedStyle(g);anc.push({tag:g.tagName,id:g.id||'',cls:typeof g.className==='string'?g.className:'',w:r.width,cw:cs.width,max:cs.maxWidth,display:cs.display,justify:cs.justifyContent,overflow:cs.overflow});g=g.parentElement}
-              let parsed={};try{parsed=JSON.parse(meta?.textContent||'{}')}catch(e){};
-              return {handle:document.querySelector('script[data-sq-refine-v3]')?.dataset.currentHandle||'',polished:side?.dataset.sqRefineV3Polished||'',rescued:side?.dataset.sqRefineV3PolishRescued||'',polishError:main?.dataset.sqRefineV3PolishError||'',sidebar:{position:side?getComputedStyle(side).position:'',w:sr?.width||0},title:{w:tr?.width||0,gap:sr&&tr?sr.right-tr.right:null,cornerChain:chain},groups:side?[...side.querySelectorAll(':scope > details.sq-refine-v3-group')].map(v=>({label:v.querySelector('summary')?.textContent.trim(),inputs:v.querySelectorAll('input').length})):[],gridAncestors:anc,tags:(parsed.tags||[]).slice(0,120),types:(parsed.types||[]).slice(0,160)}
-            }); console.log('TRACE '+path+' '+JSON.stringify({http,d})); await page.close();
-          }
-          for(const p of ['/collections/apparel','/collections/literature','/collections/firearm-accessories']){await run(p);await sleep(7000)} await browser.close();
+          const browser=await chromium.launch({headless:true}),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const base='https://www.statesideqm.com',theme='158561894555';
+          const U=(p)=>{let u=new URL(p,base);u.searchParams.set('preview_theme_id',theme);return u.toString()};
+          async function go(page,p){for(let i=0;i<4;i++){try{let r=await page.goto(U(p),{waitUntil:'domcontentloaded',timeout:90000});if(r?.status()===200)return}catch(e){}await sleep(6000*(i+1))}}
+          async function inspect(p,w){let page=await browser.newPage({viewport:{width:w,height:w<600?844:1000}});await go(page,p);try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000})}catch(e){}await sleep(2000);let d=await page.evaluate(()=>{let main=document.querySelector('#MainContent'),grid=main?.querySelector('.sq-refine-v3-results .product-grid'),items=grid?[...grid.querySelectorAll(':scope > .product-grid__item')]:[],it=items[0],prod=it?.querySelector('product-card,.product-card'),link=it?.querySelector('a[href*="/products/"]'),side=main?.querySelector('.sq-refine-v3-sidebar'),title=side?.querySelector('.sq-refine-v3-sidebar__title');function S(e){if(!e)return null;let r=e.getBoundingClientRect(),c=getComputedStyle(e);return{tag:e.tagName,cls:typeof e.className==='string'?e.className:'',w:r.width,h:r.height,x:r.x,y:r.y,display:c.display,position:c.position,visibility:c.visibility,opacity:c.opacity,overflow:c.overflow,gridColumn:c.gridColumn,gridRow:c.gridRow,width:c.width,maxWidth:c.maxWidth,minWidth:c.minWidth,transform:c.transform}}let chain=[],x=it;while(x&&chain.length<10){chain.push(S(x));x=x.parentElement}let sr=side?.getBoundingClientRect(),pts=[];if(sr)for(let dx of [1,2,3,4,5,6])for(let dy of [1,2,3,4,5,6]){let n=document.elementFromPoint(sr.right-dx,sr.top+dy);pts.push({dx,dy,tag:n?.tagName||'',cls:typeof n?.className==='string'?n.className:'',bg:n?getComputedStyle(n).backgroundColor:''})}return{href:location.href,grid:S(grid),items:items.length,item:S(it),product:S(prod),link:S(link),chain,side:S(side),title:S(title),cornerPts:pts,styleSheets:[...document.querySelectorAll('style')].map(s=>s.textContent||'').filter(t=>/product-grid__item|sq-refine-v3-results|sq-collection-layout/.test(t)).slice(-12).map(t=>t.slice(0,2500))}});console.log('DIAG '+w+' '+p+' '+JSON.stringify(d));await page.close()}
+          for(let p of ['/collections/air-national-guard-series','/collections/products-built-for-the-line-u-s-army','/collections/jrotc-series','/collections/stateside-quartermaster-logo-merch','/collections/accessories-gifts-collectibles','/collections/sta-brite-insignia']){await inspect(p,1440);await sleep(4000)}
+          await inspect('/collections/products-built-for-the-line-u-s-navy',390);await browser.close();
           EOF
           node diag.mjs
