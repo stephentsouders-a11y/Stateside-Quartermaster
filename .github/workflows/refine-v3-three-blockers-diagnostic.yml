@@ -4,6 +4,9 @@ on:
     branches: [refine-restart-v3]
     paths:
       - '.github/workflows/refine-v3-three-blockers-diagnostic.yml'
+      - 'snippets/sq-refine-v3-sidebar-polish-rescue.liquid'
+      - 'snippets/sq-refine-v3-sidebar-header-edge-fix.liquid'
+      - 'snippets/sq-refine-v3-product-scale-lock.liquid'
   workflow_dispatch:
 permissions:
   contents: read
@@ -34,14 +37,14 @@ jobs:
             page.on('console',m=>{if(m.type()==='error')consoleErrors.push({text:m.text(),loc:m.location()})});
             let http=0,navError='';try{http=(await nav(page,path)).status()}catch(e){navError=String(e)}
             try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000})}catch(e){navError+=(navError?' | ':'')+String(e)}
-            await sleep(1500);
+            await sleep(2500);
             const d=await page.evaluate(()=>{
-              const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-refine-v3-sidebar'),title=side?.querySelector('.sq-refine-v3-sidebar__title'),grid=main?.querySelector('.sq-refine-v3-results .product-grid'),layout=main?.querySelector('.sq-refine-v3-layout'),results=main?.querySelector('.sq-refine-v3-results'),core=document.querySelector('script[data-sq-refine-v3]'),polish=document.querySelector('script[data-sq-refine-v3-sidebar-polish]'),meta=document.querySelector('[data-sq-refine-v3-polish-meta]');
+              const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-refine-v3-sidebar'),title=side?.querySelector('.sq-refine-v3-sidebar__title'),grid=main?.querySelector('.sq-refine-v3-results .product-grid'),layout=main?.querySelector('.sq-refine-v3-layout'),results=main?.querySelector('.sq-refine-v3-results'),core=document.querySelector('script[data-sq-refine-v3]'),polish=document.querySelector('script[data-sq-refine-v3-sidebar-polish]'),rescue=document.querySelector('script[data-sq-refine-v3-sidebar-polish-rescue]'),meta=document.querySelector('[data-sq-refine-v3-polish-meta]');
               const cards=grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(x=>x.querySelector('a[href*="/products/"]')):[];
               const r0=cards[0]?.getBoundingClientRect(),lr=layout?.getBoundingClientRect(),rr=results?.getBoundingClientRect(),sr=side?.getBoundingClientRect(),tr=title?.getBoundingClientRect();
               let corner='';if(sr){let n=document.elementFromPoint(Math.max(0,sr.right-3),Math.max(0,sr.top+3));while(n&&n!==document.documentElement){let b=getComputedStyle(n).backgroundColor;if(b&&b!=='rgba(0, 0, 0, 0)'&&b!=='transparent'){corner=b;break}n=n.parentElement}}
               return {
-                href:location.href,ready:main?.dataset.sqRefineV3Ready||'',v3Error:main?.dataset.sqRefineV3Error||'',coreCurrent:core?.dataset.currentHandle||'',polishScript:!!polish,polished:side?.dataset.sqRefineV3Polished||'',metaText:(meta?.textContent||'').slice(0,1500),metaLength:(meta?.textContent||'').length,
+                href:location.href,ready:main?.dataset.sqRefineV3Ready||'',v3Error:main?.dataset.sqRefineV3Error||'',polishError:main?.dataset.sqRefineV3PolishError||'',coreCurrent:core?.dataset.currentHandle||'',polishScript:!!polish,rescueScript:!!rescue,polished:side?.dataset.sqRefineV3Polished||'',rescued:side?.dataset.sqRefineV3PolishRescued||'',metaText:(meta?.textContent||'').slice(0,1500),metaLength:(meta?.textContent||'').length,
                 groups:side?[...side.querySelectorAll(':scope > details.sq-refine-v3-group')].map(g=>({label:(g.querySelector(':scope > summary')?.textContent||'').trim(),inputs:g.querySelectorAll('input').length})):[],
                 sidebar:{position:side?getComputedStyle(side).position:'',overflowY:side?getComputedStyle(side).overflowY:'',width:sr?.width||0,height:sr?.height||0},
                 title:{text:title?.textContent||'',width:tr?.width||0,rightGap:sr&&tr?sr.right-tr.right:null,bg:title?getComputedStyle(title).backgroundColor:'',corner},
