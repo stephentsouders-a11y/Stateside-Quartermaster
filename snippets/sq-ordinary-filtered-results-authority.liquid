@@ -1,0 +1,29 @@
+{% if request.page_type == 'collection' %}
+{% assign sq_ofa_special = false %}
+{% case collection.handle %}
+  {% when 'products-built-for-the-line-u-s-army', 'army-national-guard-series', 'products-built-for-the-line-u-s-air-force', 'air-national-guard-series', 'products-built-for-the-line-u-s-navy', 'products-built-for-the-line-u-s-marine-corps', 'products-built-for-the-line-u-s-coast-guard', 'products-built-for-the-line-u-s-space-force', 'state-guard-series', 'rotc-series', 'jrotc-series', 'military-schools-academies', 'law-enforcement-corrections', 'firefighting-ems-search-rescue' %}
+    {% assign sq_ofa_special = true %}
+{% endcase %}
+{% unless sq_ofa_special %}
+<style data-sq-ordinary-filtered-results-authority-v1>
+#MainContent.sq-ofa-active collection-component,#MainContent.sq-ofa-active .product-grid,#MainContent.sq-ofa-active #product-grid{display:none!important}#MainContent [data-sq-ofa-products]{display:block!important;width:100%;padding:0 20px 48px;background:#f4f5f3;color:#071d2d}#MainContent [data-sq-ofa-products] .sq-custom-color-products__wrap{max-width:1280px;margin:0 auto}#MainContent [data-sq-ofa-products] .sq-custom-color-products__grid{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:18px!important}#MainContent [data-sq-ofa-products] .sq-custom-color-product__vendor{display:block;margin-top:5px;font-size:.82rem;opacity:.72}@media(max-width:900px){#MainContent [data-sq-ofa-products] .sq-custom-color-products__grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}@media(max-width:600px){#MainContent [data-sq-ofa-products] .sq-custom-color-products__grid{grid-template-columns:1fr!important}}
+</style>
+<script data-sq-ordinary-filtered-results-authority-v1>
+(function(){
+  if(window.__sqOrdinaryFilteredResultsAuthorityV1)return;window.__sqOrdinaryFilteredResultsAuthorityV1=true;
+  var main=document.getElementById('MainContent');if(!main)return;
+  function c(v){return String(v==null?'':v).trim()}function n(v){return c(v).toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ')}function e(v){return c(v).replace(/[&<>"']/g,function(k){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[k]})}
+  function f(){var q=new URLSearchParams(location.search);return{maker:c(q.get('sq_maker')||q.get('filter.p.vendor')),color:c(q.get('sq_color_pattern'))}}
+  function hidden(p){var t=n(p&&p.product_type);return !p||t==='options hidden product'||t==='options_hidden_product'}
+  function colors(p){var out=[],seen={};function add(v){v=c(v);var k=n(v);if(!v||seen[k])return;seen[k]=1;out.push(v)};(Array.isArray(p&&p.tags)?p.tags:[]).forEach(function(t){var m=c(t).match(/^(?:sq\s+)?(?:color\s*\/\s*pattern|color|colour|pattern|camo|camouflage)\s*:\s*(.+)$/i);if(m)add(m[1])});var os=Array.isArray(p&&p.options)?p.options:[],vs=Array.isArray(p&&p.variants)?p.variants:[];os.forEach(function(o,i){var name=c(typeof o==='string'?o:o&&o.name);if(/color|colour|pattern|camo|camouflage/i.test(name))vs.forEach(function(v){add(v&&v['option'+(i+1)])})});return out}
+  function match(p,a){if(hidden(p))return false;if(a.maker&&n(p.vendor)!==n(a.maker))return false;if(a.color&&!colors(p).some(function(x){return n(x)===n(a.color)}))return false;return true}
+  function image(p){var x=(p&&p.featured_image)||(p&&p.image)||(p&&p.images&&p.images[0]);if(typeof x==='string')return x;return c(x&&(x.src||x.url))}
+  function clean(){var old=main.querySelector('[data-sq-ofa-products]');if(old)old.remove();main.classList.remove('sq-ofa-active')}
+  function render(ps){var a=f();if(!a.maker&&!a.color){clean();return false}if(!Array.isArray(ps)||!ps.length)return false;var seen={},all=[];ps.forEach(function(p){if(p&&p.handle&&!seen[p.handle]){seen[p.handle]=1;all.push(p)}});var out=all.filter(function(p){return match(p,a)});if(!out.length)return false;clean();var s=document.createElement('section');s.className='sq-custom-color-products sq-ofa-products';s.dataset.sqOfaProducts='true';s.dataset.sqFilteredProductSurfaceGuardProducts='true';s.dataset.sqCategoryUniverseProducts='true';var label=[a.maker,a.color].filter(Boolean).join(' / '),h='<div class="sq-custom-color-products__wrap"><div class="sq-custom-color-products__head"><div><h2>'+e(label||'Filtered Products')+'</h2><p>'+out.length+' synchronized products. Sold-out products are included.</p></div></div><div class="sq-custom-color-products__grid">';out.forEach(function(p){var src=image(p);h+='<a class="sq-custom-color-product" href="/products/'+encodeURIComponent(c(p.handle))+'"><span class="sq-custom-color-product__media">'+(src?'<img src="'+e(src)+'" alt="'+e(p.title)+'" loading="lazy" decoding="async">':'')+'</span><span class="sq-custom-color-product__copy"><strong>'+e(p.title)+'</strong>'+(p.vendor?'<span class="sq-custom-color-product__vendor">'+e(p.vendor)+'</span>':'')+'</span></a>'});h+='</div></div>';s.innerHTML=h;var host=main.querySelector('.sq-global-refine-main')||main;host.insertBefore(s,host.firstChild);main.classList.add('sq-ofa-active');window.dispatchEvent(new CustomEvent('sq:ordinary-filtered-results-ready',{detail:{products:out,maker:a.maker,color:a.color}}));return true}
+  function consume(d){var ps=d&&Array.isArray(d.products)?d.products:null;if(!ps&&window.__sqDirectFacetUniverse&&Array.isArray(window.__sqDirectFacetUniverse.products))ps=window.__sqDirectFacetUniverse.products;return render(ps)}
+  window.addEventListener('sq:refine-universe-ready',function(ev){setTimeout(function(){consume(ev&&ev.detail)},20)});window.addEventListener('sq:refine-results-ready',function(){setTimeout(function(){consume(window.__sqDirectFacetUniverse)},40)});window.addEventListener('popstate',function(){setTimeout(function(){consume()},50)});
+  var tries=0,iv=setInterval(function(){tries++;consume();if(tries>=80)clearInterval(iv)},150);consume();
+})();
+</script>
+{% endunless %}
+{% endif %}
