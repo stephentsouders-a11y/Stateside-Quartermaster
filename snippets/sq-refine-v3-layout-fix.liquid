@@ -18,7 +18,7 @@ Keeps the V3 products-per-page control and product surface together in the right
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:auto;grid-row:auto}
 }
 </style>
-{% if collection.handle == 'accessories-gifts-collectibles' or collection.handle == 'airsoft-milsim' or collection.handle == 'apparel' %}
+{% if collection.handle == 'accessories-gifts-collectibles' or collection.handle == 'airsoft-milsim' or collection.handle == 'apparel' or collection.handle == 'armed-forces-gear' %}
 <script data-sq-refine-v3-route-fix="{{ collection.handle | escape }}">
 (function(){
   var route='{{ collection.handle | escape }}';
@@ -28,6 +28,9 @@ Keeps the V3 products-per-page control and product surface together in the right
     var main=document.getElementById('MainContent');
     if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
     document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]').forEach(function(node){if(!main.contains(node))node.removeAttribute('data-sq-refine-v3-hidden-nav')});
+    if(route==='armed-forces-gear'){
+      main.querySelectorAll('[id*="sq_afg_branch_buttons"]').forEach(function(node){node.dataset.sqRefineV3HiddenNav='true';node.style.pointerEvents='none'});
+    }
     var sidebar=main.querySelector('.sq-refine-v3-sidebar');
     if(!sidebar)return false;
     sidebar.querySelectorAll('input[data-kind="structural"]').forEach(function(input){
