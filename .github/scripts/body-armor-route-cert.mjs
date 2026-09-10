@@ -1,3 +1,4 @@
+// rerun after true-route Army/ARNG parity source repair
 import { chromium } from 'playwright';
 const BASE='https://www.statesideqm.com',PREVIEW='158561894555';
 const ROUTES=[
@@ -27,7 +28,7 @@ async function check(browser,root,mobile){
    const falseSet=new Set(['all','stateside-quartermaster-logo-merch','air-national-guard-series','state-guard-series','rotc-series','jrotc-series','military-schools-academies','public-safety-series','army-national-guard-series']);
    const falseTargets=[...(sidebar?.querySelectorAll('input[data-kind="structural"][data-target]')||[])].map(i=>{try{return new URL(i.dataset.target,location.origin).pathname.split('/')[2]||''}catch{return''}}).filter(h=>falseSet.has(h)&&h!==root);
    const checks={path:location.pathname===expected,ready:main?.dataset.sqRefineV3Ready==='true',cleanup:main?.dataset.sqRefineV3RootCleanup==='true',isolation:isolation===root,sidebar:!!sidebar&&getComputedStyle(sidebar).display!=='none',title:(sidebar?.textContent||'').includes('Refine Products'),pageSizes:['50','100','250'].every(v=>size.includes(v)),default50:!!document.querySelector('.sq-refine-v3-page-size input[value="50"]:checked'),groups:groups.length>0,inactiveClosed,activeOpen,legacy:legacy===0,oldSize:[...document.querySelectorAll('.vac-page-size')].every(el=>getComputedStyle(el).display==='none'),falseTargets:falseTargets.length===0,grid:!!grid,cards:cards.length>0&&cards.length<=50,columns:colOk,nativeColumn:!!results?.querySelector('.sq-collection-products-column'),sticky:mobile?sticky!=='sticky':sticky==='sticky'};
-   return {checks,error:main?.dataset.sqRefineV3Error||'',href:location.href,cards:cards.length,gridCols,posCols,template,groups:groups.length,structural:sidebar?.querySelectorAll('input[data-kind="structural"]').length||0,legacy,falseTargets,sticky,isolation};
+   return {checks,error:main?.dataset.sqRefineV3Error||'',href:location.href,cards:cards.length,gridCols,posCols,template,groups:groups.length,structural:sidebar?.querySelectorAll('input[data-kind="structural"]').length||0,legacy,falseTargets,sticky,isolation,parity:main?.dataset.sqArmyGuardParityV3||'',parityError:main?.dataset.sqArmyGuardParityV3Error||''};
  },{root,mobile,expected});
  const pass=(r?.status()||0)<400&&errors.length===0&&Object.values(d.checks).every(Boolean);
  await c.close(); return{viewport:mobile?'mobile':'desktop',http:r?.status()||0,errors,data:d,pass};
