@@ -5,7 +5,7 @@ window.__sqGlobalRefineAuthorityV2=true;
 window.__sqGlobalRefineVisibleSurfaceFix=true;
 window.__sqCategoryUniverseV5=true;
 window.__sqGlobalRefineCheckboxControls=true;
-{% if collection.handle == 'military-schools-academies' %}window.__sqAcademyExclusiveTreeV6=true;{% endif %}
+if(location.pathname==='/collections/military-schools-academies')window.__sqAcademyExclusiveTreeV6=true;
 /* V3 owns these collection roots. Block the older PBTL unified-tree runtime and
    both legacy recovery loops before they can replace MainContent. State Guard is
    not in this root list and is therefore unaffected. */
