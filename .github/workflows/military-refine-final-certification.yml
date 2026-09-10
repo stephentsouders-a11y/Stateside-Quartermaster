@@ -1,0 +1,63 @@
+name: Military Refine final certification
+on:
+  push:
+    paths:
+      - '.github/workflows/military-refine-final-certification.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - {slug: rotc-series, name: 'ROTC Series', path: /collections/rotc-series}
+          - {slug: jrotc-series, name: 'JROTC Series', path: /collections/jrotc-series}
+          - {slug: military-schools-academies, name: 'Military Schools & Academies', path: /collections/military-schools-academies}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify military Refine bridge
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          NAME: ${{ matrix.name }}
+          ROUTE: ${{ matrix.path }}
+        run: |
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage(); page.setDefaultTimeout(15000); page.setDefaultNavigationTimeout(60000);
+          const bad429=[],bad5xx=[]; page.on('response',r=>{if(r.status()===429)bad429.push(r.url());if(r.status()>=500)bad5xx.push(`${r.status()} ${r.url()}`)});
+          const o={name:process.env.NAME,status:null,usableMs:null,base:{},vendor:null,urlFiltered:false,checked:false,bridge:false,vendors:[],allMatch:false,cleared:false,bad429:[],bad5xx:[],outcome:'FAIL',reasons:[]};
+          const challenge=()=>page.evaluate(()=>/verify you are human|just a moment|attention required|performing security verification/i.test((document.title||'')+' '+(document.body?.innerText||''))).catch(()=>false);
+          await sleep(4500);const prime=new URL('/',process.env.BASE);prime.searchParams.set('preview_theme_id',process.env.THEME);const pr=await page.goto(prime.toString(),{waitUntil:'domcontentloaded'});await sleep(700);bad429.length=0;bad5xx.length=0;
+          if(!pr||pr.status()===429||pr.status()>=500||await challenge()){o.outcome='INFRA';o.reasons.push('preview infrastructure')}
+          if(o.outcome!=='INFRA'){
+            const t=Date.now(),r=await page.goto(new URL(process.env.ROUTE,process.env.BASE).toString(),{waitUntil:'domcontentloaded'});o.status=r?.status()??null;
+            if(o.status===429||o.status>=500||await challenge()){o.outcome='INFRA';o.reasons.push(`navigation ${o.status}`)}
+            if(o.outcome!=='INFRA'){
+              for(let i=0;i<35;i++){const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),s=document.querySelector('.sq-global-refine-sidebar');if(!m||!s)return false;const mr=m.getBoundingClientRect(),sr=s.getBoundingClientRect();return mr.width>2&&mr.height>2&&sr.width>2&&sr.height>2});if(ok){o.usableMs=Date.now()-t;break}await sleep(200)}
+              o.base=await page.evaluate(()=>{const m=document.querySelector('#MainContent');const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return{sidebarCount:m?[...m.querySelectorAll('.sq-global-refine-sidebar')].filter(vis).length:0,nativeFilters:m?[...m.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length:0,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,broken:m?[...m.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).length:0,manufacturer:m?[...m.querySelectorAll('.sq-global-refine-manufacturer-checkbox')].length:0,bridgeMarker:document.querySelectorAll('script[data-sq-military-filtered-results-bridge-v1]').length}});
+              const md=page.locator('.sq-global-refine-sidebar details').filter({hasText:/Manufacturer/i}).first();if((await md.getAttribute('open'))===null)await md.locator('summary').click().catch(()=>{});const box=md.locator('.sq-global-refine-manufacturer-checkbox').first();o.vendor=await box.inputValue();
+              await box.evaluate(el=>{el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(u=>{const q=new URL(u).searchParams;return q.get('filter.p.vendor')===o.vendor&&q.get('sq_maker')===o.vendor},{timeout:18000}).catch(()=>{});
+              const bridge=page.locator('#MainContent [data-sq-military-filtered-products]');await bridge.waitFor({state:'attached',timeout:10000}).catch(()=>{});await sleep(500);
+              const q=new URL(page.url()).searchParams;o.urlFiltered=q.get('filter.p.vendor')===o.vendor&&q.get('sq_maker')===o.vendor;o.checked=await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().isChecked().catch(()=>false);o.bridge=await bridge.count()>0;o.vendors=await bridge.locator('.sq-custom-color-product__vendor').evaluateAll(xs=>xs.slice(0,8).map(x=>(x.textContent||'').trim()).filter(Boolean)).catch(()=>[]);o.allMatch=o.vendors.length>0&&o.vendors.every(v=>v.toLowerCase()===String(o.vendor).toLowerCase());
+              const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first();if(await active.count()){await active.evaluate(el=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(u=>{const q2=new URL(u).searchParams;return !q2.has('filter.p.vendor')&&!q2.has('sq_maker')},{timeout:18000}).catch(()=>{});await sleep(400);const q2=new URL(page.url()).searchParams;o.cleared=!q2.has('filter.p.vendor')&&!q2.has('sq_maker')}
+            }
+          }
+          o.bad429=[...new Set(bad429)];o.bad5xx=[...new Set(bad5xx)];if(o.bad429.length||o.bad5xx.length||await challenge()){o.outcome='INFRA';if(o.bad429.length)o.reasons.push(`${o.bad429.length} HTTP 429`);if(o.bad5xx.length)o.reasons.push(`${o.bad5xx.length} HTTP 5xx`)}
+          if(o.outcome!=='INFRA'){if(o.status!==200)o.reasons.push(`HTTP ${o.status}`);if(o.usableMs===null||o.usableMs>5000)o.reasons.push(`usable ${o.usableMs}ms`);if(o.base.sidebarCount!==1)o.reasons.push(`sidebar ${o.base.sidebarCount}`);if(o.base.nativeFilters!==0)o.reasons.push(`native filters ${o.base.nativeFilters}`);if(o.base.overflow)o.reasons.push('overflow');if(o.base.broken)o.reasons.push(`${o.base.broken} broken images`);if(!o.base.manufacturer)o.reasons.push('manufacturer empty');if(o.base.bridgeMarker!==1)o.reasons.push(`bridge marker ${o.base.bridgeMarker}`);if(!o.urlFiltered)o.reasons.push('dual URL failed');if(!o.checked)o.reasons.push('checkbox failed');if(!o.bridge)o.reasons.push('military filtered bridge missing');if(!o.allMatch)o.reasons.push(`vendor mismatch/empty: ${o.vendors.join(', ')}`);if(!o.cleared)o.reasons.push('clear failed');o.outcome=o.reasons.length?'FAIL':'PASS'}
+          console.log('\nMILITARY CERT RESULT\n'+JSON.stringify(o,null,2));await browser.close();if(o.outcome!=='PASS')process.exitCode=2;
+          EOF
+          node cert.mjs
