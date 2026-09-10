@@ -4,6 +4,7 @@ on:
     branches: [refine-restart-v3]
     paths:
       - '.github/workflows/refine-v3-route-cert.yml'
+      - '.github/scripts/afg-grid-style-diagnostic.mjs'
       - '.github/scripts/refine-v3-route-cert-v2.mjs'
       - 'snippets/sq-refine-v3-layout-fix.liquid'
   workflow_dispatch:
@@ -11,23 +12,12 @@ jobs:
   certify:
     runs-on: ubuntu-latest
     timeout-minutes: 12
-    env:
-      SQ_ROUTE_NAME: Armed Forces Gear
-      SQ_ROUTE: /collections/armed-forces-gear
-      SQ_ROUTE_FIX: armed-forces-gear
-      SQ_FALSE_HANDLES: all,stateside-quartermaster-logo-merch,air-national-guard-series,state-guard-series,rotc-series,jrotc-series,military-schools-academies,public-safety-series,army-national-guard-series
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Run Armed Forces Gear certification
-        run: node .github/scripts/refine-v3-route-cert-v2.mjs
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: refine-v3-route-cert-armed-forces-gear
-          path: cert-v3-route-v2/
-          retention-days: 7
-# route: 4-armed-forces-gear
+      - name: Diagnose Armed Forces Gear grid visibility
+        run: node .github/scripts/afg-grid-style-diagnostic.mjs
+# route: 4-afg-diagnostic
