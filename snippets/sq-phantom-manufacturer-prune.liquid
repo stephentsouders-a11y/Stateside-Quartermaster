@@ -1,0 +1,15 @@
+{% if request.page_type == 'collection' and collection.handle == 'literature' %}
+<script data-sq-phantom-manufacturer-prune-v1>
+(function(){
+  function prune(){
+    document.querySelectorAll('.sq-global-refine-manufacturer-checkbox').forEach(function(box){
+      if(String(box.value||'').trim().toLowerCase()!=='books by splitshops')return;
+      var row=box.closest('label,.sq-global-refine-sidebar__item,li,div');
+      if(row)row.remove();else box.remove();
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',prune,{once:true});else prune();
+  var root=document.getElementById('MainContent');if(root)new MutationObserver(prune).observe(root,{childList:true,subtree:true});
+})();
+</script>
+{% endif %}
