@@ -1,0 +1,34 @@
+{% doc %}
+Shared storefront collection-catalog request coordinator. It deduplicates same-route /products.json reads across legacy category, Refine, image-repair, and filtered-surface systems, normalizes away sort_by for cache identity, and limits unique catalog requests to two concurrent calls. It only intercepts same-origin GET requests to collection products.json endpoints.
+{% enddoc %}
+{% if request.page_type == 'collection' %}
+<script data-sq-catalog-request-dedupe-v1>
+(function(){
+  if(window.__sqCatalogRequestDedupeV1)return;window.__sqCatalogRequestDedupeV1=true;
+  var nativeFetch=window.fetch.bind(window),cache=new Map(),inflight=new Map(),queue=[],active=0,MAX=2;
+  function info(input,init){
+    try{
+      var method=String((init&&init.method)||(input&&input.method)||'GET').toUpperCase();if(method!=='GET')return null;
+      var raw=typeof input==='string'||input instanceof URL?String(input):(input&&input.url)||'';if(!raw)return null;
+      var u=new URL(raw,location.origin);if(u.origin!==location.origin||!/^\/collections\/.+\/products\.json$/.test(u.pathname))return null;
+      var keyUrl=new URL(u.href);keyUrl.searchParams.delete('sort_by');keyUrl.searchParams.sort();
+      return{key:keyUrl.pathname+(keyUrl.search?'?'+keyUrl.searchParams.toString():''),url:u.href};
+    }catch(_){return null}
+  }
+  function pump(){
+    while(active<MAX&&queue.length){
+      (function(job){active++;nativeFetch(job.input,job.init).then(function(resp){job.resolve(resp)}).catch(job.reject).finally(function(){active--;pump()})})(queue.shift());
+    }
+  }
+  function scheduled(input,init){return new Promise(function(resolve,reject){queue.push({input:input,init:init,resolve:resolve,reject:reject});pump()})}
+  window.fetch=function(input,init){
+    var meta=info(input,init);if(!meta)return nativeFetch(input,init);
+    var hit=cache.get(meta.key);if(hit)return Promise.resolve(hit.clone());
+    var running=inflight.get(meta.key);if(running)return running.then(function(r){return r.clone()});
+    var base=scheduled(input,init).then(function(r){if(r&&r.ok){try{cache.set(meta.key,r.clone())}catch(_){}}return r}).finally(function(){inflight.delete(meta.key)});
+    inflight.set(meta.key,base);return base.then(function(r){return r.clone()});
+  };
+  window.__sqCatalogRequestDedupe={cache:cache,inflight:inflight,queue:queue,get active(){return active},max:MAX};
+})();
+</script>
+{% endif %}
