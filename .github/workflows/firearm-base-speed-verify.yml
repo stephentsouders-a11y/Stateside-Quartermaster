@@ -18,7 +18,7 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Verify Firearm base load only
+      - name: Profile Firearm base load
         env:
           BASE: https://www.statesideqm.com
           THEME: '158561894555'
@@ -34,8 +34,9 @@ jobs:
           const u=new URL('/collections/firearm-accessories',process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);
           const start=Date.now(); const resp=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});
           let usable=null; for(let i=0;i<40;i++){const ok=await page.locator('#MainContent').evaluate(m=>{const r=m.getBoundingClientRect(),s=getComputedStyle(m);return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2&&!!m.querySelector('h1,a[href*="/collections/"],a[href*="/products/"]')}).catch(()=>false);if(ok){usable=Date.now()-start;break}await new Promise(r=>setTimeout(r,250))}
-          const result={status:resp?.status()??null,usableMs:usable,bad:[...new Set(bad)],pass:false};result.pass=result.status===200&&result.bad.length===0&&usable!==null&&usable<=5000;
-          console.log('\nBASE SPEED RESULT\n'+JSON.stringify(result,null,2));fs.writeFileSync('out/report.json',JSON.stringify(result,null,2));await page.screenshot({path:'out/base.png',fullPage:false});await browser.close();if(!result.pass)process.exitCode=2;
+          const perf=await page.evaluate(()=>{const nav=performance.getEntriesByType('navigation')[0];const resources=performance.getEntriesByType('resource').map(r=>({name:r.name,initiatorType:r.initiatorType,startTime:Math.round(r.startTime),duration:Math.round(r.duration),responseEnd:Math.round(r.responseEnd),transferSize:r.transferSize||0})).sort((a,b)=>b.duration-a.duration).slice(0,20);return{nav:nav?{ttfb:Math.round(nav.responseStart),responseEnd:Math.round(nav.responseEnd),domInteractive:Math.round(nav.domInteractive),dclStart:Math.round(nav.domContentLoadedEventStart),dclEnd:Math.round(nav.domContentLoadedEventEnd),loadStart:Math.round(nav.loadEventStart),transferSize:nav.transferSize}:null,resources}});
+          const result={status:resp?.status()??null,usableMs:usable,bad:[...new Set(bad)],perf,pass:false};result.pass=result.status===200&&result.bad.length===0&&usable!==null&&usable<=5000;
+          console.log('\nBASE SPEED PROFILE\n'+JSON.stringify(result,null,2));fs.writeFileSync('out/report.json',JSON.stringify(result,null,2));await page.screenshot({path:'out/base.png',fullPage:false});await browser.close();if(!result.pass)process.exitCode=2;
           EOF
           node speed.mjs
       - uses: actions/upload-artifact@v4
