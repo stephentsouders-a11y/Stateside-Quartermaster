@@ -1,8 +1,20 @@
 {% doc %}
-Locks V3 product-card sizing so every desktop three-column collection uses the same large visual scale as the approved Apparel & Headwear reference. V3 only; State Guard remains excluded.
+Locks V3 product-card sizing so every desktop three-column collection uses the same large visual scale as the approved Apparel & Headwear reference. It also suppresses every legacy refinement sidebar on V3 routes while preserving legacy main-content/navigation blocks at full width. V3 only; State Guard remains excluded.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 <style data-sq-refine-v3-product-scale-lock>
+/* V3 is the one and only refinement surface. Keep any legacy main content, but never show its old sidebar. */
+#MainContent.sq-refine-v3-active .sq-global-refine-sidebar,
+#MainContent.sq-refine-v3-active .sq-collection-sidebar,
+#MainContent.sq-refine-v3-active .facets-block-wrapper,
+#MainContent.sq-refine-v3-active .facets-container,
+#MainContent.sq-refine-v3-active .facets-wrapper,
+#MainContent.sq-refine-v3-active [class*="filter-sidebar"]:not(.sq-refine-v3-sidebar){display:none!important;visibility:hidden!important;pointer-events:none!important}
+#MainContent.sq-refine-v3-active .sq-global-refine-layout,
+#MainContent.sq-refine-v3-active .sq-ts-v2-layout.sq-global-refine-layout{grid-template-columns:minmax(0,1fr)!important}
+#MainContent.sq-refine-v3-active .sq-global-refine-main,
+#MainContent.sq-refine-v3-active .sq-global-refine-layout>.sq-global-refine-main,
+#MainContent.sq-refine-v3-active .sq-ts-v2-layout.sq-global-refine-layout>.sq-global-refine-main{grid-column:1 / -1!important;width:100%!important;max-width:none!important;min-width:0!important;margin-inline:0!important}
 @media (min-width:901px){
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout{width:min(calc(100% - 32px),1440px)!important;grid-template-columns:270px minmax(0,1fr)!important;gap:22px!important}
   #MainContent.sq-refine-v3-active .sq-refine-v3-results,
