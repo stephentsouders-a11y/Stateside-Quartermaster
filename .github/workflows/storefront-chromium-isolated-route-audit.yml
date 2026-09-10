@@ -4,11 +4,6 @@ on:
   push:
     paths:
       - '.github/workflows/storefront-chromium-isolated-route-audit.yml'
-      - 'snippets/sq-global-refine-direct-data.liquid'
-      - 'snippets/sq-global-refine-checkbox-controls.liquid'
-      - 'snippets/sq-category-universe-facet-authority.liquid'
-      - 'snippets/sq-filtered-product-surface-guard.liquid'
-      - 'snippets/sq-storefront-content-guard.liquid'
 permissions:
   contents: read
 jobs:
@@ -20,52 +15,51 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-          - {slug: accessories-gifts-collectibles, name: 'Accessories, Gifts & Collectibles', path: /collections/accessories-gifts-collectibles, type: collection}
-          - {slug: airsoft-milsim, name: 'Airsoft & Milsim', path: /collections/airsoft-milsim, type: collection}
-          - {slug: apparel-headwear, name: 'Apparel & Headwear', path: /collections/apparel, type: collection}
-          - {slug: armed-forces-gear, name: 'Armed Forces Gear', path: /collections/armed-forces-gear, type: collection}
-          - {slug: armored-vehicles, name: 'Armored Vehicles', path: /pages/armored-vehicles-purchase-inquiry, type: page}
-          - {slug: art-military-prints, name: 'Art & Military Prints', path: /collections/art, type: collection}
-          - {slug: body-armor-ballistic-protection, name: 'Body Armor & Ballistic Protection', path: /collections/body-armor-ballistic-protection, type: collection}
-          - {slug: books-literature-manuals-reference, name: 'Books, Literature, Manuals & Reference', path: /collections/literature, type: collection}
-          - {slug: child-safety-shop, name: 'Child Safety Shop', path: /collections/child-safety-shop, type: collection}
-          - {slug: dive-scuba, name: 'DIVE / SCUBA', path: /collections/dive-scuba, type: collection}
-          - {slug: firearm-accessories, name: 'Firearm Accessories, Holsters & Shooting Gear', path: /collections/firearm-accessories, type: collection}
-          - {slug: first-aid-medical-ifak, name: 'First Aid, Medical & IFAK', path: /collections/first-aid-medical-ifak, type: collection}
-          - {slug: flags-displays-memorials, name: 'Flags, Displays & Memorials', path: /collections/flags-patriotic-decor, type: collection}
-          - {slug: flashlights-lighting-power, name: 'Flashlights, Lighting & Power', path: /collections/flashlights-lighting, type: collection}
-          - {slug: footwear-gloves-eyewear, name: 'Footwear, Gloves & Eyewear', path: /collections/footwear-gloves-eyewear, type: collection}
-          - {slug: k9-working-dog-gear, name: 'K9 & Working Dog Gear', path: /collections/k9-dog-gear, type: collection}
-          - {slug: knives-axes-multi-tools, name: 'Knives, Axes & Multi-Tools', path: /collections/knives-axes-cutlery, type: collection}
-          - {slug: morale-patches-tactical-id, name: 'Morale Patches, Stickers & Tactical ID', path: /collections/morale-patches-tactical-id, type: collection}
-          - {slug: outdoor-survival-preparedness, name: 'Outdoor, Survival & Preparedness', path: /collections/outdoor-preparedness-gear, type: collection}
-          - {slug: patriotic-american-heritage, name: 'Patriotic & American Heritage', path: /collections/patriotic-american-heritage, type: collection}
-          - {slug: safety-rescue-climbing, name: 'Safety, Rescue & Climbing', path: /collections/safety-rescue-climbing, type: collection}
-          - {slug: sta-brite-insignia, name: 'Sta-Brite Insignia', path: /collections/sta-brite-insignia, type: collection}
-          - {slug: tactical-gear, name: 'Tactical Gear, Packs & Load Carriage', path: /collections/tactical-gear, type: collection}
-          - {slug: thin-line-shop, name: 'Thin Line Shop', path: /collections/thin-line, type: collection}
-          - {slug: uniforms-insignia-identification, name: 'Uniforms, Insignia & Identification', path: /collections/uniforms, type: collection}
-          - {slug: watches-timepieces, name: 'Watches & Timepieces', path: /collections/watches, type: collection}
-          - {slug: zippo-lighters-fire-starters, name: 'Zippo, Lighters & Fire Starters', path: /collections/zippos-lighters-torches, type: collection}
-          - {slug: logo-merch, name: 'Logo Merch', path: /collections/stateside-quartermaster-logo-merch, type: collection}
-          - {slug: army-national-guard-series, name: 'Army National Guard Series', path: /collections/army-national-guard-series, type: collection}
-          - {slug: air-national-guard-series, name: 'Air National Guard Series', path: /collections/air-national-guard-series, type: collection}
-          - {slug: state-guard-series, name: 'State Guard Series', path: /collections/state-guard-series, type: collection}
-          - {slug: us-army-series, name: 'U.S. Army Series', path: /collections/products-built-for-the-line-u-s-army, type: collection}
-          - {slug: us-navy-series, name: 'U.S. Navy Series', path: /collections/products-built-for-the-line-u-s-navy, type: collection}
-          - {slug: us-air-force-series, name: 'U.S. Air Force Series', path: /collections/products-built-for-the-line-u-s-air-force, type: collection}
-          - {slug: us-marine-corps-series, name: 'U.S. Marine Corps Series', path: /collections/products-built-for-the-line-u-s-marine-corps, type: collection}
-          - {slug: us-coast-guard-series, name: 'U.S. Coast Guard Series', path: /collections/products-built-for-the-line-u-s-coast-guard, type: collection}
-          - {slug: us-space-force-series, name: 'U.S. Space Force Series', path: /collections/products-built-for-the-line-u-s-space-force, type: collection}
-          - {slug: rotc-series, name: 'ROTC Series', path: /collections/rotc-series, type: collection}
-          - {slug: jrotc-series, name: 'JROTC Series', path: /collections/jrotc-series, type: collection}
-          - {slug: military-schools-academies, name: 'Military Schools & Academies', path: /collections/military-schools-academies, type: collection}
-          - {slug: law-enforcement-corrections, name: 'Law Enforcement & Corrections', path: /collections/law-enforcement-corrections, type: collection}
-          - {slug: firefighting-ems-sar, name: 'Firefighting, EMS & Search & Rescue', path: /collections/firefighting-ems-search-rescue, type: collection}
+          - {slug: accessories-gifts-collectibles, name: 'Accessories, Gifts & Collectibles', path: /collections/accessories-gifts-collectibles, mode: ordinary}
+          - {slug: airsoft-milsim, name: 'Airsoft & Milsim', path: /collections/airsoft-milsim, mode: ordinary}
+          - {slug: apparel-headwear, name: 'Apparel & Headwear', path: /collections/apparel, mode: ordinary}
+          - {slug: armed-forces-gear, name: 'Armed Forces Gear', path: /collections/armed-forces-gear, mode: ordinary}
+          - {slug: armored-vehicles, name: 'Armored Vehicles', path: /pages/armored-vehicles-purchase-inquiry, mode: page}
+          - {slug: art-military-prints, name: 'Art & Military Prints', path: /collections/art, mode: ordinary}
+          - {slug: body-armor-ballistic-protection, name: 'Body Armor & Ballistic Protection', path: /collections/body-armor-ballistic-protection, mode: ordinary}
+          - {slug: books-literature-manuals-reference, name: 'Books, Literature, Manuals & Reference', path: /collections/literature, mode: ordinary}
+          - {slug: child-safety-shop, name: 'Child Safety Shop', path: /collections/child-safety-shop, mode: ordinary}
+          - {slug: dive-scuba, name: 'DIVE / SCUBA', path: /collections/dive-scuba, mode: ordinary}
+          - {slug: firearm-accessories, name: 'Firearm Accessories, Holsters & Shooting Gear', path: /collections/firearm-accessories, mode: ordinary}
+          - {slug: first-aid-medical-ifak, name: 'First Aid, Medical & IFAK', path: /collections/first-aid-medical-ifak, mode: ordinary}
+          - {slug: flags-displays-memorials, name: 'Flags, Displays & Memorials', path: /collections/flags-patriotic-decor, mode: ordinary}
+          - {slug: flashlights-lighting-power, name: 'Flashlights, Lighting & Power', path: /collections/flashlights-lighting, mode: ordinary}
+          - {slug: footwear-gloves-eyewear, name: 'Footwear, Gloves & Eyewear', path: /collections/footwear-gloves-eyewear, mode: ordinary}
+          - {slug: k9-working-dog-gear, name: 'K9 & Working Dog Gear', path: /collections/k9-dog-gear, mode: ordinary}
+          - {slug: knives-axes-multi-tools, name: 'Knives, Axes & Multi-Tools', path: /collections/knives-axes-cutlery, mode: ordinary}
+          - {slug: morale-patches-tactical-id, name: 'Morale Patches, Stickers & Tactical ID', path: /collections/morale-patches-tactical-id, mode: ordinary}
+          - {slug: outdoor-survival-preparedness, name: 'Outdoor, Survival & Preparedness', path: /collections/outdoor-preparedness-gear, mode: ordinary}
+          - {slug: patriotic-american-heritage, name: 'Patriotic & American Heritage', path: /collections/patriotic-american-heritage, mode: ordinary}
+          - {slug: safety-rescue-climbing, name: 'Safety, Rescue & Climbing', path: /collections/safety-rescue-climbing, mode: ordinary}
+          - {slug: sta-brite-insignia, name: 'Sta-Brite Insignia', path: /collections/sta-brite-insignia, mode: ordinary}
+          - {slug: tactical-gear, name: 'Tactical Gear, Packs & Load Carriage', path: /collections/tactical-gear, mode: ordinary}
+          - {slug: thin-line-shop, name: 'Thin Line Shop', path: /collections/thin-line, mode: ordinary}
+          - {slug: uniforms-insignia-identification, name: 'Uniforms, Insignia & Identification', path: /collections/uniforms, mode: ordinary}
+          - {slug: watches-timepieces, name: 'Watches & Timepieces', path: /collections/watches, mode: ordinary}
+          - {slug: zippo-lighters-fire-starters, name: 'Zippo, Lighters & Fire Starters', path: /collections/zippos-lighters-torches, mode: ordinary}
+          - {slug: logo-merch, name: 'Logo Merch', path: /collections/stateside-quartermaster-logo-merch, mode: ordinary}
+          - {slug: army-national-guard-series, name: 'Army National Guard Series', path: /collections/army-national-guard-series, mode: military}
+          - {slug: air-national-guard-series, name: 'Air National Guard Series', path: /collections/air-national-guard-series, mode: military}
+          - {slug: state-guard-series, name: 'State Guard Series', path: /collections/state-guard-series, mode: military}
+          - {slug: us-army-series, name: 'U.S. Army Series', path: /collections/products-built-for-the-line-u-s-army, mode: military}
+          - {slug: us-navy-series, name: 'U.S. Navy Series', path: /collections/products-built-for-the-line-u-s-navy, mode: military}
+          - {slug: us-air-force-series, name: 'U.S. Air Force Series', path: /collections/products-built-for-the-line-u-s-air-force, mode: military}
+          - {slug: us-marine-corps-series, name: 'U.S. Marine Corps Series', path: /collections/products-built-for-the-line-u-s-marine-corps, mode: military}
+          - {slug: us-coast-guard-series, name: 'U.S. Coast Guard Series', path: /collections/products-built-for-the-line-u-s-coast-guard, mode: military}
+          - {slug: us-space-force-series, name: 'U.S. Space Force Series', path: /collections/products-built-for-the-line-u-s-space-force, mode: military}
+          - {slug: rotc-series, name: 'ROTC Series', path: /collections/rotc-series, mode: military}
+          - {slug: jrotc-series, name: 'JROTC Series', path: /collections/jrotc-series, mode: military}
+          - {slug: military-schools-academies, name: 'Military Schools & Academies', path: /collections/military-schools-academies, mode: military}
+          - {slug: law-enforcement-corrections, name: 'Law Enforcement & Corrections', path: /collections/law-enforcement-corrections, mode: ordinary}
+          - {slug: firefighting-ems-sar, name: 'Firefighting, EMS & Search & Rescue', path: /collections/firefighting-ems-search-rescue, mode: ordinary}
     steps:
       - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
+        with: {node-version: '24'}
       - run: |
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
@@ -77,7 +71,7 @@ jobs:
           SLUG: ${{ matrix.slug }}
           NAME: ${{ matrix.name }}
           ROUTE: ${{ matrix.path }}
-          TYPE: ${{ matrix.type }}
+          MODE: ${{ matrix.mode }}
         run: |
           cat > audit.mjs <<'EOF'
           import { chromium } from 'playwright';
@@ -87,26 +81,32 @@ jobs:
           const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
           const page=await ctx.newPage();page.setDefaultTimeout(16000);page.setDefaultNavigationTimeout(60000);
           const bad429=[],bad5xx=[];page.on('response',r=>{if(r.status()===429)bad429.push(r.url());if(r.status()>=500)bad5xx.push(`${r.status()} ${r.url()}`)});
-          const out={name:process.env.NAME,slug:process.env.SLUG,status:null,usableMs:null,base:{},vendor:null,urlFiltered:false,checked:false,surface:false,surfaceKind:null,vendors:[],handles:[],allMatch:false,cleared:false,bad429:[],bad5xx:[],outcome:'FAIL',reasons:[]};
+          const out={name:process.env.NAME,slug:process.env.SLUG,mode:process.env.MODE,status:null,usableMs:null,base:{},vendor:null,urlFiltered:false,checked:false,surface:false,surfaceKind:null,vendors:[],allMatch:false,cleared:false,bad429:[],bad5xx:[],outcome:'FAIL',reasons:[]};
           const challenge=()=>page.evaluate(()=>/verify you are human|just a moment|attention required|performing security verification/i.test((document.title||'')+' '+(document.body?.innerText||''))).catch(()=>false);
-          const visibleHandles=()=>page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return{kind:null,handles:[]};const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};const sels=[['guard','[data-sq-filtered-product-surface-guard-products] a[href*="/products/"]'],['category','[data-sq-category-universe-products] a[href*="/products/"]'],['custom','[data-sq-custom-color-products] a[href*="/products/"]'],['grid','collection-component a[href*="/products/"],.product-grid a[href*="/products/"],product-card a[href*="/products/"]']];for(const [kind,sel] of sels){const hs=[];for(const a of m.querySelectorAll(sel)){if(!vis(a))continue;try{const h=new URL(a.href,location.origin).pathname.match(/^\/products\/([^/?#]+)/)?.[1]||'';if(h&&!hs.includes(h))hs.push(decodeURIComponent(h))}catch{}if(hs.length>=8)break}if(hs.length)return{kind,handles:hs}}return{kind:null,handles:[]}});
-          const vendorsFor=hs=>page.evaluate(handles=>{const ps=window.__sqDirectFacetUniverse&&Array.isArray(window.__sqDirectFacetUniverse.products)?window.__sqDirectFacetUniverse.products:[];const map=new Map(ps.map(p=>[String(p.handle||''),String(p.vendor||'').trim()]));return handles.map(h=>map.get(h)||'').filter(Boolean)},hs).catch(()=>[]);
+          const visibleHandles=()=>page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return{kind:null,handles:[]};const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};const sels=[['guard','[data-sq-filtered-product-surface-guard-products] a[href*="/products/"]'],['military','[data-sq-military-filtered-products] a[href*="/products/"]'],['category','[data-sq-category-universe-products] a[href*="/products/"]'],['custom','[data-sq-custom-color-products] a[href*="/products/"]'],['grid','collection-component a[href*="/products/"],.product-grid a[href*="/products/"],product-card a[href*="/products/"]']];for(const [kind,sel] of sels){const hs=[];for(const a of m.querySelectorAll(sel)){if(!vis(a))continue;try{const h=new URL(a.href,location.origin).pathname.match(/^\/products\/([^/?#]+)/)?.[1]||'';if(h&&!hs.includes(h))hs.push(decodeURIComponent(h))}catch{}if(hs.length>=8)break}if(hs.length)return{kind,handles:hs}}return{kind:null,handles:[]}});
+          async function sampledVendors(handles){const labels=await page.evaluate(({handles,mode})=>{const root=mode==='military'?document.querySelector('#MainContent [data-sq-military-filtered-products]'):document.querySelector('#MainContent [data-sq-filtered-product-surface-guard-products]');if(!root)return[];return [...root.querySelectorAll('.sq-custom-color-product__vendor')].slice(0,8).map(x=>(x.textContent||'').trim()).filter(Boolean)},{handles,mode:process.env.MODE}).catch(()=>[]);if(labels.length)return labels;const vs=[];for(const h of handles.slice(0,4)){await sleep(220);const u=new URL('/products/'+encodeURIComponent(h)+'.js',process.env.BASE);const r=await ctx.request.get(u.toString(),{timeout:12000}).catch(()=>null);if(!r)continue;if(r.status()===429){bad429.push(u.toString());continue}if(r.status()>=500){bad5xx.push(`${r.status()} ${u}`);continue}if(!r.ok())continue;const j=await r.json().catch(()=>null);if(j?.vendor)vs.push(String(j.vendor).trim())}return vs}
           try{
-            await sleep(7000);
-            const prime=new URL('/',process.env.BASE);prime.searchParams.set('preview_theme_id',process.env.THEME);const pr=await page.goto(prime.toString(),{waitUntil:'domcontentloaded'});await sleep(1000);bad429.length=0;bad5xx.length=0;
+            await sleep(6500);
+            const prime=new URL('/',process.env.BASE);prime.searchParams.set('preview_theme_id',process.env.THEME);const pr=await page.goto(prime.toString(),{waitUntil:'domcontentloaded'});await sleep(900);bad429.length=0;bad5xx.length=0;
             if(!pr||pr.status()===429||pr.status()>=500||await challenge()){out.outcome='INFRA';out.reasons.push('preview infrastructure')}
             if(out.outcome!=='INFRA'){
               const started=Date.now();const r=await page.goto(new URL(process.env.ROUTE,process.env.BASE).toString(),{waitUntil:'domcontentloaded'});out.status=r?.status()??null;
               if(out.status===429||out.status>=500||await challenge()){out.outcome='INFRA';out.reasons.push(`navigation ${out.status}`)}
-              if(out.outcome!=='INFRA')for(let i=0;i<35;i++){const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const mr=m.getBoundingClientRect();if(mr.width<3||mr.height<3)return false;return [...m.querySelectorAll('h1,a[href*="/collections/"],a[href*="/products/"],.product-grid,.sq-custom-color-products,.rte')].some(x=>{const s=getComputedStyle(x),r=x.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2})});if(ok){out.usableMs=Date.now()-started;break}await sleep(200)}
-              if(process.env.TYPE==='collection'&&out.outcome!=='INFRA'){await page.locator('.sq-global-refine-sidebar').first().waitFor({state:'visible',timeout:12000}).catch(()=>{});await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:12000}).catch(()=>{})}
-              await sleep(500);
-              out.base=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return{sidebarCount:m?[...m.querySelectorAll('.sq-global-refine-sidebar')].filter(vis).length:0,nativeFilters:m?[...m.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length:0,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,broken:m?[...m.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).length:0,manufacturer:m?[...m.querySelectorAll('.sq-global-refine-manufacturer-checkbox')].length:0,dedupe:document.querySelectorAll('script[data-sq-catalog-request-dedupe-v1]').length,guard:document.querySelectorAll('script[data-sq-filtered-product-surface-guard-v2]').length,directV5:document.querySelectorAll('script[data-sq-global-refine-direct-data-v5]').length,checkboxV3:document.querySelectorAll('script[data-sq-refine-checkbox-navigation="history-v3"]').length}});
-              if(process.env.TYPE==='collection'&&out.outcome!=='INFRA'){
-                const md=page.locator('.sq-global-refine-sidebar details').filter({hasText:/Manufacturer/i}).first();if(await md.count()){if((await md.getAttribute('open').catch(()=>null))===null)await md.locator('summary').click().catch(()=>{});const box=md.locator('.sq-global-refine-manufacturer-checkbox').first();if(await box.count()){out.vendor=await box.inputValue().catch(()=>null);if(out.vendor){await box.evaluate(el=>{el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(u=>{const q=new URL(u).searchParams;return q.get('filter.p.vendor')===out.vendor&&q.get('sq_maker')===out.vendor},{timeout:5000}).catch(()=>{});await page.locator('[data-sq-filtered-product-surface-guard-products]').first().waitFor({state:'attached',timeout:6000}).catch(()=>{});await sleep(300);const q=new URL(page.url()).searchParams;out.urlFiltered=q.get('filter.p.vendor')===out.vendor&&q.get('sq_maker')===out.vendor;out.checked=await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().isChecked().catch(()=>false);const s=await visibleHandles();out.surface=!!s.handles.length;out.surfaceKind=s.kind;out.handles=s.handles.slice(0,8);out.vendors=await vendorsFor(out.handles);if(!out.vendors.length&&s.kind==='guard')out.vendors=await page.locator('[data-sq-filtered-product-surface-guard-products] .sq-custom-color-product__vendor').evaluateAll(xs=>xs.slice(0,8).map(x=>(x.textContent||'').trim()).filter(Boolean)).catch(()=>[]);out.allMatch=out.vendors.length>0&&out.vendors.every(v=>v.toLowerCase()===String(out.vendor).toLowerCase());const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first();if(await active.count()){await active.evaluate(el=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(u=>{const q2=new URL(u).searchParams;return !q2.has('filter.p.vendor')&&!q2.has('sq_maker')},{timeout:5000}).catch(()=>{});const q2=new URL(page.url()).searchParams;out.cleared=!q2.has('filter.p.vendor')&&!q2.has('sq_maker')}}}}}
+              if(out.outcome!=='INFRA'){
+                for(let i=0;i<35;i++){const ok=await page.evaluate(()=>{const m=document.querySelector('#MainContent');if(!m)return false;const mr=m.getBoundingClientRect();if(mr.width<3||mr.height<3)return false;return [...m.querySelectorAll('h1,a[href*="/collections/"],a[href*="/products/"],.product-grid,.sq-custom-color-products,.rte')].some(x=>{const s=getComputedStyle(x),r=x.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2})});if(ok){out.usableMs=Date.now()-started;break}await sleep(200)}
+                if(process.env.MODE!=='page'){await page.locator('.sq-global-refine-sidebar').first().waitFor({state:'visible',timeout:12000}).catch(()=>{});await page.locator('.sq-global-refine-manufacturer-checkbox').first().waitFor({state:'attached',timeout:12000}).catch(()=>{})}
+                await sleep(400);
+                out.base=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return{sidebarCount:m?[...m.querySelectorAll('.sq-global-refine-sidebar')].filter(vis).length:0,nativeFilters:m?[...m.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length:0,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,broken:m?[...m.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).length:0,manufacturer:m?[...m.querySelectorAll('.sq-global-refine-manufacturer-checkbox')].length:0,dedupe:document.querySelectorAll('script[data-sq-catalog-request-dedupe-v1]').length,guard:document.querySelectorAll('script[data-sq-filtered-product-surface-guard-v2]').length,militaryBridge:document.querySelectorAll('script[data-sq-military-filtered-results-bridge-v1]').length,checkboxV3:document.querySelectorAll('script[data-sq-refine-checkbox-navigation="history-v3"]').length}});
+                if(process.env.MODE!=='page'){
+                  const md=page.locator('.sq-global-refine-sidebar details').filter({hasText:/Manufacturer/i}).first();if(await md.count()){if((await md.getAttribute('open').catch(()=>null))===null)await md.locator('summary').click().catch(()=>{});const box=md.locator('.sq-global-refine-manufacturer-checkbox').first();if(await box.count()){out.vendor=await box.inputValue().catch(()=>null);if(out.vendor){await box.evaluate(el=>{el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(u=>{const q=new URL(u).searchParams;return q.get('filter.p.vendor')===out.vendor&&q.get('sq_maker')===out.vendor},{timeout:18000}).catch(()=>{});const target=process.env.MODE==='military'?'#MainContent [data-sq-military-filtered-products]':'#MainContent [data-sq-filtered-product-surface-guard-products]';await page.locator(target).first().waitFor({state:'attached',timeout:12000}).catch(()=>{});await page.waitForFunction(({target})=>document.querySelectorAll(target+' .sq-custom-color-product__vendor').length>0,{target},{timeout:12000}).catch(()=>{});await sleep(300);const q=new URL(page.url()).searchParams;out.urlFiltered=q.get('filter.p.vendor')===out.vendor&&q.get('sq_maker')===out.vendor;out.checked=await page.locator('.sq-global-refine-manufacturer-checkbox:checked').first().isChecked().catch(()=>false);const s=await visibleHandles();out.surface=!!s.handles.length;out.surfaceKind=s.kind;out.vendors=await sampledVendors(s.handles);out.allMatch=out.vendors.length>0&&out.vendors.every(v=>v.toLowerCase()===String(out.vendor).toLowerCase());const active=page.locator('.sq-global-refine-manufacturer-checkbox:checked').first();if(await active.count()){await active.evaluate(el=>{el.checked=false;el.dispatchEvent(new Event('change',{bubbles:true}))});await page.waitForURL(u=>{const q2=new URL(u).searchParams;return !q2.has('filter.p.vendor')&&!q2.has('sq_maker')},{timeout:18000}).catch(()=>{});await sleep(400);const q2=new URL(page.url()).searchParams;out.cleared=!q2.has('filter.p.vendor')&&!q2.has('sq_maker')}}}}}
+              }
             }
             out.bad429=[...new Set(bad429)];out.bad5xx=[...new Set(bad5xx)];if(out.bad429.length||out.bad5xx.length||await challenge()){out.outcome='INFRA';if(out.bad429.length)out.reasons.push(`${out.bad429.length} HTTP 429`);if(out.bad5xx.length)out.reasons.push(`${out.bad5xx.length} HTTP 5xx`)}
-            if(out.outcome!=='INFRA'){if(out.status!==200)out.reasons.push(`HTTP ${out.status}`);if(out.usableMs===null||out.usableMs>5000)out.reasons.push(`usable ${out.usableMs}ms`);if(out.base.overflow)out.reasons.push('horizontal overflow');if(out.base.broken)out.reasons.push(`${out.base.broken} broken images`);if(process.env.TYPE==='page'){if(out.base.sidebarCount!==0)out.reasons.push(`unexpected sidebar ${out.base.sidebarCount}`)}else{if(out.base.sidebarCount!==1)out.reasons.push(`sidebar ${out.base.sidebarCount}`);if(out.base.nativeFilters!==0)out.reasons.push(`native filters ${out.base.nativeFilters}`);if(!out.base.manufacturer)out.reasons.push('manufacturer empty');if(out.base.dedupe!==1)out.reasons.push(`dedupe marker ${out.base.dedupe}`);if(out.base.guard!==1)out.reasons.push(`guard marker ${out.base.guard}`);if(out.base.directV5!==1)out.reasons.push(`direct v5 marker ${out.base.directV5}`);if(out.base.checkboxV3!==1)out.reasons.push(`checkbox v3 marker ${out.base.checkboxV3}`);if(!out.vendor)out.reasons.push('manufacturer unavailable');if(!out.urlFiltered)out.reasons.push('dual URL failed');if(!out.checked)out.reasons.push('checkbox failed');if(!out.surface)out.reasons.push('filtered surface missing');if(!out.allMatch)out.reasons.push(`vendor mismatch/empty: ${out.vendors.join(', ')}`);if(!out.cleared)out.reasons.push('clear failed')}out.outcome=out.reasons.length?'FAIL':'PASS'}
+            if(out.outcome!=='INFRA'){
+              if(out.status!==200)out.reasons.push(`HTTP ${out.status}`);if(out.usableMs===null||out.usableMs>5000)out.reasons.push(`usable ${out.usableMs}ms`);if(out.base.overflow)out.reasons.push('horizontal overflow');if(out.base.broken)out.reasons.push(`${out.base.broken} broken images`);
+              if(process.env.MODE==='page'){if(out.base.sidebarCount!==0)out.reasons.push(`unexpected sidebar ${out.base.sidebarCount}`)}else{if(out.base.sidebarCount!==1)out.reasons.push(`sidebar ${out.base.sidebarCount}`);if(out.base.nativeFilters!==0)out.reasons.push(`native filters ${out.base.nativeFilters}`);if(!out.base.manufacturer)out.reasons.push('manufacturer empty');if(out.base.dedupe!==1)out.reasons.push(`dedupe marker ${out.base.dedupe}`);if(out.base.checkboxV3!==1)out.reasons.push(`checkbox v3 marker ${out.base.checkboxV3}`);if(process.env.MODE==='ordinary'&&out.base.guard!==1)out.reasons.push(`guard marker ${out.base.guard}`);if(process.env.MODE==='military'&&out.base.militaryBridge!==1)out.reasons.push(`military bridge marker ${out.base.militaryBridge}`);if(!out.vendor)out.reasons.push('manufacturer unavailable');if(!out.urlFiltered)out.reasons.push('dual URL failed');if(!out.checked)out.reasons.push('checkbox failed');if(!out.surface)out.reasons.push('filtered surface missing');if(!out.allMatch)out.reasons.push(`vendor mismatch/empty: ${out.vendors.join(', ')}`);if(!out.cleared)out.reasons.push('clear failed')}
+              out.outcome=out.reasons.length?'FAIL':'PASS';
+            }
           }catch(err){out.reasons.push(String(err&&err.stack||err));if(out.outcome!=='INFRA')out.outcome='FAIL'}
           fs.mkdirSync('out',{recursive:true});fs.writeFileSync(`out/${process.env.SLUG}.json`,JSON.stringify(out,null,2));await page.screenshot({path:`out/${process.env.SLUG}.png`,fullPage:false}).catch(()=>{});console.log('\nFINAL ROUTE CERT RESULT\n'+JSON.stringify(out,null,2));await browser.close();if(out.outcome!=='PASS')process.exitCode=2;
           EOF
@@ -114,7 +114,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: storefront-cert-${{ matrix.slug }}
+          name: audit-${{ matrix.slug }}
           path: out/
           if-no-files-found: ignore
           retention-days: 7
