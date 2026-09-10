@@ -29,7 +29,7 @@ Keeps the V3 products-per-page control and product surface together in the right
     if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
     document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]').forEach(function(node){if(!main.contains(node))node.removeAttribute('data-sq-refine-v3-hidden-nav')});
     if(route==='armed-forces-gear'){
-      main.querySelectorAll('[id*="sq_afg_branch_buttons"]').forEach(function(node){node.dataset.sqRefineV3HiddenNav='true';node.style.pointerEvents='none'});
+      main.querySelectorAll('[id*="sq_afg_branch_buttons"]').forEach(function(node){node.remove()});
     }
     var sidebar=main.querySelector('.sq-refine-v3-sidebar');
     if(!sidebar)return false;
