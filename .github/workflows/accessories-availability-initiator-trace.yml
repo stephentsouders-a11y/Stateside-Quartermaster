@@ -1,0 +1,68 @@
+name: Accessories availability initiator trace
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/accessories-availability-initiator-trace.yml'
+permissions:
+  contents: read
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Trace navigation and request initiators
+        run: |
+          cat > trace.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage();
+          page.setDefaultNavigationTimeout(60000);
+          const cdp=await ctx.newCDPSession(page);
+          await cdp.send('Network.enable');
+          const events=[];
+          cdp.on('Network.requestWillBeSent',e=>{
+            if(/accessories-gifts-collectibles|filter\.v\.availability/i.test(e.request.url)) events.push({kind:'request',url:e.request.url,type:e.type,documentURL:e.documentURL,initiator:e.initiator,redirectResponse:e.redirectResponse&&{status:e.redirectResponse.status,url:e.redirectResponse.url,headers:e.redirectResponse.headers}});
+          });
+          cdp.on('Network.responseReceived',e=>{if(/accessories-gifts-collectibles|filter\.v\.availability/i.test(e.response.url))events.push({kind:'response',url:e.response.url,status:e.response.status,type:e.type,fromDiskCache:e.response.fromDiskCache,fromServiceWorker:e.response.fromServiceWorker})});
+          page.on('framenavigated',f=>{if(f===page.mainFrame())events.push({kind:'framenavigated',url:f.url()})});
+          page.on('console',m=>events.push({kind:'console',type:m.type(),text:m.text().slice(0,1000)}));
+          page.on('pageerror',e=>events.push({kind:'pageerror',text:String(e).slice(0,2000)}));
+          await page.addInitScript(()=>{
+            const rec=(kind,data)=>{(window.__sqNavTrace||(window.__sqNavTrace=[])).push({t:performance.now(),kind,...data})};
+            try{
+              const pa=history.pushState.bind(history),ra=history.replaceState.bind(history);
+              history.pushState=function(s,t,u){rec('pushState',{url:String(u||''),stack:new Error().stack});return pa(s,t,u)};
+              history.replaceState=function(s,t,u){rec('replaceState',{url:String(u||''),stack:new Error().stack});return ra(s,t,u)};
+              document.addEventListener('click',e=>{const a=e.target&&e.target.closest&&e.target.closest('a[href]');if(a&&/filter\.v\.availability/i.test(a.href))rec('availability-link-click',{href:a.href,html:a.outerHTML.slice(0,1500),stack:new Error().stack})},true);
+              document.addEventListener('submit',e=>{const f=e.target;if(f&&f.action&&/collections\/accessories-gifts-collectibles/i.test(f.action))rec('form-submit',{action:f.action,html:f.outerHTML.slice(0,2500),stack:new Error().stack})},true);
+            }catch(e){rec('init-error',{error:String(e)})}
+          });
+          await new Promise(r=>setTimeout(r,7000));
+          await page.goto('https://www.statesideqm.com/?preview_theme_id=158561894555',{waitUntil:'domcontentloaded'});
+          await new Promise(r=>setTimeout(r,1000));
+          events.length=0;
+          let response=null,error=null;
+          try{response=await page.goto('https://www.statesideqm.com/collections/accessories-gifts-collectibles',{waitUntil:'domcontentloaded'})}catch(e){error=String(e)}
+          await new Promise(r=>setTimeout(r,12000));
+          const state=await page.evaluate(()=>({url:location.href,title:document.title,trace:window.__sqNavTrace||[],availabilityEls:[...document.querySelectorAll('a[href*="filter.v.availability"],form[action*="accessories-gifts-collectibles"]')].slice(0,30).map(e=>({tag:e.tagName,href:e.href||'',action:e.action||'',text:(e.textContent||'').trim().slice(0,200),html:e.outerHTML.slice(0,1600)})),scripts:[...document.scripts].map(s=>s.src||s.getAttribute('data-sq-global-refine-direct-data-v5')||s.getAttribute('data-sq-category-universe-v5')||'inline').slice(-80)})).catch(e=>({evalError:String(e)}));
+          const report={initialStatus:response&&response.status(),initialUrl:response&&response.url(),error,finalUrl:page.url(),events,state};
+          fs.mkdirSync('trace-out',{recursive:true});fs.writeFileSync('trace-out/report.json',JSON.stringify(report,null,2));await page.screenshot({path:'trace-out/final.png',fullPage:false}).catch(()=>{});console.log(JSON.stringify(report,null,2));
+          await browser.close();
+          EOF
+          node trace.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accessories-availability-initiator-trace
+          path: trace-out
+          retention-days: 7
