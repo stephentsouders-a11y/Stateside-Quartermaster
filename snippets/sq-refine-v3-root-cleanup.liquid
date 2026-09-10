@@ -1,0 +1,32 @@
+{% assign sq_v3_cleanup_roots = 'accessories-gifts-collectibles,airsoft-milsim,apparel,armed-forces-gear,art,body-armor-ballistic-protection,literature,child-safety-shop,dive-scuba,firearm-accessories,first-aid-medical-ifak,flags-patriotic-decor,flashlights-lighting,footwear-gloves-eyewear,k9-dog-gear,knives-axes-cutlery,morale-patches-tactical-id,outdoor-preparedness-gear,patriotic-american-heritage,safety-rescue-climbing,sta-brite-insignia,tactical-gear,thin-line,uniforms,watches,zippos-lighters-torches,stateside-quartermaster-logo-merch,army-national-guard-series,air-national-guard-series,products-built-for-the-line-u-s-army,products-built-for-the-line-u-s-navy,products-built-for-the-line-u-s-air-force,products-built-for-the-line-u-s-marine-corps,products-built-for-the-line-u-s-coast-guard,products-built-for-the-line-u-s-space-force,rotc-series,jrotc-series,military-schools-academies,law-enforcement-corrections,firefighting-ems-search-rescue' | split: ',' %}
+{% if request.page_type == 'collection' and sq_v3_cleanup_roots contains collection.handle %}
+<script data-sq-refine-v3-root-cleanup="{{ collection.handle | escape }}">
+(function(){
+  var route='{{ collection.handle | escape }}';
+  var falseHandles=new Set(['all','stateside-quartermaster-logo-merch','air-national-guard-series','state-guard-series','rotc-series','jrotc-series','military-schools-academies','public-safety-series','army-national-guard-series']);
+  function h(raw){try{var m=new URL(raw,location.origin).pathname.match(/^\/collections\/([^/?#]+)/);return m?decodeURIComponent(m[1]):''}catch(_){return''}}
+  function hide(node){if(!node)return;node.hidden=true;node.setAttribute('aria-hidden','true');node.style.setProperty('display','none','important');node.style.setProperty('visibility','hidden','important');node.style.setProperty('pointer-events','none','important')}
+  function clean(){
+    var main=document.getElementById('MainContent');
+    if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
+    main.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]').forEach(function(node){
+      if(node.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results,.sq-refine-v3-page-size'))return;
+      hide(node);
+    });
+    var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;
+    side.querySelectorAll('input[data-kind="structural"][data-target]').forEach(function(input){
+      var target=h(input.dataset.target||'');
+      if(falseHandles.has(target)&&target!==route){var row=input.closest('.sq-refine-v3-choice');if(row)row.remove()}
+      else if((input.dataset.target||'').includes('filter.v.availability=1')){
+        try{var u=new URL(input.dataset.target,location.origin);u.searchParams.delete('filter.v.availability');input.dataset.target=u.pathname+(u.search?'?'+u.searchParams.toString():'')}catch(_){ }
+      }
+    });
+    side.querySelectorAll('.sq-refine-v3-group').forEach(function(group){if(!group.querySelector('input[type="checkbox"]'))group.remove()});
+    main.dataset.sqRefineV3RootCleanup='true';
+    return true;
+  }
+  if(clean())return;
+  var tries=0,t=setInterval(function(){tries++;if(clean()||tries>80)clearInterval(t)},100);
+})();
+</script>
+{% endif %}
