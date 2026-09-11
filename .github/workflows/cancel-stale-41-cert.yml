@@ -1,0 +1,18 @@
+name: Cancel stale 41 certification run
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/cancel-stale-41-cert.yml']
+permissions:
+  actions: write
+  contents: read
+jobs:
+  cancel-stale:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel superseded named certification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST repos/${{ github.repository }}/actions/runs/34638421721/cancel
+          echo 'Cancelled superseded run 34638421721'
