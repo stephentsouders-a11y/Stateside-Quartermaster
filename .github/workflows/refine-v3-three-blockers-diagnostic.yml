@@ -1,4 +1,4 @@
-name: Refine V3 final blocker diagnostics
+name: Refine V3 latest failure diagnostics
 on:
   push:
     branches: [refine-restart-v3]
@@ -10,7 +10,7 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 25
     steps:
       - uses: actions/setup-node@v4
         with: { node-version: '24' }
@@ -18,39 +18,36 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Diagnose Books, Firearm, Logo Merch and Navy mobile
+      - name: Diagnose latest deterministic and throttling failures
         run: |
           cat > diag.mjs <<'EOF'
           import { chromium } from 'playwright';
+          import fs from 'node:fs';
           const browser=await chromium.launch({headless:true});
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
           const BASE='https://www.statesideqm.com',THEME='158561894555';
           function U(path){const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()}
-          async function go(page,path){let last;for(let i=0;i<4;i++){try{const r=await page.goto(U(path),{waitUntil:'domcontentloaded',timeout:60000});if(r?.status()===200)return r;last=new Error('HTTP '+(r?.status()||0))}catch(e){last=e}await sleep([2500,5000,8000,12000][i])}throw last||new Error('navigation failed')}
-          async function snap(page,label){
-            const d=await page.evaluate(()=>{
-              const main=document.querySelector('#MainContent');
-              const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),c=getComputedStyle(e);return r.width>1&&r.height>1&&c.display!=='none'&&c.visibility!=='hidden'&&Number(c.opacity||1)>0};
-              const info=e=>{if(!e)return null;const r=e.getBoundingClientRect(),c=getComputedStyle(e);return{tag:e.tagName,id:e.id||'',cls:typeof e.className==='string'?e.className:'',text:(e.textContent||'').replace(/\s+/g,' ').trim().slice(0,180),w:Math.round(r.width),h:Math.round(r.height),x:Math.round(r.x),y:Math.round(r.y),display:c.display,visibility:c.visibility,position:c.position,bg:c.backgroundColor}};
-              const side=[...main.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis);
-              const legacy=[...main.querySelectorAll('.sq-global-refine-sidebar,.sq-collection-sidebar,.facets-block-wrapper,.facets-container,.facets-wrapper,[class*="filter-sidebar"]')].filter(e=>vis(e)&&!e.classList.contains('sq-refine-v3-sidebar'));
-              const title=side[0]?.querySelector('.sq-refine-v3-sidebar__title');
-              const sr=side[0]?.getBoundingClientRect(),tr=title?.getBoundingClientRect();
-              const groups=[...main.querySelectorAll('.sq-refine-v3-sidebar > details.sq-refine-v3-group')].filter(vis).map(g=>({label:(g.querySelector(':scope > summary')?.textContent||'').trim(),inputs:[...g.querySelectorAll('input')].slice(0,120).map(i=>({text:(i.parentElement?.textContent||'').replace(/\s+/g,' ').trim().slice(0,120),kind:i.dataset.kind||'',target:i.dataset.target||'',filter:i.dataset.filterName||'',value:i.dataset.filterValue||''}))}));
-              const grids=[...main.querySelectorAll('.sq-refine-v3-results .product-grid')].map(g=>{const r=g.getBoundingClientRect(),c=getComputedStyle(g);const cards=[...g.querySelectorAll(':scope > .product-grid__item')].filter(x=>vis(x)&&x.querySelector('a[href*="/products/"]')).slice(0,8).map(info);return{cls:typeof g.className==='string'?g.className:'',w:Math.round(r.width),h:Math.round(r.height),display:c.display,visible:vis(g),cards}});
-              return{href:location.href,ready:main?.dataset.sqRefineV3Ready||'',error:main?.dataset.sqRefineV3Error||'',authorHidden:main?.dataset.sqRefineV3AuthorHidden||'',v3Count:side.length,legacyCount:legacy.length,title:info(title),side:info(side[0]),rightGap:sr&&tr?Math.round((sr.right-tr.right)*10)/10:999,groups,grids};
-            });
-            console.log(label+' '+JSON.stringify(d));
-          }
-          for(const path of ['/collections/literature','/collections/firearm-accessories','/collections/stateside-quartermaster-logo-merch']){
-            const page=await browser.newPage({viewport:{width:1440,height:1000}});await go(page,path);await sleep(5000);await snap(page,'DESKTOP '+path);await page.screenshot({path:path.split('/').pop()+'.png',fullPage:true});await page.close();await sleep(1200);
-          }
-          const mobile=await browser.newPage({viewport:{width:390,height:844}});await go(mobile,'/collections/products-built-for-the-line-u-s-navy');await sleep(5000);await snap(mobile,'MOBILE NAVY');await mobile.screenshot({path:'navy-mobile.png',fullPage:true});await mobile.close();
+          async function go(page,path){let last;for(let i=0;i<6;i++){try{const r=await page.goto(U(path),{waitUntil:'domcontentloaded',timeout:90000});const status=r?.status()||0;if(status===200){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000}).catch(()=>{});await sleep(900);return status}last=new Error('HTTP '+status)}catch(e){last=e}await sleep(2500*(i+1))}throw last||new Error('navigation failed')}
+          async function snap(page,label){const d=await page.evaluate(()=>{const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),c=getComputedStyle(e);return r.width>2&&r.height>2&&c.display!=='none'&&c.visibility!=='hidden'};const main=document.querySelector('#MainContent'),side=[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar')].find(vis);const groups=side?[...side.querySelectorAll(':scope>details.sq-refine-v3-group')].map(g=>({title:(g.querySelector(':scope>summary')?.textContent||'').replace(/\s+/g,' ').trim(),active:g.dataset.active||'',open:g.open,items:[...g.querySelectorAll('input[type=checkbox][data-kind]')].map(x=>({label:(x.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),kind:x.dataset.kind||'',target:x.dataset.target||'',name:x.dataset.filterName||'',value:x.dataset.filterValue||'',checked:x.checked,pathActive:x.hasAttribute('data-sq-path-active')}))})):[];const grid=[...document.querySelectorAll('#MainContent .sq-refine-v3-results .product-grid')].find(vis);const cards=grid?[...grid.children].filter(x=>vis(x)&&x.querySelector('a[href*="/products/"]')).length:0;return{href:location.href,collectionHandle:document.querySelector('[data-sq-refine-v3]')?.dataset.currentHandle||'',ready:main?.dataset.sqRefineV3Ready||'',error:main?.dataset.sqRefineV3Error||'',childRoot:document.documentElement.dataset.sqRefineV3ChildRoot||'',childIsolation:document.documentElement.dataset.sqRefineV3ChildIsolation||'',childTaxonomy:main?.dataset.sqChildSafetyTaxonomy||'',cards,groups,pageErrors:window.__diagErrors||[]};});console.log(label+' '+JSON.stringify(d));return d}
+          const cases=[
+            ['child-ballistic','/collections/child-safety-shop/sq-child-safety-ballistic?sq_root=child-safety-shop'],
+            ['child-first-aid','/collections/child-safety-shop/sq-child-safety-first-aid?sq_root=child-safety-shop'],
+            ['airsoft-protection','/collections/airsoft-milsim-protection-apparel?sq_root=airsoft-milsim'],
+            ['afg-marines','/collections/armed-forces-gear-u-s-marine-corps?sq_root=armed-forces-gear'],
+            ['art-patriotic','/collections/art-ben-cantwell-patriotic-art?sq_root=art'],
+            ['dive-surface','/collections/dive-scuba-surface-markers-buoys-dive-reels?sq_root=dive-scuba']
+          ];
+          const out=[];
+          for(const [name,path] of cases){const p=await browser.newPage({viewport:{width:1440,height:1000}});p.on('pageerror',e=>p.evaluate(x=>{window.__diagErrors=window.__diagErrors||[];window.__diagErrors.push(x)},String(e)).catch(()=>{}));try{const status=await go(p,path);const d=await snap(p,name);out.push({name,path,status,...d});await p.screenshot({path:name+'.png',fullPage:true})}catch(e){out.push({name,path,error:String(e),href:p.url()})}await p.close();await sleep(1800)}
+          fs.writeFileSync('latest-failure-diagnostic.json',JSON.stringify(out,null,2));
+          console.log('SUMMARY '+JSON.stringify(out));
           await browser.close();
           EOF
           node diag.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: final-blocker-screenshots
-          path: '*.png'
+          name: latest-failure-diagnostics
+          path: |
+            '*.png'
+            latest-failure-diagnostic.json
