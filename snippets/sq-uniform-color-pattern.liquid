@@ -25,9 +25,9 @@ html.sq-ucp-filtered #MainContent.sq-refine-v3-active .sq-refine-v3-results>:not
   function norm(v){return String(v||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function key(v){return norm(v).replace(/ /g,'-')}
-  function appearance(raw){
+  function appearance(raw,titleMode){
     var n=norm(String(raw||'').replace(/^\d+[a-z]?\.\s*/i,'').replace(/\([^)]*\)/g,'').replace(/,.*$/,'').replace(/\b\d+\s*-?\s*pack\b/gi,''));
-    if(!n||/\b(?:sergeant|lieutenant|corporal|specialist|captain|colonel|major|private|count|tactical version|other color)\b/.test(n))return [];
+    if(!n||(!titleMode&&/\b(?:sergeant|lieutenant|corporal|specialist|captain|colonel|major|private|count|tactical version|other color)\b/.test(n)))return [];
     if(/multicam black/.test(n))return ['MultiCam Black'];
     if(/multicam alpine/.test(n))return ['MultiCam Alpine'];
     if(/multicam tropic/.test(n))return ['MultiCam Tropic'];
@@ -43,7 +43,7 @@ html.sq-ucp-filtered #MainContent.sq-refine-v3-active .sq-refine-v3-results>:not
     if(/desert tiger/.test(n))return ['Desert Tiger Stripe'];
     if(/tiger stripe/.test(n))return ['Tiger Stripe'];
     if(/greek lizard/.test(n))return ['Greek Lizard'];
-    if(/cce/.test(n))return ['CCE Woodland'];
+    if(/\bcce\b/.test(n))return ['CCE Woodland'];
     if(/roma 90/.test(n))return ['Roma-90 Woodland'];
     if(/m81 arid/.test(n))return ['M81 Arid'];
     if(/\bwoodland\b|\bm81\b/.test(n))return ['Woodland / M81'];
@@ -79,8 +79,8 @@ html.sq-ucp-filtered #MainContent.sq-refine-v3-active .sq-refine-v3-results>:not
     var ix=(p.options||[]).map(function(x){return typeof x==='string'?x:x.name}).findIndex(function(n){return /color|colour|pattern|camo/i.test(n)});
     var tags=(p.tags||[]).filter(function(t){return /^(?:sq\s+)?(?:colou?r(?:\s*\/\s*pattern)?|pattern|camo(?:uflage)?)\s*:/i.test(t)}).flatMap(function(t){return appearance(t.replace(/^[^:]*:/,''))});
     var fallback=Array.from(new Set(tags));
-    if(!fallback.length){var title=p.title.replace(/black knights|blue angels|green beret/gi,'').replace(/\bnavy\b(?!\s+blue)/gi,'');fallback=appearance(title)}
-    var preciseTitle=appearance(p.title).filter(function(x){return /MultiCam|MARPAT|Woodland|UCP|MTP|AOR2|Tiger|Desert|MM14|Lizard/.test(x)});if(fallback.includes('Camouflage')&&preciseTitle.length)fallback=fallback.filter(function(x){return x!=='Camouflage'}).concat(preciseTitle);
+    if(!fallback.length){var title=p.title.replace(/black knights|blue angels|green beret/gi,'').replace(/\bnavy\b(?!\s+blue)/gi,'');fallback=appearance(title,true)}
+    var preciseTitle=appearance(p.title,true).filter(function(x){return /MultiCam|MARPAT|Woodland|UCP|MTP|AOR2|Tiger|Desert|MM14|Lizard/.test(x)});if(fallback.includes('Camouflage')&&preciseTitle.length)fallback=fallback.filter(function(x){return x!=='Camouflage'}).concat(preciseTitle);
     var optionKnown=ix>=0&&(p['option'+(ix+1)]||[]).some(function(value){return appearance(value).length>0});
     if(fallback.length>1&&fallback.includes('Camouflage'))fallback=fallback.filter(function(x){return x!=='Camouflage'});
     var vars=p.variant_ids.map(function(id,i){
