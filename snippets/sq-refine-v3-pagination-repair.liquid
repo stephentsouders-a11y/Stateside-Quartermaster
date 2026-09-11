@@ -3,8 +3,9 @@ Sitewide authoritative pagination repair for Refine V3 collection pages.
 The V3 interface supports logical page sizes of 50, 100, and 250 while its alternate
 Shopify source view renders 50 products per native page. This guard determines whether
 a logical Next page exists by probing the first native source page after the current
-logical view instead of trusting a missing native pagination marker. It applies to every
-Refine V3 root and child route and leaves State Guard Series untouched.
+logical view instead of trusting a missing native pagination marker. It also rescues a
+logical page when the core V3 assembler is interrupted by a transient source-page error.
+It applies to every Refine V3 root and child route and leaves State Guard Series untouched.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 <style data-sq-refine-v3-pagination-button-style>
@@ -40,7 +41,7 @@ Refine V3 root and child route and leaves State Guard Series untouched.
   color:#fff!important;
 }
 </style>
-<script data-sq-refine-v3-pagination-repair data-revision="retry-visible-pager-20260911-v3">
+<script data-sq-refine-v3-pagination-repair data-revision="assembly-rescue-20260911-v4">
 (function(){
   if(window.__sqRefineV3PaginationRepair)return;
   window.__sqRefineV3PaginationRepair=true;
@@ -90,29 +91,37 @@ Refine V3 root and child route and leaves State Guard Series untouched.
     if(!grid)return[];
     return Array.from(new Set(Array.from(grid.querySelectorAll('a[href*="/products/"]')).map(function(a){return a.getAttribute('href')||a.href}).filter(Boolean)));
   }
-  async function nativePageHasProducts(page){
+  async function sourceDocument(page){
     var lastStatus=0;
     var lastError=null;
-    for(var attempt=0;attempt<5;attempt++){
+    for(var attempt=0;attempt<6;attempt++){
       try{
         var r=await fetch(alternateUrl(page),{credentials:'same-origin',cache:'no-store'});
         lastStatus=r.status;
-        if(r.ok){
-          var doc=new DOMParser().parseFromString(await r.text(),'text/html');
-          return productLinks(doc).length>0;
-        }
+        if(r.ok)return new DOMParser().parseFromString(await r.text(),'text/html');
         if(r.status!==429&&r.status<500)throw new Error('HTTP '+r.status+' for source page '+page);
         lastError=new Error('HTTP '+r.status+' for source page '+page);
       }catch(e){
         lastError=e;
         if(!/HTTP 429|HTTP 5\d\d|Failed to fetch|NetworkError/i.test(String(e&&e.message||e)))throw e;
       }
-      if(attempt<4)await wait(Math.min(5000,500*Math.pow(2,attempt)));
+      if(attempt<5)await wait(Math.min(6500,550*Math.pow(2,attempt)));
     }
     throw lastError||new Error('HTTP '+lastStatus+' for source page '+page);
   }
+  async function nativePageHasProducts(page){
+    return productLinks(await sourceDocument(page)).length>0;
+  }
+  function sourceCards(doc){
+    var grid=doc.querySelector('.product-grid');
+    if(!grid)return[];
+    return Array.from(grid.querySelectorAll(':scope > .product-grid__item')).filter(function(card){return !!card.querySelector('a[href*="/products/"]')});
+  }
+  function liveGrid(){
+    return main.querySelector('.sq-refine-v3-results .product-grid')||main.querySelector('collection-component .product-grid')||main.querySelector('.product-grid');
+  }
   function pagerHost(){
-    var grid=main.querySelector('.sq-refine-v3-results .product-grid');
+    var grid=liveGrid();
     return grid&&grid.parentElement?grid.parentElement:null;
   }
   function authoritativePager(){
@@ -154,8 +163,52 @@ Refine V3 root and child route and leaves State Guard Series untouched.
       pager.appendChild(next);
     }
   }
+  async function rescueAssembly(){
+    if(window.__sqRefineV3AssemblyRescueRunning)return false;
+    var grid=liveGrid();
+    if(!grid)return false;
+    window.__sqRefineV3AssemblyRescueRunning=true;
+    try{
+      var size=perPage();
+      var view=currentView();
+      var globalStart=(view-1)*size;
+      var startPage=Math.floor(globalStart/50)+1;
+      var offset=globalStart%50;
+      var need=offset+size+1;
+      var cards=[];
+      var p=startPage;
+      while(cards.length<need&&p<startPage+8){
+        var batch=sourceCards(await sourceDocument(p));
+        if(!batch.length)break;
+        cards=cards.concat(batch);
+        if(batch.length<50)break;
+        p++;
+        await wait(220);
+      }
+      var sliced=cards.slice(offset,offset+size);
+      if(!sliced.length)return false;
+      var frag=document.createDocumentFragment();
+      sliced.forEach(function(card){frag.appendChild(document.importNode(card,true))});
+      grid.replaceChildren(frag);
+      main.querySelectorAll('pagination-component,.pagination').forEach(function(node){node.style.display='none'});
+      var pager=authoritativePager();
+      if(pager)renderPager(pager,view,cards.length>offset+size);
+      delete main.dataset.sqRefineV3Error;
+      delete main.dataset.sqRefineV3PaginationRepairError;
+      main.dataset.sqRefineV3Ready='true';
+      main.dataset.sqRefineV3PaginationRescued='true';
+      main.dataset.sqRefineV3PaginationRepaired='true';
+      main.dataset.sqRefineV3PaginationPageSize=String(size);
+      main.dataset.sqRefineV3PaginationCertified='rescued-logical-page-'+view;
+      return true;
+    }finally{
+      window.__sqRefineV3AssemblyRescueRunning=false;
+    }
+  }
   async function repair(){
-    if(main.dataset.sqRefineV3Error)return;
+    if(main.dataset.sqRefineV3Error){
+      try{await rescueAssembly()}catch(e){main.dataset.sqRefineV3PaginationRepairError=String(e&&e.message||e);console.error('[SQ V3 pagination rescue]',e)}
+    }
     if(main.dataset.sqRefineV3Ready!=='true')return;
     var pager=authoritativePager();
     if(!pager)return;
@@ -180,13 +233,13 @@ Refine V3 root and child route and leaves State Guard Series untouched.
     window.__sqRefineV3PaginationTimer=setTimeout(repair,typeof delay==='number'?delay:60);
   }
   function whenReady(){
-    if(main.dataset.sqRefineV3Ready==='true')schedule(60);
+    if(main.dataset.sqRefineV3Ready==='true'||main.dataset.sqRefineV3Error)schedule(60);
     var obs=new MutationObserver(function(){
-      if(main.dataset.sqRefineV3Ready==='true')schedule(80);
+      if(main.dataset.sqRefineV3Ready==='true'||main.dataset.sqRefineV3Error)schedule(80);
     });
-    obs.observe(main,{childList:true,subtree:true,attributes:true,attributeFilter:['data-sq-refine-v3-ready']});
-    [250,900,1800,4500,9000].forEach(function(ms){setTimeout(function(){if(main.dataset.sqRefineV3Ready==='true')schedule(30)},ms)});
-    setTimeout(function(){obs.disconnect();if(main.dataset.sqRefineV3Ready==='true')schedule(30)},14000);
+    obs.observe(main,{childList:true,subtree:true,attributes:true,attributeFilter:['data-sq-refine-v3-ready','data-sq-refine-v3-error']});
+    [250,900,1800,4500,9000,14000].forEach(function(ms){setTimeout(function(){if(main.dataset.sqRefineV3Ready==='true'||main.dataset.sqRefineV3Error)schedule(30)},ms)});
+    setTimeout(function(){obs.disconnect();if(main.dataset.sqRefineV3Ready==='true'||main.dataset.sqRefineV3Error)schedule(30)},20000);
     window.addEventListener('pageshow',function(){schedule(40)});
     window.addEventListener('popstate',function(){schedule(40)});
   }
