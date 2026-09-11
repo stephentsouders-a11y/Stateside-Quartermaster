@@ -1,0 +1,81 @@
+name: Sta-Brite legacy flash diagnostic
+on:
+  push:
+    paths:
+      - '.github/workflows/sta-brite-flash-diagnostic.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm install --no-save playwright@1.55.0 agent-browser >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Record first paint and legacy source
+        run: |
+          cat > sta-diagnostic.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          fs.mkdirSync('sta-out/videos',{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          for(const [name,preview,viewport] of [['live-desktop',false,{width:1440,height:1000}],['preview-desktop',true,{width:1440,height:1000}],['preview-mobile',true,{width:390,height:844}]]){
+            const context=await browser.newContext({viewport,recordVideo:{dir:'sta-out/videos',size:viewport}});
+            const page=await context.newPage();
+            const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+            await page.addInitScript(()=>{
+              window.__staAudit={samples:[],mutations:0};
+              const visible=e=>{if(!e||!e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}))return false;const r=e.getBoundingClientRect();return r.width>1&&r.height>1;};
+              let previous='';
+              function tick(){
+                const main=document.querySelector('#MainContent');
+                if(main){
+                  const legacy=[...main.querySelectorAll('a[href*="/collections/"]')].filter(e=>!e.closest('.sq-refine-v3-layout')&&!e.closest('.product-grid')&&visible(e)).map(e=>({text:e.innerText.trim().slice(0,90),class:e.className,parent:e.parentElement.className}));
+                  const state={ready:main.dataset.sqRefineV3Ready,layouts:main.querySelectorAll('.sq-refine-v3-layout').length,visibleGrids:[...main.querySelectorAll('.product-grid')].filter(visible).length,legacy,body:document.body.className};
+                  const key=JSON.stringify(state);if(key!==previous){window.__staAudit.samples.push({t:Math.round(performance.now()),...state});previous=key;}
+                }
+                if(performance.now()<16000)requestAnimationFrame(tick);
+              }
+              document.addEventListener('DOMContentLoaded',()=>{const m=document.querySelector('#MainContent');if(m)new MutationObserver(rs=>{window.__staAudit.mutations+=rs.length}).observe(m,{subtree:true,childList:true,attributes:true});});
+              requestAnimationFrame(tick);
+            });
+            const url='https://www.statesideqm.com/collections/sta-brite-insignia'+(preview?'?preview_theme_id=158561894555':'');
+            const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
+            fs.writeFileSync(`sta-out/${name}-source.html`,await response.text());
+            await page.screenshot({path:`sta-out/${name}-initial.png`,timeout:15000}).catch(()=>{});
+            await page.waitForTimeout(12000);
+            await page.screenshot({path:`sta-out/${name}-final.png`,fullPage:true,timeout:20000}).catch(()=>{});
+            const state=await page.evaluate(()=>({theme:window.Shopify?.theme,audit:window.__staAudit,body:document.body.className,text:document.querySelector('#MainContent')?.innerText.slice(0,6000),scripts:[...document.scripts].filter(s=>s.src||/ThinSta|sq-ts-parent|sta-brite/i.test(s.textContent)).map(s=>({src:s.src,text:s.src?'':s.textContent})),groups:[...document.querySelectorAll('.sq-refine-v3-group > summary')].map(e=>e.textContent),cards:document.querySelectorAll('.sq-refine-v3-results .product-grid__item').length}));
+            fs.writeFileSync(`sta-out/${name}-state.json`,JSON.stringify({...state,errors,status:response.status()},null,2));
+            fs.writeFileSync(`sta-out/${name}-dom.html`,await page.content());
+            console.log(JSON.stringify({name,theme:state.theme,audit:state.audit,errors,groups:state.groups,cards:state.cards,text:state.text?.slice(0,1200)},null,2));
+            for(const [i,s] of state.scripts.filter(s=>!s.src).entries())fs.writeFileSync(`sta-out/${name}-inline-${i}.js`,s.text);
+            for(const [i,s] of state.scripts.filter(s=>s.src&&/statesideqm|shopify/.test(s.src)&&/refine|thin|sta-brite/.test(s.src)).entries()){const r=await context.request.get(s.src).catch(()=>null);if(r?.ok())fs.writeFileSync(`sta-out/${name}-asset-${i}.js`,await r.text());}
+            const video=page.video();await page.close();await context.close();if(video)await video.saveAs(`sta-out/${name}.webm`);
+          }
+          fs.cpSync('snippets','sta-out/repository-snippets',{recursive:true});
+          for(const dir of ['assets','templates','layout'])if(fs.existsSync(dir))fs.cpSync(dir,`sta-out/repository-${dir}`,{recursive:true});
+          await browser.close();
+          EOF
+          node sta-diagnostic.mjs
+      - name: Agent-browser Chromium snapshot
+        if: always()
+        run: |
+          npx agent-browser install >/dev/null 2>&1
+          npx agent-browser open 'https://www.statesideqm.com/collections/sta-brite-insignia?preview_theme_id=158561894555'
+          npx agent-browser snapshot -s '#MainContent' > sta-out/agent-browser-snapshot.txt
+          npx agent-browser screenshot sta-out/agent-browser.png
+          npx agent-browser close
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sta-brite-flash-diagnostic
+          path: sta-out
+          retention-days: 7
