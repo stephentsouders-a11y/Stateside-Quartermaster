@@ -6,6 +6,13 @@ on:
       - 'snippets/sq-refine-v3-pagination-repair.liquid'
       - 'snippets/sq-refine-v3.liquid'
       - 'layout/theme.liquid'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/refine-pagination-army-literature-cert.yml'
+      - 'snippets/sq-refine-v3-pagination-repair.liquid'
+      - 'snippets/sq-refine-v3.liquid'
+      - 'layout/theme.liquid'
   workflow_dispatch:
 permissions:
   contents: read
