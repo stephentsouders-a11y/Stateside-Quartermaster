@@ -1,0 +1,45 @@
+{% doc %}
+Synchronizes the active Literature author selection across every Refine V3 sidebar instance, including the visible authoritative sidebar when Shopify leaves hidden duplicate collection surfaces in the DOM. This is a state-only repair: it does not create author data, change product data, or affect non-Literature routes.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle == 'literature' %}
+<script data-sq-refine-v3-literature-author-visible-state>
+(function(){
+  var main=document.getElementById('MainContent');if(!main)return;
+  var timer=0,observer=null;
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
+  function norm(v){return clean(v).toLowerCase().replace(/[\u2019']/g,'').replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim()}
+  function activeAuthor(){return new URLSearchParams(location.search).get('sq_author')||''}
+  function visible(el){if(!el)return false;var r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0'}
+  function sync(){
+    var active=activeAuthor(),matchedVisible=false,visibleGroups=0,totalGroups=0;
+    main.querySelectorAll('.sq-refine-v3-sidebar').forEach(function(side){
+      var sideVisible=visible(side);
+      side.querySelectorAll(':scope > details[data-sq-author-refine="true"]').forEach(function(group){
+        totalGroups++;if(sideVisible)visibleGroups++;
+        var any=false;
+        group.querySelectorAll('input[data-kind="author"][data-author]').forEach(function(input){
+          var on=!!active&&norm(input.dataset.author)===norm(active);
+          input.checked=on;
+          if(on){input.setAttribute('checked','');any=true;if(sideVisible)matchedVisible=true}else input.removeAttribute('checked');
+        });
+        group.open=any;
+        group.dataset.active=any?'true':'false';
+      });
+    });
+    main.dataset.sqRefineV3AuthorVisibleState=active?(matchedVisible?'checked':'unmatched'):'clear';
+    main.dataset.sqRefineV3AuthorVisibleGroups=String(visibleGroups);
+    main.dataset.sqRefineV3AuthorTotalGroups=String(totalGroups);
+  }
+  function schedule(){clearTimeout(timer);timer=setTimeout(sync,40)}
+  function start(){
+    sync();
+    [150,400,900,1800,3200,5000].forEach(function(ms){setTimeout(sync,ms)});
+    if(!observer){observer=new MutationObserver(schedule);observer.observe(main,{childList:true,subtree:true})}
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+  window.addEventListener('load',sync,{once:true});
+  window.addEventListener('pageshow',function(){setTimeout(sync,0)});
+  window.addEventListener('popstate',function(){setTimeout(sync,0)});
+})();
+</script>
+{% endif %}
