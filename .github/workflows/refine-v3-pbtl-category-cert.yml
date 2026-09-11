@@ -10,11 +10,24 @@ permissions: { contents: read }
 jobs:
   certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        root:
+          - products-built-for-the-line-u-s-army
+          - products-built-for-the-line-u-s-navy
+          - products-built-for-the-line-u-s-air-force
+          - products-built-for-the-line-u-s-marine-corps
+          - products-built-for-the-line-u-s-coast-guard
+          - products-built-for-the-line-u-s-space-force
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '24' }
       - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Certify every active-duty PBTL Category route
+      - name: Certify service PBTL Category routes
+        env:
+          PBTL_ROOT: ${{ matrix.root }}
         run: node .github/scripts/refine-v3-pbtl-category-cert.mjs
