@@ -15,6 +15,8 @@ Locks V3 product-card sizing so every desktop three-column collection uses the s
 #MainContent.sq-refine-v3-active .sq-global-refine-main,
 #MainContent.sq-refine-v3-active .sq-global-refine-layout>.sq-global-refine-main,
 #MainContent.sq-refine-v3-active .sq-ts-v2-layout.sq-global-refine-layout>.sq-global-refine-main{grid-column:1 / -1!important;width:100%!important;max-width:none!important;min-width:0!important;margin-inline:0!important}
+/* Once V3 is active, the product grid inside .sq-refine-v3-results is authoritative. Any native/legacy grid outside that results surface is a duplicate and must never paint, including late Shopify rerenders. */
+#MainContent.sq-refine-v3-active .product-grid:not(.sq-refine-v3-results .product-grid){display:none!important;visibility:hidden!important;pointer-events:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important}
 @media (min-width:901px){
   #MainContent.sq-refine-v3-active .sq-refine-v3-layout{width:min(calc(100% - 32px),1440px)!important;grid-template-columns:270px minmax(0,1fr)!important;gap:22px!important}
   #MainContent.sq-refine-v3-active .sq-refine-v3-results,
