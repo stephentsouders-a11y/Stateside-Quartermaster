@@ -61,7 +61,6 @@ jobs:
           ];
           const devices=[['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]];
           const report={theme,routes:[],failures:[]};
-          const visible=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0};
           const browser=await chromium.launch({headless:true});
           for(const [device,viewport] of devices){
             const context=await browser.newContext({viewport});
@@ -160,20 +159,25 @@ jobs:
             }
             await context.close();
           }
+          fs.writeFileSync('out/report-preclick.json',JSON.stringify(report,null,2));
           const clickContext=await browser.newContext({viewport:{width:1440,height:1000}});
           const clickPage=await clickContext.newPage();
-          const root=`${base}accessories-gifts-collectibles?preview_theme_id=${theme}`;
-          await clickPage.goto(root,{waitUntil:'domcontentloaded',timeout:90000});
-          await clickPage.waitForTimeout(2500);
-          const choice=clickPage.locator('#MainContent .sq-refine-v3-sidebar label').filter({hasText:'Collectibles & Cards'}).first();
-          if(await choice.count()){
-            await choice.click();
-            await clickPage.waitForLoadState('domcontentloaded');
-            await clickPage.waitForTimeout(2000);
-            const u=clickPage.url();
-            report.clickUrl=u;
-            if(!u.includes('/collections/collectibles-cards')||!u.includes('sq_root=accessories-gifts-collectibles'))report.failures.push(`click-path: wrong destination ${u}`);
-          }else report.failures.push('click-path: Collectibles & Cards choice not found on root');
+          try{
+            const root=`${base}accessories-gifts-collectibles?preview_theme_id=${theme}`;
+            await clickPage.goto(root,{waitUntil:'domcontentloaded',timeout:90000});
+            await clickPage.waitForTimeout(2500);
+            const choice=clickPage.locator('#MainContent .sq-refine-v3-sidebar label').filter({hasText:'Collectibles & Cards'}).first();
+            if(await choice.count()){
+              await choice.evaluate(el=>{const d=el.closest('details');if(d)d.open=true});
+              await choice.scrollIntoViewIfNeeded();
+              await choice.click({timeout:10000});
+              await clickPage.waitForLoadState('domcontentloaded');
+              await clickPage.waitForTimeout(2000);
+              const u=clickPage.url();
+              report.clickUrl=u;
+              if(!u.includes('/collections/collectibles-cards')||!u.includes('sq_root=accessories-gifts-collectibles'))report.failures.push(`click-path: wrong destination ${u}`);
+            }else report.failures.push('click-path: Collectibles & Cards choice not found on root');
+          }catch(e){report.failures.push(`click-path: ${String(e)}`)}
           await clickContext.close();
           await browser.close();
           fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
