@@ -1,0 +1,94 @@
+{% doc %}
+Sitewide safety repair for Refine V3 50-per-page pagination.
+The primary V3 assembler has a page-1 fast path that infers whether page 2 exists
+from the visible theme pager. Some collection templates do not expose a matching
+native next-page selector, which can incorrectly leave the custom pager at Page 1.
+This guard verifies alternate-view page 2 directly and restores the Next link when
+products actually exist there. It applies to every V3 collection root and leaves
+State Guard Series untouched.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<script data-sq-refine-v3-pagination-repair>
+(function(){
+  if(window.__sqRefineV3PaginationRepair)return;
+  window.__sqRefineV3PaginationRepair=true;
+
+  var ROOTS=new Set(['accessories-gifts-collectibles','airsoft-milsim','apparel','armed-forces-gear','art','body-armor-ballistic-protection','literature','child-safety-shop','dive-scuba','firearm-accessories','first-aid-medical-ifak','flags-patriotic-decor','flashlights-lighting','footwear-gloves-eyewear','k9-dog-gear','knives-axes-cutlery','morale-patches-tactical-id','outdoor-preparedness-gear','patriotic-american-heritage','safety-rescue-climbing','sta-brite-insignia','tactical-gear','thin-line','uniforms','watches','zippos-lighters-torches','stateside-quartermaster-logo-merch','army-national-guard-series','air-national-guard-series','products-built-for-the-line-u-s-army','products-built-for-the-line-u-s-navy','products-built-for-the-line-u-s-air-force','products-built-for-the-line-u-s-marine-corps','products-built-for-the-line-u-s-coast-guard','products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series','military-schools-academies','law-enforcement-corrections','firefighting-ems-search-rescue']);
+  var q=new URLSearchParams(location.search);
+  var currentHandle='{{ collection.handle | escape }}';
+  var rootHandle=q.get('sq_root')||currentHandle;
+  if(!ROOTS.has(rootHandle))return;
+  if(parseInt(q.get('sq_per_page')||'50',10)!==50)return;
+  if(Math.max(1,parseInt(q.get('sq_view_page')||'1',10)||1)!==1)return;
+
+  function sourcePath(){
+    return currentHandle==='air-national-guard-series'
+      ?'/collections/products-built-for-the-line-u-s-air-force'
+      :location.pathname;
+  }
+  function alternateUrl(page){
+    var u=new URL(sourcePath(),location.origin);
+    q.forEach(function(v,k){
+      if(k.indexOf('filter.')===0||k==='sort_by'||k==='preview_theme_id')u.searchParams.append(k,v);
+    });
+    u.searchParams.set('view','sq-refine-v3-products');
+    u.searchParams.set('page',String(page));
+    return u.pathname+'?'+u.searchParams.toString();
+  }
+  function viewUrl(page){
+    var u=new URL(location.href);
+    u.searchParams.delete('page');
+    u.searchParams.set('sq_per_page','50');
+    u.searchParams.set('sq_view_page',String(page));
+    return u.pathname+'?'+u.searchParams.toString();
+  }
+  function hasProductCards(doc){
+    return !!doc.querySelector('.product-grid > .product-grid__item a[href*="/products/"], .product-grid > [data-product-id], .product-grid > [data-product-handle]');
+  }
+  async function repair(){
+    var main=document.getElementById('MainContent');
+    if(!main||main.dataset.sqRefineV3Error)return;
+    var pager=main.querySelector('.sq-refine-v3-pager');
+    if(!pager)return;
+    if(pager.querySelector('a[href*="sq_view_page=2"]')){
+      main.dataset.sqRefineV3PaginationCertified='native-next';
+      return;
+    }
+    try{
+      var r=await fetch(alternateUrl(2),{credentials:'same-origin',cache:'no-store'});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      var doc=new DOMParser().parseFromString(await r.text(),'text/html');
+      if(!hasProductCards(doc)){
+        main.dataset.sqRefineV3PaginationCertified='single-page';
+        return;
+      }
+      var a=document.createElement('a');
+      a.href=viewUrl(2);
+      a.textContent='Next';
+      a.setAttribute('aria-label','Next product page');
+      pager.appendChild(a);
+      main.dataset.sqRefineV3PaginationRepaired='true';
+      main.dataset.sqRefineV3PaginationCertified='alternate-page-2';
+    }catch(e){
+      main.dataset.sqRefineV3PaginationRepairError=String(e&&e.message||e);
+      console.error('[SQ V3 pagination repair]',e);
+    }
+  }
+  function whenReady(){
+    var main=document.getElementById('MainContent');
+    if(!main)return;
+    if(main.dataset.sqRefineV3Ready==='true')return repair();
+    var obs=new MutationObserver(function(){
+      if(main.dataset.sqRefineV3Ready==='true'){
+        obs.disconnect();
+        repair();
+      }
+    });
+    obs.observe(main,{attributes:true,attributeFilter:['data-sq-refine-v3-ready']});
+    setTimeout(function(){obs.disconnect();if(main.dataset.sqRefineV3Ready==='true')repair()},12000);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',whenReady,{once:true});
+  else whenReady();
+})();
+</script>
+{% endif %}
