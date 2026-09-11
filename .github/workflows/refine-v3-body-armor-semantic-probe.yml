@@ -4,40 +4,17 @@ on:
     branches: [refine-restart-v3]
     paths:
       - '.github/workflows/refine-v3-body-armor-semantic-probe.yml'
+      - '.github/scripts/refine-v3-body-armor-type-integrity.mjs'
   workflow_dispatch:
 permissions: { contents: read }
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '24' }
       - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Inspect Body Armor visible taxonomy and targets
-        run: |
-          cat > probe.mjs <<'EOF'
-          import { chromium } from 'playwright';
-          const BASE='https://www.statesideqm.com', THEME='158561894555', ROOT='body-armor-ballistic-protection';
-          const browser=await chromium.launch({headless:true});
-          const context=await browser.newContext({viewport:{width:1440,height:1000}});
-          const page=await context.newPage();
-          await page.goto(`${BASE}/collections/${ROOT}?preview_theme_id=${THEME}`,{waitUntil:'domcontentloaded',timeout:90000});
-          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:60000});
-          await page.waitForSelector('#MainContent .sq-refine-v3-sidebar',{state:'visible'});
-          const groups=await page.evaluate(()=>[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group')].map(d=>({title:(d.querySelector(':scope>summary')?.textContent||'').trim(),items:[...d.querySelectorAll('.sq-refine-v3-choice')].map(l=>{const i=l.querySelector('input');return{label:(l.querySelector('span')?.textContent||'').trim(),kind:i?.dataset.kind||'',target:i?.dataset.target||'',name:i?.dataset.filterName||'',value:i?.dataset.filterValue||''}})})));
-          console.log('BODY_ARMOR_GROUPS '+JSON.stringify(groups));
-          const taxonomy=groups.filter(g=>/Shop by (Category|Subcategory|Type)/i.test(g.title));
-          const seen=new Map(),dupes=[];
-          for(const g of taxonomy)for(const i of g.items){const k=i.label.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();if(seen.has(k))dupes.push({label:i.label,first:seen.get(k),second:g.title});else seen.set(k,g.title)}
-          const structural=taxonomy.flatMap(g=>g.items.filter(i=>i.kind==='structural').map(i=>({...i,group:g.title})));
-          const checks=[];
-          for(const item of structural){const p=await context.newPage();let err='';try{const u=new URL(item.target,BASE);if(u.searchParams.get('sq_root')!==ROOT)err='missing/wrong sq_root';u.searchParams.set('preview_theme_id',THEME);await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:90000});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});await new Promise(r=>setTimeout(r,700));const d=await p.evaluate(()=>{const main=document.querySelector('#MainContent');const grid=main?.querySelector('.sq-refine-v3-results .product-grid');const cards=grid?[...grid.querySelectorAll(':scope>.product-grid__item')].filter(x=>x.querySelector('a[href*="/products/"]')):[];return{cards:cards.length,side:!!main?.querySelector('.sq-refine-v3-sidebar'),error:main?.dataset.sqRefineV3Error||'',fallback:main?.dataset.sqRefineV3Fallback||'',current:location.pathname+location.search,gridHtml:(grid?.innerHTML||'').slice(0,300)}});const raw=new URL(u.pathname,BASE);raw.searchParams.set('view','sq-refine-v3-products');raw.searchParams.set('preview_theme_id',THEME);const rr=await context.request.get(raw.toString()).catch(()=>null);let source={status:rr?.status()||0,products:0,hasHost:false,hasGrid:false};if(rr){const text=await rr.text().catch(()=>'');source.hasHost=text.includes('data-sq-refine-v3-fallback-host');source.hasGrid=text.includes('product-grid');source.products=(text.match(/\/products\//g)||[]).length;}if(!d.side||d.error||d.cards<1)err=err||`bad target side=${d.side} error=${d.error} cards=${d.cards}`;checks.push({...item,...d,source,err});}catch(e){checks.push({...item,err:String(e)});}await p.close();}
-          console.log('BODY_ARMOR_DUPES '+JSON.stringify(dupes));
-          console.log('BODY_ARMOR_TARGETS '+JSON.stringify(checks));
-          const failures=[];if(dupes.length)failures.push('duplicate taxonomy labels across hierarchy');for(const c of checks)if(c.err)failures.push(`${c.group}: ${c.label}: ${c.err}`);
-          console.log('BODY_ARMOR_SEMANTIC_SUMMARY '+JSON.stringify({groups:taxonomy.map(g=>({title:g.title,count:g.items.length})),duplicates:dupes.length,targets:checks.length,failures}));
-          await browser.close();if(failures.length)process.exit(1);
-          EOF
-          node probe.mjs
-# source-view diagnostic rerun
+      - name: Audit Body Armor type and subcategory product integrity
+        run: node .github/scripts/refine-v3-body-armor-type-integrity.mjs
