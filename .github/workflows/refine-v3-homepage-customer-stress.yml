@@ -4,7 +4,7 @@ on:
     branches: [refine-restart-v3]
     paths:
       - '.github/workflows/refine-v3-homepage-customer-stress.yml'
-      - '.github/scripts/refine-v3-customer-stress-v2.mjs'
+      - '.github/scripts/refine-v3-customer-stress-v3.mjs'
   workflow_dispatch:
 permissions: { contents: read }
 jobs:
@@ -29,7 +29,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           VIEWPORT: ${{ matrix.viewport }}
-        run: node .github/scripts/refine-v3-customer-stress-v2.mjs
+        run: node .github/scripts/refine-v3-customer-stress-v3.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
