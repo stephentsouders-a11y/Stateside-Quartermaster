@@ -2,11 +2,9 @@
   "status": "FAIL",
   "theme": "158561894555",
   "publication": "UNPUBLISHED",
-  "sourceCommit": "e42ab118a280bdadb41129eb78b2f8d5766ad249",
-  "started": "2026-09-11T19:53:42.676Z",
-  "checks": [
-    "Desktop: exact heading, unique real checkbox options, one sidebar"
-  ],
+  "sourceCommit": "9ed47d9e52357f9357adfb72d118d92b66baf143",
+  "started": "2026-09-11T20:09:45.142Z",
+  "checks": [],
   "pageErrors": [],
   "tests": [],
   "browserVersion": "140.0.7339.16",
@@ -17,51 +15,75 @@
     "Shop by Manufacturers",
     "Availability"
   ],
-  "mode": "tags-v2",
+  "mode": "tags-v3-native",
   "options": [
     {
       "label": "Black",
-      "tag": "SQ Color/Pattern: Black"
+      "tag": "SQ Color/Pattern: Black",
+      "handle": "sq-color-pattern-black"
     },
     {
       "label": "Blue",
-      "tag": "SQ Color/Pattern: Blue"
+      "tag": "SQ Color/Pattern: Blue",
+      "handle": "sq-color-pattern-blue"
     },
     {
       "label": "Brown / Tan",
-      "tag": "SQ Color/Pattern: Brown / Tan"
+      "tag": "SQ Color/Pattern: Brown / Tan",
+      "handle": "sq-color-pattern-brown-tan"
     },
     {
       "label": "Camouflage",
-      "tag": "SQ Color/Pattern: Camouflage"
+      "tag": "SQ Color/Pattern: Camouflage",
+      "handle": "sq-color-pattern-camouflage"
     },
     {
       "label": "Gray",
-      "tag": "SQ Color/Pattern: Gray"
+      "tag": "SQ Color/Pattern: Gray",
+      "handle": "sq-color-pattern-gray"
     },
     {
       "label": "Green",
-      "tag": "SQ Color/Pattern: Green"
+      "tag": "SQ Color/Pattern: Green",
+      "handle": "sq-color-pattern-green"
     },
     {
       "label": "Orange",
-      "tag": "SQ Color/Pattern: Orange"
+      "tag": "SQ Color/Pattern: Orange",
+      "handle": "sq-color-pattern-orange"
+    },
+    {
+      "label": "Other Color / Pattern",
+      "tag": "SQ Color/Pattern: Other Color / Pattern",
+      "handle": "sq-color-pattern-other-color-pattern"
     },
     {
       "label": "Pink",
-      "tag": "SQ Color/Pattern: Pink"
+      "tag": "SQ Color/Pattern: Pink",
+      "handle": "sq-color-pattern-pink"
+    },
+    {
+      "label": "Purple",
+      "tag": "SQ Color/Pattern: Purple",
+      "handle": "sq-color-pattern-purple"
     },
     {
       "label": "Red",
-      "tag": "SQ Color/Pattern: Red"
+      "tag": "SQ Color/Pattern: Red",
+      "handle": "sq-color-pattern-red"
     },
     {
       "label": "White",
-      "tag": "SQ Color/Pattern: White"
+      "tag": "SQ Color/Pattern: White",
+      "handle": "sq-color-pattern-white"
+    },
+    {
+      "label": "Yellow / Gold",
+      "tag": "SQ Color/Pattern: Yellow / Gold",
+      "handle": "sq-color-pattern-yellow-gold"
     }
   ],
-  "baselineVisibleCount": 50,
-  "failure": "AssertionError [ERR_ASSERTION]: Product does not match selected color: be-polite-be-professional-but-have-a-plan-patch\n    at truth (file:///tmp/morale-verify/test.mjs:40:37)\n    at async file:///tmp/morale-verify/test.mjs:67:18",
-  "failureUrl": "https://www.statesideqm.com/collections/morale-patches-tactical-id?filter.v.availability=1&filter.p.tag=SQ+Color%2FPattern%3A+Gray",
-  "finished": "2026-09-11T19:54:06.520Z"
+  "failure": "AssertionError [ERR_ASSERTION]: Exact canonical options and order\n+ actual - expected\n... Skipped lines\n\n  [\n    'Black',\n    'Blue',\n    'Brown / Tan',\n    'Camouflage',\n...\n    'Orange',\n+   'Other Color / Pattern',\n    'Pink',\n+   'Purple',\n    'Red',\n    'White',\n+   'Yellow / Gold'\n  ]\n\n    at file:///tmp/morale-verify/test.mjs:50:10",
+  "failureUrl": "https://www.statesideqm.com/collections/morale-patches-tactical-id",
+  "finished": "2026-09-11T20:09:58.079Z"
 }
