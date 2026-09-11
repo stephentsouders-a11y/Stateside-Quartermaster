@@ -1,0 +1,69 @@
+{% doc %}
+Button 01 release repair for Accessories, Gifts & Collectibles. Keeps the root category tree authoritative on child routes, removes unrelated structural groups, normalizes Shopify availability values, and keeps 50/100/250 labels visible on mobile. State Guard is unaffected.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<style data-sq-refine-v3-button01-fix>
+#MainContent.sq-v3-button01-root .sq-refine-v3-page-size > strong,
+#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label > span{
+  display:inline!important;
+  position:static!important;
+  width:auto!important;
+  height:auto!important;
+  min-width:0!important;
+  min-height:0!important;
+  margin:0!important;
+  padding:0!important;
+  overflow:visible!important;
+  clip:auto!important;
+  clip-path:none!important;
+  white-space:normal!important;
+  opacity:1!important;
+  visibility:visible!important;
+}
+@media (max-width:900px){
+  #MainContent.sq-v3-button01-root .sq-refine-v3-page-size{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:7px!important;flex-wrap:wrap!important}
+  #MainContent.sq-v3-button01-root .sq-refine-v3-page-size label{display:flex!important;align-items:center!important;gap:5px!important;min-width:58px!important;padding:7px 9px!important}
+}
+</style>
+<script data-sq-refine-v3-button01-fix>
+(function(){
+  var main=document.getElementById('MainContent');if(!main)return;
+  var params=new URLSearchParams(location.search),current={{ collection.handle | json }},root=params.get('sq_root')||current;
+  if(root!=='accessories-gifts-collectibles')return;
+  main.classList.add('sq-v3-button01-root');
+  var CATEGORIES=[
+    ['Challenge Coins & Displays','challenge-coins-display-holders'],
+    ['Collectibles & Cards','collectibles-cards'],
+    ['Drinkware','drinkware-gifts'],
+    ['Keychains & Lanyards','keychains-lanyards'],
+    ['Memorial & Personalized Gifts','personalized-displays-memorials'],
+    ['Military Surplus & Collectibles','military-surplus-field-gear-collectibles'],
+    ['Pins, Buttons & Small Insignia','pins-buttons-small-insignia'],
+    ['Sword & Knife Display Cases','sword-knife-display-cases'],
+    ['Wallets & Pocket Gifts','wallets-pocket-gifts']
+  ];
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
+  function key(v){return clean(v).toLowerCase().replace(/[\u2019']/g,'').replace(/&/g,' ').replace(/\band\b/g,' ').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim()}
+  function group(side,title){return [].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')).find(function(d){var s=d.querySelector(':scope > summary');return s&&key(s.textContent)===key(title)})||null}
+  function target(handle){var u=new URL('/collections/'+handle,location.origin);u.searchParams.set('sq_root',root);params.forEach(function(v,k){if(k.indexOf('filter.')===0||k==='sort_by')u.searchParams.append(k,v)});var preview=params.get('preview_theme_id');if(preview)u.searchParams.set('preview_theme_id',preview);return u.pathname+'?'+u.searchParams.toString()}
+  function makeChoice(label,handle){var row=document.createElement('label');row.className='sq-refine-v3-choice';var input=document.createElement('input');input.type='checkbox';input.dataset.kind='structural';input.dataset.target=target(handle);input.checked=current===handle;var span=document.createElement('span');span.textContent=label;row.appendChild(input);row.appendChild(span);input.addEventListener('change',function(){if(input.checked)location.assign(input.dataset.target);else location.assign(target(root))});return row}
+  function repairCategory(side){
+    var cat=group(side,'Shop by Category');
+    if(!cat){cat=document.createElement('details');cat.className='sq-refine-v3-group';cat.innerHTML='<summary>Shop by Category</summary><div class="sq-refine-v3-choices"></div>';var first=side.querySelector(':scope > details.sq-refine-v3-group');if(first)side.insertBefore(cat,first);else side.appendChild(cat)}
+    var host=cat.querySelector(':scope > .sq-refine-v3-choices');if(!host){host=document.createElement('div');host.className='sq-refine-v3-choices';cat.appendChild(host)}
+    host.replaceChildren();CATEGORIES.forEach(function(row){host.appendChild(makeChoice(row[0],row[1]))});
+    var active=!!host.querySelector('input:checked');cat.dataset.active=active?'true':'false';if(active)cat.open=true;
+    [].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')).forEach(function(d){if(d===cat)return;var structural=d.querySelector('input[data-kind="structural"]');if(structural)d.remove()});
+  }
+  function repairAvailability(side){
+    var availability=group(side,'Availability');if(!availability)return;
+    availability.querySelectorAll('.sq-refine-v3-choice').forEach(function(row){var input=row.querySelector('input'),label=key(row.querySelector('span')&&row.querySelector('span').textContent);if(!input)return;var value='';if(label.indexOf('in stock')>-1)value='1';else if(label.indexOf('out of stock')>-1)value='0';if(!value)return;input.dataset.kind='native';input.dataset.filterName='filter.v.availability';input.dataset.filterValue=value;input.value=value;input.checked=params.getAll('filter.v.availability').indexOf(value)>-1});
+    var active=!!availability.querySelector('input:checked');availability.dataset.active=active?'true':'false';if(active)availability.open=true;
+  }
+  function normalizeSynthetic(side){side.querySelectorAll('input[data-sq-polish-param][data-sq-polish-value]').forEach(function(input){input.dataset.kind='native';input.dataset.filterName=input.dataset.sqPolishParam;input.dataset.filterValue=input.dataset.sqPolishValue})}
+  function repair(){var side=main.querySelector('.sq-refine-v3-sidebar');if(!side||main.dataset.sqRefineV3Ready!=='true')return false;repairCategory(side);repairAvailability(side);normalizeSynthetic(side);side.dataset.sqButton01Fixed='true';return true}
+  var tries=0,t=setInterval(function(){tries++;if(repair()||tries>160)clearInterval(t)},100);setTimeout(repair,1200);setTimeout(repair,3000);setTimeout(repair,6000);
+  var mo=new MutationObserver(function(){repair()});mo.observe(main,{subtree:true,childList:true,attributes:true,attributeFilter:['data-sq-refine-v3-ready']});
+})();
+</script>
+{% endif %}
