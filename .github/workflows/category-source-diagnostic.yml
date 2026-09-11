@@ -1,0 +1,57 @@
+name: Category source diagnostic Chromium
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/category-source-diagnostic.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --no-save playwright@1.55.0 && npx playwright install --with-deps chromium
+      - name: Inspect actual child-button sources and current sidebar
+        run: |
+          cat > .category-source.mjs <<'NODE'
+          import fs from 'node:fs';
+          import { chromium } from 'playwright';
+          const out='category-source-diagnostic';fs.mkdirSync(out,{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1000}});
+          const handles=['apparel','uniforms','tactical-gear','watches','literature','armed-forces-gear','products-built-for-the-line-u-s-army','rotc-series'];
+          const report=[];
+          for(const handle of handles){
+            const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+            try{
+              const response=await page.goto('https://www.statesideqm.com/collections/'+handle+'?preview_theme_id=158561894555',{waitUntil:'domcontentloaded',timeout:60000});
+              fs.writeFileSync(out+'/'+handle+'-source.html',await response.text());
+              await page.waitForTimeout(3000);
+              const data=await page.evaluate(()=>{
+                const text=e=>(e?.textContent||'').replace(/\s+/g,' ').trim();
+                const main=document.querySelector('#MainContent');
+                const links=[...(main?.querySelectorAll('a[href*="/collections/"]')||[])].filter(a=>!a.closest('collection-component,results-list,.product-grid,product-card,.sq-refine-v3-sidebar')).map(a=>({label:text(a.querySelector('[class*="title"],[class*="label"],strong,h3,h4'))||text(a),href:a.getAttribute('href'),ancestry:[a,a.parentElement,a.parentElement?.parentElement,a.parentElement?.parentElement?.parentElement].filter(Boolean).map(n=>n.tagName+'#'+n.id+'.'+n.className)}));
+                const groups=[...document.querySelectorAll('.sq-refine-v3-sidebar details')].map(d=>({label:text(d.querySelector('summary')),choices:[...d.querySelectorAll('label')].map(l=>({label:text(l.querySelector('span')),target:l.querySelector('input')?.dataset.target}))}));
+                return {url:location.href,theme:window.Shopify?.theme,links,groups,ready:main?.dataset.sqRefineV3Ready};
+              });
+              data.handle=handle;data.status=response.status();data.errors=errors;report.push(data);
+              console.log('CATEGORY_SOURCE '+JSON.stringify(data));
+              await page.locator('.sq-refine-v3-sidebar').evaluate(el=>{for(const d of el.querySelectorAll('details'))if(/category/i.test(d.querySelector('summary')?.textContent||''))d.open=true}).catch(()=>{});
+              await page.screenshot({path:out+'/'+handle+'.png',fullPage:false});
+              fs.writeFileSync(out+'/'+handle+'-rendered.html',await page.content());
+            }catch(e){report.push({handle,error:String(e),errors});console.log('ERROR '+handle+' '+String(e));}
+            await page.close();
+          }
+          fs.writeFileSync(out+'/report.json',JSON.stringify(report,null,2));await browser.close();
+          NODE
+          node .category-source.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: category-source-diagnostic
+          path: category-source-diagnostic
+          retention-days: 7
