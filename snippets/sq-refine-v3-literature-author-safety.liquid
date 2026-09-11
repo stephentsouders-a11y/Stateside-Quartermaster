@@ -1,32 +1,37 @@
 {% doc %}
-Removes only an unsafe Literature Author refine group when its options are malformed or are not backed by collection routes. This prevents search-derived/free-text author controls from misleading customers. Other Literature refinements remain intact.
+Removes unsafe Literature Author refine groups immediately when legacy V3 builders insert them. Search-derived or malformed author controls are never allowed to remain customer-interactive; the dedicated collection-local sq_author controls are preserved. Other Literature refinements remain untouched.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle == 'literature' %}
 <script data-sq-refine-v3-literature-author-safety>
 (function(){
-  const main=document.getElementById('MainContent');
-  if(!main)return;
+  var main=document.getElementById('MainContent');if(!main)return;
+  var cleaning=false,observer=null;
   function clean(){
-    const side=main.querySelector('.sq-refine-v3-sidebar');
-    if(!side)return false;
-    for(const group of side.querySelectorAll(':scope > details.sq-refine-v3-group')){
-      const label=(group.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim();
-      if(label!=='Shop by Author')continue;
-      const inputs=[...group.querySelectorAll('input[type="checkbox"]')];
-      const unsafe=!inputs.length || inputs.some(function(input){
-        const option=(input.closest('label')?.textContent||input.parentElement?.textContent||'').replace(/\s+/g,' ').trim();
-        const target=input.dataset.target||'';
-        return option.length>90 || /(?:description|paperback|hardcover|publisher|publication date|language|print length|isbn)/i.test(option) || !target.startsWith('/collections/');
+    if(cleaning)return false;cleaning=true;
+    var side=main.querySelector('.sq-refine-v3-sidebar');
+    if(!side){cleaning=false;return false}
+    [].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')).forEach(function(group){
+      var summary=group.querySelector(':scope > summary');
+      var label=(summary&&summary.textContent||'').replace(/\s+/g,' ').trim();
+      if(label!=='Shop by Author')return;
+      var inputs=[].slice.call(group.querySelectorAll('input[type="checkbox"]'));
+      var unsafe=!inputs.length||inputs.some(function(input){
+        var option=(input.closest('label')&&input.closest('label').textContent||input.parentElement&&input.parentElement.textContent||'').replace(/\s+/g,' ').trim();
+        var target=input.dataset.target||'';
+        var correct=input.dataset.kind==='author'&&target.indexOf('/collections/literature?')===0&&target.indexOf('sq_author=')>-1;
+        return !correct||option.length>90||/(?:description|paperback|hardcover|publisher|publication date|language|print length|isbn)/i.test(option);
       });
       if(unsafe)group.remove();
+    });
+    if(!observer){
+      observer=new MutationObserver(function(){queueMicrotask(clean)});
+      observer.observe(side,{childList:true,subtree:true});
     }
-    return true;
+    cleaning=false;return true;
   }
   clean();
-  setTimeout(clean,500);
-  setTimeout(clean,1200);
-  setTimeout(clean,2500);
-  setTimeout(clean,4000);
+  var tries=0,t=setInterval(function(){if(clean()&&++tries>20)clearInterval(t);else if(++tries>80)clearInterval(t)},50);
+  window.addEventListener('load',clean,{once:true});
 })();
 </script>
 {% endif %}
