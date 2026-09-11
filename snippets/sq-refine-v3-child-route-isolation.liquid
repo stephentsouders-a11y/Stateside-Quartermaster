@@ -1,0 +1,113 @@
+{% doc %}
+  Keeps Refine V3 authoritative after a structural filter navigates from a V3
+  root collection to a child collection. This runs before MainContent so legacy
+  collection runtimes cannot replace the V3 surface on child routes carrying a
+  valid sq_root. State Guard and unrelated collections remain untouched.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<script data-sq-refine-v3-child-route-isolation="{{ collection.handle | escape }}">
+(function(){
+  var ROOTS=new Set([
+    'accessories-gifts-collectibles','airsoft-milsim','apparel','armed-forces-gear','art',
+    'body-armor-ballistic-protection','literature','child-safety-shop','dive-scuba',
+    'firearm-accessories','first-aid-medical-ifak','flags-patriotic-decor',
+    'flashlights-lighting','footwear-gloves-eyewear','k9-dog-gear','knives-axes-cutlery',
+    'morale-patches-tactical-id','outdoor-preparedness-gear','patriotic-american-heritage',
+    'safety-rescue-climbing','sta-brite-insignia','tactical-gear','thin-line','uniforms',
+    'watches','zippos-lighters-torches','stateside-quartermaster-logo-merch',
+    'army-national-guard-series','air-national-guard-series','products-built-for-the-line-u-s-army',
+    'products-built-for-the-line-u-s-navy','products-built-for-the-line-u-s-air-force',
+    'products-built-for-the-line-u-s-marine-corps','products-built-for-the-line-u-s-coast-guard',
+    'products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series',
+    'military-schools-academies','law-enforcement-corrections','firefighting-ems-search-rescue'
+  ]);
+  var current={{ collection.handle | json }};
+  var params=new URLSearchParams(location.search);
+  var root=params.get('sq_root')||'';
+  if(!root||!ROOTS.has(root)||ROOTS.has(current))return;
+
+  document.documentElement.dataset.sqRefineV3ChildIsolation='true';
+  document.documentElement.dataset.sqRefineV3ChildRoot=root;
+  window.__sqGlobalRefineAuthorityV2=true;
+  window.__sqGlobalRefineVisibleSurfaceFix=true;
+  window.__sqCategoryUniverseV5=true;
+  window.__sqGlobalRefineCheckboxControls=true;
+
+  if(root==='military-schools-academies')window.__sqAcademyExclusiveTreeV6=true;
+  if(root==='thin-line'){
+    window.__sqCollectionFacetSidebarV1=true;
+    window.__sqThinStaGlobalSidebarBridgeV2=true;
+    window.__sqThinStaGlobalSidebarBridge=true;
+    window.__sqThinStaLegacyParentIsolationDisabled=true;
+    window.__sqRefineTaxonomyPanelV1=true;
+    document.addEventListener('DOMContentLoaded',function(){
+      if(!document.body)return;
+      document.body.classList.remove('sq-ts-parent','sq-ts-parent-only');
+      document.querySelectorAll('[id^="shopify-section-template--"]').forEach(function(el){
+        el.classList.remove('sq-ts-keep-section');
+        el.style.removeProperty('display');
+      });
+    },{once:true});
+  }
+
+  function lock(name,value){
+    try{
+      Object.defineProperty(window,name,{configurable:false,enumerable:true,get:function(){return value},set:function(){}});
+    }catch(_){
+      try{window[name]=value}catch(__){}
+    }
+  }
+  lock('__sqBflUnifiedTree',true);
+  lock('__sqBflRecoveryRouteV4','__sq_refine_v3_disabled__');
+  lock('__sqBflServerRecoveryRouteV3','__sq_refine_v3_disabled__');
+
+  function installSentinel(){
+    var main=document.getElementById('MainContent');
+    if(!main)return false;
+    if(!main.querySelector('[data-sqbfl-root]')){
+      var sentinel=document.createElement('span');
+      sentinel.hidden=true;
+      sentinel.setAttribute('aria-hidden','true');
+      sentinel.setAttribute('data-sqbfl-root','v3-watchdog-compat');
+      sentinel.setAttribute('data-sq-refine-v3-watchdog-sentinel','true');
+      main.appendChild(sentinel);
+    }
+    if(!main.__sqRefineV3WatchdogObserver){
+      main.__sqRefineV3WatchdogObserver=new MutationObserver(function(){
+        if(!main.querySelector('[data-sqbfl-root]'))installSentinel();
+      });
+      main.__sqRefineV3WatchdogObserver.observe(main,{childList:true});
+    }
+    return true;
+  }
+  if(!installSentinel())document.addEventListener('DOMContentLoaded',installSentinel,{once:true});
+
+  if(!window.__sqRefineV3MainReplaceGuard&&window.Element){
+    window.__sqRefineV3MainReplaceGuard=true;
+    var nativeReplace=Element.prototype.replaceChildren;
+    function isLegacyTakeoverNode(node){
+      if(!node)return false;
+      if(node.nodeType===1){
+        if((node.classList&&node.classList.contains('sqbfl'))||(node.matches&&node.matches('[data-sqbfl-root]')))return true;
+        if(node.querySelector&&node.querySelector('.sqbfl,[data-sqbfl-root]'))return true;
+      }
+      if(node.nodeType===11&&node.querySelector&&node.querySelector('.sqbfl,[data-sqbfl-root]'))return true;
+      return false;
+    }
+    Element.prototype.replaceChildren=function(){
+      if(this&&this.id==='MainContent'){
+        for(var i=0;i<arguments.length;i++)if(isLegacyTakeoverNode(arguments[i]))return;
+      }
+      return nativeReplace.apply(this,arguments);
+    };
+  }
+})();
+</script>
+<style data-sq-refine-v3-child-public-safety-visibility>
+html[data-sq-refine-v3-child-root="law-enforcement-corrections"] body #MainContent.sq-refine-v3-active .sq-refine-v3-results collection-component,
+html[data-sq-refine-v3-child-root="firefighting-ems-search-rescue"] body #MainContent.sq-refine-v3-active .sq-refine-v3-results collection-component{
+  display:block!important;
+  visibility:visible!important;
+}
+</style>
+{% endif %}
