@@ -1,0 +1,101 @@
+name: Collectibles child-route Chromium certification
+on:
+  push:
+    paths:
+      - '.github/workflows/collectibles-child-route-chromium-cert.yml'
+      - 'snippets/sq-refine-v3-button01-child-route-rescue.liquid'
+      - 'snippets/sq-refine-v3-button01-accessories-fix.liquid'
+      - 'snippets/sq-refine-v3.liquid'
+      - 'layout/theme.liquid'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Chromium certify Collectibles & Cards child route
+        run: |
+          cat > certify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const theme='158561894555';
+          const root=`https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=${theme}`;
+          const child=`https://www.statesideqm.com/collections/collectibles-cards?sq_root=accessories-gifts-collectibles&preview_theme_id=${theme}`;
+          const report={root,child,runs:[],failures:[]};
+          for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
+            const browser=await chromium.launch({headless:true});
+            const page=await browser.newPage({viewport});
+            const errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            await page.goto(child,{waitUntil:'domcontentloaded',timeout:90000});
+            await page.waitForTimeout(2500);
+            const audit=await page.evaluate(()=>{
+              const main=document.querySelector('#MainContent');
+              const side=main?.querySelector('.sq-refine-v3-sidebar');
+              const results=main?.querySelector('.sq-refine-v3-results');
+              const cards=[...(results?.querySelectorAll('.product-grid > *')||[])].filter(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'});
+              const sideRect=side?.getBoundingClientRect();
+              const resultsRect=results?.getBoundingClientRect();
+              const checked=[...(side?.querySelectorAll('input[type="checkbox"]:checked')||[])].map(i=>i.closest('label')?.innerText?.replace(/\s+/g,' ').trim()||i.value);
+              const columns=[...new Set(cards.slice(0,10).map(e=>Math.round(e.getBoundingClientRect().left)))].length;
+              return {
+                hasMain:!!main,hasSide:!!side,hasResults:!!results,
+                sideTop:sideRect?.top??null,resultsTop:resultsRect?.top??null,
+                sideLeft:sideRect?.left??null,resultsLeft:resultsRect?.left??null,
+                checked,products:cards.length,columns,
+                rescued:main?.querySelector('.sq-refine-v3-layout')?.dataset.sqButton01ChildRescued||null,
+                duplicateVisibleGrids:[...document.querySelectorAll('#MainContent .product-grid')].filter(g=>{const r=g.getBoundingClientRect(),s=getComputedStyle(g);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'}).length
+              };
+            });
+            await page.screenshot({path:`out/${device}-child.png`,fullPage:true});
+            report.runs.push({device,audit,errors});
+            if(!audit.hasSide) report.failures.push(`${device}: sidebar missing`);
+            if(!audit.hasResults) report.failures.push(`${device}: results missing`);
+            if(audit.products<1) report.failures.push(`${device}: no visible products`);
+            if(!audit.checked.some(x=>/Collectibles\s*&\s*Cards/i.test(x))) report.failures.push(`${device}: Collectibles & Cards not checked`);
+            if(device==='desktop'){
+              if(audit.sideTop===null||audit.resultsTop===null||Math.abs(audit.sideTop-audit.resultsTop)>80) report.failures.push(`desktop: sidebar pushed away from results (${audit.sideTop} vs ${audit.resultsTop})`);
+              if(audit.sideLeft===null||audit.resultsLeft===null||audit.sideLeft>=audit.resultsLeft) report.failures.push('desktop: sidebar is not left of results');
+              if(audit.columns!==3) report.failures.push(`desktop: expected 3 product columns, got ${audit.columns}`);
+            }
+            if(device==='mobile'&&audit.columns!==2) report.failures.push(`mobile: expected 2 product columns, got ${audit.columns}`);
+            if(audit.duplicateVisibleGrids!==1) report.failures.push(`${device}: expected one visible product grid, got ${audit.duplicateVisibleGrids}`);
+            if(errors.length) report.failures.push(`${device}: ${errors.length} browser console/page errors`);
+            await browser.close();
+          }
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          await page.goto(root,{waitUntil:'domcontentloaded',timeout:90000});
+          await page.waitForTimeout(2000);
+          const choice=page.locator('#MainContent .sq-refine-v3-sidebar label').filter({hasText:'Collectibles & Cards'}).first();
+          if(await choice.count()){
+            await choice.click();
+            await page.waitForLoadState('domcontentloaded');
+            await page.waitForTimeout(1800);
+            const u=page.url();
+            report.clickUrl=u;
+            if(!u.includes('/collections/collectibles-cards')||!u.includes('sq_root=accessories-gifts-collectibles')) report.failures.push(`click path wrong: ${u}`);
+          } else report.failures.push('root: Collectibles & Cards choice not found');
+          await browser.close();
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          if(report.failures.length) process.exitCode=2;
+          EOF
+          node certify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: collectibles-child-route-chromium-cert
+          path: out
+          retention-days: 14
