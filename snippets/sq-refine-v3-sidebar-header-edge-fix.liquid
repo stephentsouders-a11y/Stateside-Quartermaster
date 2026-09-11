@@ -1,5 +1,5 @@
 {% doc %}
-Ensures the V3 Refine Products navy title bar reaches both rounded top corners while the filter body stays white throughout scrolling, preserving the sticky desktop sidebar.
+Ensures the V3 Refine Products navy title bar reaches both rounded top corners while the filter body stays white throughout scrolling, preserving the sticky desktop sidebar. Armed Forces Gear is hard-locked to Shop by Branch, Availability, and Type in that order.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 {% render 'sq-refine-v3-sidebar-polish-rescue' %}
@@ -42,4 +42,15 @@ Ensures the V3 Refine Products navy title bar reaches both rounded top corners w
 @media (min-width:901px){#MainContent.sq-refine-v3-active .sq-refine-v3-sidebar{position:sticky!important;top:18px!important}}
 @media (max-width:900px){#MainContent.sq-refine-v3-active .sq-refine-v3-sidebar{position:static!important}}
 </style>
+{% if collection.handle == 'armed-forces-gear' %}
+<script data-sq-afg-three-filter-lock>
+(function(){
+  var main=document.getElementById('MainContent');if(!main)return;
+  function clean(v){return String(v||'').replace(/\s+/g,' ').trim().toLowerCase()}
+  function role(d){var s=clean(d.querySelector(':scope > summary')&&d.querySelector(':scope > summary').textContent);if(/branch|service/.test(s))return'branch';if(/availability/.test(s))return'availability';if(/(?:product\s*)?type/.test(s))return'type';return''}
+  function enforce(){var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;var groups=[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')),keep={};groups.forEach(function(d){var r=role(d);if(!r||keep[r])d.remove();else keep[r]=d});if(keep.branch)keep.branch.querySelector(':scope > summary').textContent='Shop by Branch';if(keep.availability)keep.availability.querySelector(':scope > summary').textContent='Availability';if(keep.type)keep.type.querySelector(':scope > summary').textContent='Type';['branch','availability','type'].forEach(function(r){if(keep[r])side.appendChild(keep[r])});side.dataset.sqAfgThreeFilterLock='true';return !!(keep.branch&&keep.availability&&keep.type)}
+  var tries=0,t=setInterval(function(){tries++;if(enforce()||tries>160)clearInterval(t)},50);var mo=new MutationObserver(function(){enforce()});mo.observe(main,{childList:true,subtree:true});
+})();
+</script>
+{% endif %}
 {% endif %}
