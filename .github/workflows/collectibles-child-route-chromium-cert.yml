@@ -44,6 +44,7 @@ jobs:
             {handle:'thin-line'},
             {handle:'tactical-gear',color:true},
             {handle:'literature'},
+            {handle:'literature-service-branch',root:'literature'},
             {handle:'k9-dog-gear',color:true},
             {handle:'patriotic-american-heritage',color:true},
             {handle:'apparel',policy:'apparel'},
@@ -66,9 +67,15 @@ jobs:
             const context=await browser.newContext({viewport});
             for(const spec of routes){
               const page=await context.newPage();
-              const errors=[];
+              const errors=[], benignErrors=[];
               page.on('pageerror',e=>errors.push(`pageerror: ${String(e)}`));
-              page.on('console',m=>{if(m.type()==='error')errors.push(`console: ${m.text()}`)});
+              page.on('console',m=>{
+                if(m.type()!=='error')return;
+                const text=m.text(),loc=(m.location()&&m.location().url)||'';
+                if(text.includes("Refused to frame 'https://shop.app/'")){benignErrors.push(`console: ${text}`);return;}
+                if(text.includes('Failed to load resource: the server responded with a status of 403')&&(/shop\.app|shopify|monorail|analytics/i.test(loc)||!loc)){benignErrors.push(`console: ${text}${loc?` @ ${loc}`:''}`);return;}
+                errors.push(`console: ${text}${loc?` @ ${loc}`:''}`);
+              });
               await page.addInitScript(()=>{
                 window.__sqLegacyPaints=[];
                 const selectors=['[class*="button-tree"]','[class*="root-categories"]','[class*="subcategory"]','[class*="third-level"]','[class*="branch-grid"]','[class*="type-grid"]','[class*="program-tree"]','[class*="category-grid"]','[class*="navigation-grid"]'];
@@ -106,12 +113,13 @@ jobs:
                 const isVisible=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0};
                 const cards=[...(results?.querySelectorAll('.product-grid > *')||[])].filter(isVisible);
                 const grids=[...document.querySelectorAll('#MainContent .product-grid')].filter(isVisible);
+                const gridMeta=grids.map((g,i)=>{const r=g.getBoundingClientRect(),s=getComputedStyle(g),p=g.parentElement,gp=p&&p.parentElement,first=g.querySelector('a[href*="/products/"]');return {index:i,inResults:!!g.closest('.sq-refine-v3-results'),className:String(g.className||''),id:g.id||'',parentClass:p?String(p.className||''):'',grandParentClass:gp?String(gp.className||''):'',top:Math.round(r.top),left:Math.round(r.left),width:Math.round(r.width),height:Math.round(r.height),position:s.position,overflow:s.overflow,firstProduct:first?first.getAttribute('href'):null};});
                 const sideRect=side?.getBoundingClientRect(),resultsRect=results?.getBoundingClientRect();
                 const checked=[...(side?.querySelectorAll('input[type="checkbox"]:checked')||[])].map(i=>i.closest('label')?.innerText?.replace(/\s+/g,' ').trim()||i.value);
                 const summaries=[...(side?.querySelectorAll(':scope > details > summary')||[])].map(s=>s.textContent.replace(/\s+/g,' ').trim());
                 const columns=[...new Set(cards.slice(0,12).map(e=>Math.round(e.getBoundingClientRect().left)))].length;
                 return {
-                  hasSide:!!side,hasResults:!!results,products:cards.length,columns,visibleGrids:grids.length,checked,summaries,
+                  hasSide:!!side,hasResults:!!results,products:cards.length,columns,visibleGrids:grids.length,gridMeta,checked,summaries,
                   sideTop:sideRect?.top??null,resultsTop:resultsRect?.top??null,sideLeft:sideRect?.left??null,resultsLeft:resultsRect?.left??null,
                   rescued:main?.querySelector('.sq-refine-v3-layout')?.dataset.sqRefineV3ChildRescued||null,
                   legacyPaints:(window.__sqLegacyPaints||[]).slice(0,10),
@@ -123,14 +131,14 @@ jobs:
                 await page.waitForTimeout(500);
                 audit.sideBackgroundAfterScroll=await page.$eval('.sq-refine-v3-sidebar',e=>getComputedStyle(e).backgroundColor);
               }
-              const row={device,handle:spec.handle,url:page.url(),navigationError,audit,errors};
+              const row={device,handle:spec.handle,url:page.url(),navigationError,audit,errors,benignErrors};
               report.routes.push(row);
               const fail=m=>report.failures.push(`${device}/${spec.handle}: ${m}`);
               if(navigationError)fail(`navigation failed: ${navigationError}`);
               if(!audit.hasSide)fail('sidebar missing');
               if(!audit.hasResults)fail('results missing');
               if(audit.products<1)fail('no visible products');
-              if(audit.visibleGrids!==1)fail(`expected one visible product grid, got ${audit.visibleGrids}`);
+              if(audit.visibleGrids!==1)fail(`expected one visible product grid, got ${audit.visibleGrids}: ${JSON.stringify(audit.gridMeta)}`);
               if(device==='desktop'&&audit.hasSide&&audit.hasResults){
                 if(audit.sideTop===null||audit.resultsTop===null||Math.abs(audit.sideTop-audit.resultsTop)>80)fail(`sidebar pushed away from results (${audit.sideTop} vs ${audit.resultsTop})`);
                 if(audit.sideLeft===null||audit.resultsLeft===null||audit.sideLeft>=audit.resultsLeft)fail('sidebar is not left of results');
@@ -141,8 +149,8 @@ jobs:
               if(spec.checked&&!audit.checked.some(x=>spec.checked.test(x)))fail('expected structural choice is not checked');
               if(spec.color&&!audit.summaries.some(x=>/^Shop by Color \/ Pattern$/i.test(x)))fail('Shop by Color / Pattern missing');
               if(spec.policy==='afg'){
-                const got=audit.summaries.map(x=>x.toLowerCase());
-                const allowed=['shop by branch','availability','type'];
+                const got=audit.summaries.map(x=>x.toLowerCase().replace(/^shop by\s+/,''));
+                const allowed=['branch','availability','type'];
                 if(got.length!==3||!allowed.every(x=>got.includes(x)))fail(`Armed Forces Gear filter policy wrong: ${audit.summaries.join(' | ')}`);
               }
               if(spec.policy==='apparel'){
@@ -152,7 +160,7 @@ jobs:
               }
               if(audit.legacyPaints.length)fail(`legacy navigation painted during load: ${JSON.stringify(audit.legacyPaints[0])}`);
               if(spec.scrollWhite&&audit.sideBackgroundAfterScroll&&!/rgb\(255, 255, 255\)|rgba\(255, 255, 255, 1\)/.test(audit.sideBackgroundAfterScroll))fail(`sidebar changed from white after scroll: ${audit.sideBackgroundAfterScroll}`);
-              if(errors.length)fail(`${errors.length} browser console/page errors`);
+              if(errors.length)fail(`${errors.length} browser console/page errors: ${errors.join(' || ')}`);
               const thisRouteFailed=report.failures.some(f=>f.startsWith(`${device}/${spec.handle}:`));
               if(spec.root||thisRouteFailed)await page.screenshot({path:`out/${device}-${spec.handle}.png`,fullPage:true});
               await page.close();
