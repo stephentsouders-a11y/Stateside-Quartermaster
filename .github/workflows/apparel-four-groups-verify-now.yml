@@ -1,0 +1,54 @@
+name: Apparel four-group Chromium verify now
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/apparel-four-groups-verify-now.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify Apparel draft and live
+        run: |
+          cat > verify.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const expected=['Shop by Category','Shop by Type','Shop by Manufacturer / Artist','Availability'];
+          const browser=await chromium.launch({headless:true});
+          let failed=false;
+          for (const [mode,suffix] of [['draft','?preview_theme_id=158561894555'],['live','']]) {
+            for (const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]) {
+              const ctx=await browser.newContext({viewport});
+              const page=await ctx.newPage();
+              const errors=[];
+              page.on('pageerror',e=>errors.push(String(e)));
+              await page.goto('https://www.statesideqm.com/collections/apparel'+suffix,{waitUntil:'domcontentloaded',timeout:60000});
+              await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:40000}).catch(()=>{});
+              await page.waitForTimeout(2500);
+              const data=await page.evaluate(()=>({
+                themeId:String(window.Shopify?.theme?.id||''),
+                ready:document.querySelector('#MainContent')?.dataset.sqRefineV3Ready||'',
+                groups:[...document.querySelectorAll('.sq-refine-v3-sidebar>details')].map(d=>d.querySelector(':scope>summary')?.textContent.trim()),
+                choices:[...document.querySelectorAll('.sq-refine-v3-sidebar>details')].map(d=>({label:d.querySelector(':scope>summary')?.textContent.trim(),count:d.querySelectorAll('input[type="checkbox"]').length})),
+                visibleGrids:[...document.querySelectorAll('#MainContent .product-grid')].filter(g=>{const r=g.getBoundingClientRect(),s=getComputedStyle(g);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'}).length,
+                cards:[...document.querySelectorAll('#MainContent .product-grid>.product-grid__item')].filter(x=>x.getBoundingClientRect().height>0).length,
+                policy:document.querySelector('.sq-refine-v3-sidebar')?.dataset.sqRefineV3Policy||''
+              }));
+              const pass=JSON.stringify(data.groups)===JSON.stringify(expected)&&data.ready==='true'&&data.visibleGrids===1&&data.cards>0&&errors.length===0;
+              console.log(JSON.stringify({mode,device,pass,...data,errors}));
+              if(!pass)failed=true;
+              await ctx.close();
+            }
+          }
+          await browser.close();
+          if(failed)process.exit(1);
+          JS
+          node verify.mjs
