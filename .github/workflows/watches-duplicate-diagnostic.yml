@@ -1,13 +1,13 @@
-name: Watches duplicate diagnostic
+name: Watches Chromium certification
 on:
   push:
     paths:
       - '.github/workflows/watches-duplicate-diagnostic.yml'
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 jobs:
-  diagnose:
+  certify:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -17,28 +17,32 @@ jobs:
           node-version: '22'
       - run: npm install --no-save playwright@1.55.0
       - run: npx playwright install --with-deps chromium
-      - name: Diagnose Watches
+      - name: Certify preview Watches route
         run: |
-          cat > diag.mjs <<'EOF'
-          import { chromium } from 'playwright'; import fs from 'node:fs';
-          const browser=await chromium.launch({headless:true}); const page=await browser.newPage({viewport:{width:1440,height:1000}}); const errors=[]; page.on('pageerror',e=>errors.push(e.message));
-          await page.goto('https://www.statesideqm.com/collections/watches',{waitUntil:'domcontentloaded',timeout:60000}); await page.waitForTimeout(8000);
-          const state=await page.evaluate(()=>{const vis=e=>e.getClientRects().length>0&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'; const grids=[...document.querySelectorAll('#MainContent .product-grid,#MainContent .sq-refine-v3-grid')].map(g=>({id:g.id,cls:g.className,visible:vis(g),top:g.getBoundingClientRect().top+scrollY,count:g.querySelectorAll('.product-grid__item').length,links:[...new Set([...g.querySelectorAll('a[href*="/products/"]')].map(a=>new URL(a.href).pathname))],html:g.outerHTML.slice(0,2000)})); return {url:location.href,theme:window.Shopify?.theme,main:document.querySelector('#MainContent')?.className,layouts:document.querySelectorAll('.sq-refine-v3-layout').length,grids,collectionComponents:[...document.querySelectorAll('#MainContent collection-component')].map(x=>({visible:vis(x),cls:x.className,gridCount:x.querySelectorAll('.product-grid').length,top:x.getBoundingClientRect().top+scrollY}))};});
-          await page.screenshot({path:'watches-before.png',fullPage:true}); await browser.close(); fs.writeFileSync('watches-diagnostic.json',JSON.stringify({errors,state},null,2)); console.log(JSON.stringify({errors,state},null,2));
+          cat > certify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const browser=await chromium.launch({headless:true});
+          const url='https://www.statesideqm.com/collections/watches?preview_theme_id=158561894555';
+          const sizes=[['desktop',1440,1000],['mobile',390,844]];
+          const report={browser:browser.version(),url,results:[]};
+          for(const [name,width,height] of sizes){
+            const ctx=await browser.newContext({viewport:{width,height}});
+            const page=await ctx.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+            await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});await page.waitForTimeout(9000);
+            const state=await page.evaluate(()=>{const vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden');const main=document.querySelector('#MainContent');const grids=[...main.querySelectorAll('.product-grid,.sq-refine-v3-grid')].filter(g=>vis(g)&&g.querySelector('a[href*="/products/"]'));const links=grids.map(g=>[...new Set([...g.querySelectorAll('a[href*="/products/"]')].map(a=>new URL(a.href,location.href).pathname))]);let overlap=0;for(let i=0;i<links.length;i++)for(let j=i+1;j<links.length;j++)if(links[i].some(x=>links[j].includes(x)))overlap++;const text=(main.innerText||'').toLowerCase();return{theme:window.Shopify?.theme,guard:!!document.querySelector('[data-sq-watches-single-surface-guard]'),marker:main?.dataset.sqWatchesSingleSurface||'',layouts:[...main.querySelectorAll('.sq-refine-v3-layout')].filter(vis).length,visibleProductGrids:grids.length,gridProductCounts:links.map(x=>x.length),overlapPairs:overlap,stateGuardBuilder:text.includes('state guard uniform builder')||text.includes('build your uniform'),duplicateMarked:[...main.querySelectorAll('[data-sq-watches-duplicate-surface="true"]')].length};});
+            await page.screenshot({path:`watches-${name}.png`,fullPage:true});
+            const pass=state.guard&&state.marker==='true'&&state.layouts===1&&state.visibleProductGrids===1&&!state.stateGuardBuilder&&state.overlapPairs===0&&errors.length===0;
+            report.results.push({name,pass,errors,state});await ctx.close();
+          }
+          await browser.close();fs.writeFileSync('watches-cert.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));if(report.results.some(r=>!r.pass))process.exit(1);
           EOF
-          node diag.mjs
+          node certify.mjs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: watches-before
+          name: watches-preview-chromium-cert
           path: |
-            watches-before.png
-            watches-diagnostic.json
-      - name: Commit diagnosis
-        run: |
-          mkdir -p audit-output
-          cp watches-diagnostic.json audit-output/watches-diagnostic.json
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add audit-output/watches-diagnostic.json
-          git diff --cached --quiet || git commit -m 'test(watches): save duplicate diagnosis [skip ci]'
-          git push
+            watches-cert.json
+            watches-desktop.png
+            watches-mobile.png
