@@ -6,6 +6,8 @@ Guarantees that Refine V3 exposes the assembled product cards in the visible V3 
 (function(){
   const main=document.getElementById('MainContent');
   if(!main)return;
+  const refineQuery=new URLSearchParams(location.search);
+  if((refineQuery.get('sq_root')||{{ collection.handle | json }})==='tactical-gear'&&refineQuery.has('sq_tactical_color'))return;
   function visible(el){
     if(!el)return false;
     const r=el.getBoundingClientRect(),s=getComputedStyle(el);
