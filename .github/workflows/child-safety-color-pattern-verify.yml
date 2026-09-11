@@ -1,0 +1,75 @@
+name: Child Safety color pattern verification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/child-safety-color-pattern-verify.yml'
+      - 'snippets/sq-refine-v3-child-safety-fix.liquid'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify Child Safety Shop color and pattern filtering
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > verify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          const wanted=['Black','Blue','Camouflage','Gray','Green','Other Color / Pattern','Pink','Purple','Red','White','Yellow / Gold'];
+          const results={};
+          for(const [name,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
+            const ctx=await browser.newContext({viewport});
+            const page=await ctx.newPage();
+            const errors=[];
+            page.on('pageerror',e=>errors.push(e.message));
+            const base=new URL('/collections/child-safety-shop',process.env.BASE);
+            base.searchParams.set('preview_theme_id',process.env.THEME);
+            const resp=await page.goto(base.toString(),{waitUntil:'domcontentloaded',timeout:90000});
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqChildSafetyColorPattern==='ready',null,{timeout:45000});
+            const group=page.locator('.sq-refine-v3-group').filter({has:page.locator('summary',{hasText:'Shop by Color / Pattern'})}).first();
+            await group.waitFor({state:'attached',timeout:15000});
+            const labels=(await group.locator('.sq-refine-v3-choice span').allTextContents()).map(x=>x.trim());
+            await page.screenshot({path:`out/${name}-base.png`,fullPage:true});
+            const black=group.locator('input[data-filter-value="SQ Color/Pattern: Black"]');
+            await black.check();
+            await page.waitForURL(u=>new URL(u).searchParams.getAll('filter.p.tag').includes('SQ Color/Pattern: Black'),{timeout:30000});
+            await page.waitForLoadState('domcontentloaded');
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqChildSafetyColorPattern==='ready',null,{timeout:45000});
+            const checked=await page.locator('input[data-sq-child-color-pattern="true"][data-filter-value="SQ Color/Pattern: Black"]').isChecked();
+            const cards=await page.locator('.sq-refine-v3-results .product-grid__item').evaluateAll(cs=>cs.map(c=>(c.innerText||'').replace(/\s+/g,' ').trim()).filter(Boolean));
+            const text=cards.join('\n');
+            const includesKids=text.includes('Bulletproof Backpack for Kids');
+            const includesPuma=text.includes("Bulletproof PUMA Kids' Meridian Backpack");
+            const excludesNonBlack=!text.includes("Children's Bulletproof Backpack for School")&&!text.includes('Bulletproof Backpack Insert')&&!text.includes('173pcs Large First Aid Kit');
+            await page.screenshot({path:`out/${name}-black.png`,fullPage:true});
+            results[name]={status:resp?.status(),labels,groupExists:await group.count()>0,allLabels:wanted.every(x=>labels.includes(x)),checked,url:page.url(),includesKids,includesPuma,excludesNonBlack,errors,cards};
+            await ctx.close();
+          }
+          await browser.close();
+          fs.writeFileSync('out/report.json',JSON.stringify(results,null,2));
+          console.log('CHILD_SAFETY_COLOR_PATTERN_REPORT '+JSON.stringify(results));
+          const ok=Object.values(results).every(r=>r.status===200&&r.groupExists&&r.allLabels&&r.checked&&r.includesKids&&r.includesPuma&&r.excludesNonBlack&&r.errors.length===0);
+          if(!ok) process.exit(2);
+          EOF
+          node verify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: child-safety-color-pattern-verification
+          path: out
+          retention-days: 7
