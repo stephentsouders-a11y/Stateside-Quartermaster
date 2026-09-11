@@ -1,7 +1,7 @@
 {% if request.page_type == 'collection' and collection.handle == 'child-safety-shop' %}
 <script data-sq-refine-v3-child-safety-taxonomy>
 (function(){
-  function esc(v){return String(v||'').replace(/[&<>"']/g,function(k){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[k]})}
+  function esc(v){return String(v||'').replace(/[&<>"']/g,function(k){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[k]})}
   function cleanLabel(card){
     var n=card.querySelector('.sq-subcategory-name,.sq-third-level__name,[data-sq-nav-name]');
     var label=String((n&&n.textContent)||card.getAttribute('aria-label')||'').replace(/^Shop\s+/i,'').trim();
