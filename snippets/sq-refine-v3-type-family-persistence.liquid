@@ -1,28 +1,40 @@
 {% doc %}
-Keeps broad V3 Shop by Type family selections visibly checked when the active route uses sq_type_family instead of Shopify's raw product_type parameter. Also makes clearing the active family checkbox remove that family route. State Guard is excluded.
+Canonicalizes legacy broad V3 Shop by Type family selections to Shopify's authoritative product_type filter so the V3 server-rendered product feed actually changes. The selected Type remains checked through Shopify's native filter state. State Guard is excluded.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 <script data-sq-refine-v3-type-family-persistence>
 (function(){
   var main=document.getElementById('MainContent');if(!main)return;
   function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
+  function canonicalize(){
+    var u=new URL(location.href),family=clean(u.searchParams.get('sq_type_family'));
+    if(!family)return false;
+    var existing=u.searchParams.getAll('filter.p.product_type');
+    if(existing.some(function(v){return clean(v)===family})){
+      u.searchParams.delete('sq_type_family');
+      history.replaceState(history.state,'',u.pathname+'?'+u.searchParams.toString());
+      return false;
+    }
+    u.searchParams.delete('sq_type_family');
+    u.searchParams.delete('page');
+    u.searchParams.delete('sq_view_page');
+    u.searchParams.append('filter.p.product_type',family);
+    location.replace(u.pathname+'?'+u.searchParams.toString());
+    return true;
+  }
+  if(canonicalize())return;
   function sync(){
     if(main.dataset.sqRefineV3Ready!=='true')return false;
-    var family=new URLSearchParams(location.search).get('sq_type_family');if(!family)return true;
+    var selected=new URLSearchParams(location.search).getAll('filter.p.product_type');if(!selected.length)return true;
     var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;
     var groups=[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group'));
     var type=groups.find(function(d){var s=d.querySelector(':scope > summary');return s&&/^Shop by Type$/i.test(clean(s.textContent))});if(!type)return false;
-    var input=[].slice.call(type.querySelectorAll('input[type=checkbox]')).find(function(i){return clean(i.dataset.sqPolishValue||i.dataset.filterValue||i.value)===clean(family)});if(!input)return false;
-    input.checked=true;input.dataset.typeFamily=family;type.open=true;type.dataset.active='true';
-    if(input.dataset.sqTypeFamilyBound!=='1'){
-      input.dataset.sqTypeFamilyBound='1';
-      input.addEventListener('change',function(ev){
-        if(input.checked)return;
-        var u=new URL(location.href);if(u.searchParams.get('sq_type_family')!==family)return;
-        ev.stopImmediatePropagation();u.searchParams.delete('sq_type_family');u.searchParams.delete('page');u.searchParams.delete('sq_view_page');location.assign(u.pathname+'?'+u.searchParams.toString());
-      },true);
-    }
-    return true;
+    var found=false;
+    [].slice.call(type.querySelectorAll('input[type=checkbox]')).forEach(function(i){
+      var value=clean(i.dataset.sqPolishValue||i.dataset.filterValue||i.value);
+      if(selected.some(function(v){return clean(v)===value})){i.checked=true;type.open=true;type.dataset.active='true';found=true}
+    });
+    return found||true;
   }
   if(sync())return;var tries=0,t=setInterval(function(){tries++;if(sync()||tries>120)clearInterval(t)},250);
 })();
