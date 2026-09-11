@@ -1,0 +1,108 @@
+{% assign sq_sta_branch_handles_csv = 'sta-brite-all-products,sta-brite-army,sta-brite-navy,sta-brite-air-force,sta-brite-marine-corps,sta-brite-coast-guard,sta-brite-space-force,sta-brite-rotc,sta-brite-jrotc,sta-brite-military-service-academies,sta-brite-law-enforcement,sta-brite-firefighting' %}
+{% assign sq_sta_branch_handles = sq_sta_branch_handles_csv | split: ',' %}
+{% assign sq_is_sta_branch = false %}
+{% if sq_sta_branch_handles contains collection.handle %}{% assign sq_is_sta_branch = true %}{% endif %}
+{% assign sq_type_handles_csv = 'thin-line-shop-general-multi-line,thin-line-shop-thin-blue-line,thin-line-shop-thin-camo-line,thin-line-shop-thin-gold-line,thin-line-shop-thin-gray-line,thin-line-shop-thin-green-line,thin-line-shop-thin-orange-line,thin-line-shop-thin-pink-line,thin-line-shop-thin-purple-teal-line,thin-line-shop-thin-red-line,thin-line-shop-thin-white-line,thin-line-shop-thin-yellow-line,sta-brite-all-products,sta-brite-army,sta-brite-navy,sta-brite-air-force,sta-brite-marine-corps,sta-brite-coast-guard,sta-brite-space-force,sta-brite-rotc,sta-brite-jrotc,sta-brite-military-service-academies,sta-brite-law-enforcement,sta-brite-firefighting' %}
+{% assign sq_type_handles = sq_type_handles_csv | split: ',' %}
+{% if sq_type_handles contains collection.handle %}
+  {% unless sq_is_sta_branch %}
+    <style data-sq-thin-line-type-prepaint="20260911">
+      html[data-sq-refine-v3-child-root="thin-line"] #MainContent .sq-thin-stabrite-types{display:none!important;visibility:hidden!important;pointer-events:none!important}
+      html[data-sq-refine-v3-child-root="thin-line"] #MainContent:not([data-sq-refine-v3-ready="true"]){min-height:100vh}
+    </style>
+  {% endunless %}
+  {% assign sq_types = collection.all_types | sort_natural %}
+  <section class="sq-ts-match-section sq-thin-stabrite-types" data-sq-type-browser data-sq-sta-branch="{{ sq_is_sta_branch }}">
+    <div class="sq-ts-match-wrap">
+      <p class="sq-ts-match-kicker">Stateside Quartermaster</p>
+      <h2>Shop by Type</h2>
+      <p class="sq-ts-match-intro">Select a product type to view the products in this branch or service group.</p>
+      <div class="sq-ts-match-grid">
+        {% for sq_type in sq_types %}
+          {% assign sq_type_clean = sq_type | strip %}
+          {% if sq_type_clean != blank %}
+            {% assign sq_type_products = collection.products | where: 'type', sq_type_clean %}
+            {% assign sq_type_product = sq_type_products.first %}
+            {% assign sq_type_image = sq_type_product.featured_image %}
+            <a class="sq-ts-match-card" href="{{ collection.url }}?filter.p.product_type={{ sq_type_clean | url_encode }}&filter.v.availability=1&sort_by=title-ascending" aria-label="Shop {{ sq_type_clean | escape }}">
+              <span class="sq-ts-match-media">
+                {% if sq_type_image != blank %}
+                  <img src="{{ sq_type_image | image_url: width: 720 }}" alt="{{ sq_type_clean | escape }}" width="720" height="500" loading="lazy">
+                {% else %}
+                  <span class="sq-ts-match-placeholder" aria-hidden="true">SQ</span>
+                {% endif %}
+              </span>
+              <span class="sq-ts-match-copy">
+                <span class="sq-ts-match-name">{{ sq_type_clean }}</span>
+                <span class="sq-ts-match-count">View products</span>
+                <span class="sq-ts-match-arrow" aria-hidden="true">→</span>
+              </span>
+            </a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+  <style>
+    .sq-ts-match-section{padding:12px 20px 48px;background:#f4f5f3;color:#071d2d}.sq-ts-match-wrap{max-width:1280px;margin:0 auto}.sq-ts-match-kicker{margin:0 0 6px;color:#a91827;font-size:12px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}.sq-ts-match-section h2{margin:0;font-size:clamp(26px,3vw,40px);line-height:1.08}.sq-ts-match-intro{max-width:820px;margin:10px 0 26px;color:#41505b;font-size:16px;line-height:1.55}.sq-ts-match-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px}.sq-ts-match-card{position:relative;display:flex;min-width:0;height:280px;flex-direction:column;overflow:hidden;border:1px solid #aeb8be;border-radius:14px;background:#fff;color:#fff;text-decoration:none;box-shadow:0 8px 22px rgba(0,0,0,.12);transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}.sq-ts-match-card::after{content:"";position:absolute;inset:auto 0 0;height:4px;background:#a91827}.sq-ts-match-card:hover,.sq-ts-match-card:focus-visible{transform:translateY(-4px);border-color:#a91827;box-shadow:0 14px 30px rgba(0,0,0,.24)}.sq-ts-match-card:focus-visible{outline:3px solid #d5ab4b;outline-offset:3px}.sq-ts-match-media{display:block;height:176px;flex:0 0 176px;overflow:hidden;background:#fff;border-bottom:1px solid #d9dee1}.sq-ts-match-media img{display:block;width:100%;height:100%;padding:10px;box-sizing:border-box;background:#fff;object-fit:contain;transition:transform .25s ease}.sq-ts-match-card:hover .sq-ts-match-media img{transform:scale(1.035)}.sq-ts-match-placeholder{display:grid;width:100%;height:100%;place-items:center;color:#d5ab4b;font-size:38px;font-weight:950;letter-spacing:.08em}.sq-ts-match-copy{position:relative;display:flex;min-height:104px;flex:1;flex-direction:column;padding:14px 42px 16px 15px;background:#071d2d}.sq-ts-match-name{font-size:15px;font-weight:850;line-height:1.24}.sq-ts-match-count{margin-top:6px;color:#c7d0d6;font-size:12px;font-weight:650}.sq-ts-match-arrow{position:absolute;right:15px;bottom:16px;color:#d5ab4b;font-size:22px;font-weight:900}
+    body.sq-tst-scope .sq-third-level,body.sq-tst-scope .sq-ptype-browser,body.sq-tst-scope .sq-stabrite-browser{display:none!important}body.sq-tst-choice [id^="shopify-section-template--"][id$="__main"],body.sq-tst-choice collection-component{display:none!important}body.sq-tst-filtered [id^="shopify-section-template--"][id$="__main"],body.sq-tst-filtered collection-component{display:block!important}
+    @media(min-width:1121px){.sq-ts-match-card{height:327px}.sq-ts-match-media{height:220px;flex-basis:220px}.sq-ts-match-copy{min-height:107px}}@media(max-width:1120px){.sq-ts-match-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}@media(max-width:900px){.sq-ts-match-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:749px){.sq-ts-match-section{padding:6px 14px 36px}.sq-ts-match-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.sq-ts-match-card{height:218px;min-height:218px}.sq-ts-match-media{height:128px;flex-basis:128px}.sq-ts-match-copy{min-height:90px;padding:12px 34px 14px 12px}.sq-ts-match-name{font-size:14px}.sq-ts-match-arrow{right:11px;bottom:13px}}
+  </style>
+  <script>
+  (function(){
+    if(document.documentElement.dataset.sqRefineV3ChildRoot==='thin-line'){
+      var main=document.getElementById('MainContent');
+      var activePath=location.pathname.replace(/\/$/,'');
+      function markActiveCategory(){
+        if(!main)return;
+        main.querySelectorAll('.sq-refine-v3-sidebar .sq-refine-v3-group').forEach(function(group){
+          var summary=group.querySelector(':scope>summary');
+          if(!summary||summary.textContent.trim().toLowerCase()!=='shop by category')return;
+          var active=false;
+          group.querySelectorAll('input[data-kind="structural"][data-target]').forEach(function(input){
+            try{
+              var selected=new URL(input.dataset.target,location.origin).pathname.replace(/\/$/,'')===activePath;
+              input.checked=selected;
+              if(selected)active=true;
+            }catch(_){}
+          });
+          if(active){group.dataset.active='true';group.open=true;}
+        });
+      }
+      markActiveCategory();
+      if(main){
+        var observer=new MutationObserver(markActiveCategory);
+        observer.observe(main,{childList:true,subtree:true});
+        setTimeout(function(){markActiveCategory();observer.disconnect();},15000);
+      }
+      return;
+    }
+    var section=document.querySelector('[data-sq-type-browser]');
+    var filtered=new URLSearchParams(window.location.search).has('filter.p.product_type');
+    var isStaBranch={{ sq_is_sta_branch | json }};
+    function apply(){
+      if(!document.body)return;
+      document.body.classList.add('sq-tst-scope');
+      document.querySelectorAll('.sq-third-level,.sq-ptype-browser,.sq-stabrite-browser').forEach(function(el){el.style.setProperty('display','none','important');});
+      var typeWrap=section ? section.closest('[id^="shopify-section-template--"]') : null;
+      var mainWrap=document.querySelector('[id^="shopify-section-template--"][id$="__main"]');
+      if(filtered){
+        if(section)section.style.setProperty('display','none','important');
+        document.body.classList.remove('sq-tst-choice');document.body.classList.add('sq-tst-filtered');
+        if(isStaBranch){
+          document.querySelectorAll('[id^="shopify-section-template--"]').forEach(function(el){el.style.setProperty('display',mainWrap && el===mainWrap ? 'block' : 'none','important');});
+        }
+        document.querySelectorAll('[id^="shopify-section-template--"][id$="__main"],collection-component').forEach(function(el){el.style.setProperty('display','block','important');});
+      }else{
+        document.body.classList.remove('sq-tst-filtered');document.body.classList.add('sq-tst-choice');
+        if(isStaBranch){
+          document.querySelectorAll('[id^="shopify-section-template--"]').forEach(function(el){el.style.setProperty('display',typeWrap && el===typeWrap ? 'block' : 'none','important');});
+          if(typeWrap)typeWrap.style.setProperty('display','block','important');
+        }
+      }
+    }
+    if(document.body)apply();else document.addEventListener('DOMContentLoaded',apply);
+  })();
+  </script>
+{% endif %}
+{% schema %}{"name":"SQ Thin Sta Types","settings":[],"presets":[{"name":"SQ Thin Sta Types"}]}{% endschema %}
