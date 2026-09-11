@@ -1,0 +1,51 @@
+name: Diagnose Body Armor Ballistic Shields filter
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/diagnose-body-armor-shields.yml'
+permissions:
+  contents: read
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Trace exact structural click
+        run: |
+          cat > trace.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          const errs=[]; page.on('pageerror',e=>errs.push(String(e)));
+          const base='https://www.statesideqm.com/collections/body-armor-ballistic-protection?preview_theme_id=158561894555';
+          const r=await page.goto(base,{waitUntil:'domcontentloaded',timeout:90000});
+          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});
+          const before=await page.evaluate(()=>({url:location.href,handle:document.querySelector('script[data-sq-refine-v3]')?.dataset.currentHandle||'',target:[...document.querySelectorAll('.sq-refine-v3-choice')].find(x=>/Ballistic Shields & Barriers/i.test(x.textContent))?.querySelector('input')?.dataset.target||'',groups:[...document.querySelectorAll('.sq-refine-v3-group>summary')].map(x=>x.textContent.trim())}));
+          console.log('BEFORE '+JSON.stringify(before));
+          const choice=page.locator('.sq-refine-v3-choice').filter({hasText:'Ballistic Shields & Barriers'}).first();
+          const details=choice.locator('xpath=ancestor::details[1]');
+          if(!(await details.evaluate(e=>e.open))) await details.locator(':scope > summary').click();
+          const input=choice.locator('input[type=checkbox]');
+          await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:60000}).catch(()=>null),input.click()]);
+          await page.waitForTimeout(1500);
+          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000}).catch(()=>{});
+          const after=await page.evaluate(()=>({url:location.href,path:location.pathname,search:location.search,ready:document.querySelector('#MainContent')?.dataset.sqRefineV3Ready||'',error:document.querySelector('#MainContent')?.dataset.sqRefineV3Error||'',handle:document.querySelector('script[data-sq-refine-v3]')?.dataset.currentHandle||'',checked:[...document.querySelectorAll('.sq-refine-v3-choice input:checked')].map(x=>({label:x.closest('label')?.textContent?.trim(),target:x.dataset.target||'',kind:x.dataset.kind||''})),cards:[...document.querySelectorAll('.sq-refine-v3-results .product-grid > *')].filter(x=>x.querySelector('a[href*="/products/"]')&&getComputedStyle(x).display!=='none').length,bodyTitle:document.title}));
+          console.log('AFTER '+JSON.stringify(after));
+          console.log('PAGE_ERRORS '+JSON.stringify(errs));
+          await page.screenshot({path:'body-armor-shields-after.png',fullPage:true});
+          await browser.close();
+          EOF
+          node trace.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: body-armor-shields-trace
+          path: body-armor-shields-after.png
+          if-no-files-found: warn
