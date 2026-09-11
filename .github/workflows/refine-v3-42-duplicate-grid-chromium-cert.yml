@@ -17,7 +17,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: refine-restart-v3
+          ref: ${{ github.sha }}
+      - name: Verify immutable checkout
+        env:
+          CERT_SHA: ${{ github.sha }}
+        run: |
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          echo "CERT_SHA=$CERT_SHA"
+          echo "ACTUAL_SHA=$ACTUAL_SHA"
+          test "$ACTUAL_SHA" = "$CERT_SHA"
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -64,4 +72,3 @@ jobs:
           name: refine-v3-42-shard-${{ matrix.shard }}
           path: out
           retention-days: 14
-# post-single-grid-fix certification 2026-09-11
