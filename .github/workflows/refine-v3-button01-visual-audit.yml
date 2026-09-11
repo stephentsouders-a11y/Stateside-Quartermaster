@@ -4,7 +4,7 @@ on:
   push:
     branches: [refine-restart-v3]
     paths:
-      - '.github/scripts/refine-v3-button01-visual-audit-v4.mjs'
+      - '.github/scripts/refine-v3-button01-final-cert-v5.mjs'
       - '.github/workflows/refine-v3-button01-visual-audit.yml'
   workflow_dispatch:
 
@@ -24,15 +24,15 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Run button 01 forensic Chromium audit
-        run: node .github/scripts/refine-v3-button01-visual-audit-v4.mjs
-      - name: Upload visual evidence
+      - name: Run final button 01 Chromium certification
+        run: node .github/scripts/refine-v3-button01-final-cert-v5.mjs
+      - name: Upload final visual evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: button-01-forensic-audit
-          path: audit-evidence/button-01/current
+          name: button-01-final-v5
+          path: audit-evidence/button-01/final-v5
           if-no-files-found: warn
           retention-days: 14
 
-# Dedicated route-by-route release gate: button 01 must pass before button 02.
+# Button 01 must pass automated and manual Chromium review before button 02 begins.
