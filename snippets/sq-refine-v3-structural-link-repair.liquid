@@ -1,5 +1,5 @@
 {% doc %}
-Repairs late-added V3 structural refinement targets so every collection navigation preserves sq_root. V3 only; State Guard remains untouched.
+Repairs late-added V3 structural refinement targets so every collection navigation preserves sq_root. V3 only; State Guard remains untouched. Tactical Gear's Chest Rigs structural choice is pinned to the authoritative sq-type-chest-rigs tagged route so the broad parent collection cannot leak belts into a Chest Rigs selection.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 <script data-sq-refine-v3-structural-link-repair>
@@ -15,6 +15,10 @@ Repairs late-added V3 structural refinement targets so every collection navigati
       try{
         const url=new URL(input.dataset.target,location.origin);
         if(url.pathname.indexOf('/collections/')===0){
+          const label=(input.closest('label')&&input.closest('label').textContent||'').replace(/\s+/g,' ').trim();
+          if(root==='tactical-gear'&&/chest\s+rigs/i.test(label)&&url.pathname.replace(/\/$/,'')==='/collections/packs-pouches-carry-gear-chest-rigs-load-carriage'){
+            url.pathname='/collections/packs-pouches-carry-gear-chest-rigs-load-carriage/sq-type-chest-rigs';
+          }
           url.searchParams.set('sq_root',root);
           input.dataset.target=url.pathname+(url.searchParams.toString()?'?'+url.searchParams.toString():'');
         }
