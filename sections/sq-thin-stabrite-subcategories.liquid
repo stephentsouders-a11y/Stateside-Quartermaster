@@ -15,6 +15,19 @@
     {% assign sq_handles_csv = 'sta-brite-all-products,sta-brite-air-force,sta-brite-army,sta-brite-coast-guard,sta-brite-marine-corps,sta-brite-navy,sta-brite-space-force,sta-brite-rotc,sta-brite-jrotc,sta-brite-military-service-academies,sta-brite-law-enforcement,sta-brite-firefighting' %}
 {% endcase %}
 {% if sq_parent %}
+  {% if collection.handle == 'thin-line' %}
+    <style data-sq-thin-line-first-paint="20260911">
+      #MainContent .sq-ts-match-section[data-sq-parent="thin-line"]{display:none!important;visibility:hidden!important;pointer-events:none!important}
+    </style>
+    <noscript><style>#MainContent .sq-ts-match-section[data-sq-parent="thin-line"]{display:block!important;visibility:visible!important;pointer-events:auto!important}</style></noscript>
+    <script data-sq-thin-line-v3-owner>
+      window.__sqCollectionFacetSidebarV1=true;
+      window.__sqThinStaGlobalSidebarBridge=true;
+      window.__sqThinStaGlobalSidebarBridgeV2=true;
+      window.__sqThinStaLegacyParentIsolationDisabled=true;
+      window.__sqRefineTaxonomyPanelV1=true;
+    </script>
+  {% endif %}
   {% if collection.handle == 'sta-brite-insignia' %}
     <style data-sq-stabrite-v3-prepaint>
       #MainContent .sq-ts-match-section[data-sq-parent="sta-brite-insignia"]{display:none!important;visibility:hidden!important;pointer-events:none!important}
