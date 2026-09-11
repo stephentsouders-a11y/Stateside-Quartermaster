@@ -5,6 +5,22 @@
   valid sq_root. State Guard and unrelated collections remain untouched.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<style data-sq-refine-v3-child-first-paint-isolation>
+html[data-sq-refine-v3-child-isolation="true"] #MainContent [class*="button-tree"],
+html[data-sq-refine-v3-child-isolation="true"] #MainContent [class*="root-categories"],
+html[data-sq-refine-v3-child-isolation="true"] #MainContent [class*="third-level"],
+html[data-sq-refine-v3-child-isolation="true"] #MainContent [class*="branch-grid"],
+html[data-sq-refine-v3-child-isolation="true"] #MainContent [class*="type-grid"],
+html[data-sq-refine-v3-child-isolation="true"] #MainContent [class*="program-tree"],
+html[data-sq-refine-v3-child-isolation="true"] #MainContent [class*="category-grid"],
+html[data-sq-refine-v3-child-isolation="true"] #MainContent [class*="navigation-grid"],
+html[data-sq-refine-v3-child-isolation="true"] #MainContent .sqbfl,
+html[data-sq-refine-v3-child-isolation="true"] #MainContent [data-sq-refine-v3-hidden-nav="true"]{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+</style>
 <script data-sq-refine-v3-child-route-isolation="{{ collection.handle | escape }}">
 (function(){
   var ROOTS=new Set([
@@ -51,31 +67,24 @@
   }
 
   function lock(name,value){
-    try{
-      Object.defineProperty(window,name,{configurable:false,enumerable:true,get:function(){return value},set:function(){}});
-    }catch(_){
-      try{window[name]=value}catch(__){}
-    }
+    try{Object.defineProperty(window,name,{configurable:false,enumerable:true,get:function(){return value},set:function(){}})}
+    catch(_){try{window[name]=value}catch(__){}}
   }
   lock('__sqBflUnifiedTree',true);
   lock('__sqBflRecoveryRouteV4','__sq_refine_v3_disabled__');
   lock('__sqBflServerRecoveryRouteV3','__sq_refine_v3_disabled__');
 
   function installSentinel(){
-    var main=document.getElementById('MainContent');
-    if(!main)return false;
+    var main=document.getElementById('MainContent');if(!main)return false;
     if(!main.querySelector('[data-sqbfl-root]')){
-      var sentinel=document.createElement('span');
-      sentinel.hidden=true;
+      var sentinel=document.createElement('span');sentinel.hidden=true;
       sentinel.setAttribute('aria-hidden','true');
       sentinel.setAttribute('data-sqbfl-root','v3-watchdog-compat');
       sentinel.setAttribute('data-sq-refine-v3-watchdog-sentinel','true');
       main.appendChild(sentinel);
     }
     if(!main.__sqRefineV3WatchdogObserver){
-      main.__sqRefineV3WatchdogObserver=new MutationObserver(function(){
-        if(!main.querySelector('[data-sqbfl-root]'))installSentinel();
-      });
+      main.__sqRefineV3WatchdogObserver=new MutationObserver(function(){if(!main.querySelector('[data-sqbfl-root]'))installSentinel()});
       main.__sqRefineV3WatchdogObserver.observe(main,{childList:true});
     }
     return true;
@@ -95,9 +104,7 @@
       return false;
     }
     Element.prototype.replaceChildren=function(){
-      if(this&&this.id==='MainContent'){
-        for(var i=0;i<arguments.length;i++)if(isLegacyTakeoverNode(arguments[i]))return;
-      }
+      if(this&&this.id==='MainContent')for(var i=0;i<arguments.length;i++)if(isLegacyTakeoverNode(arguments[i]))return;
       return nativeReplace.apply(this,arguments);
     };
   }
