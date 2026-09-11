@@ -1,0 +1,149 @@
+{% doc %}
+K9 color and pattern refinement from current collection product options. Preserves native theme cards, applies before pagination, and never activates legacy color-grid controllers.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle contains 'k9' %}
+<script data-sq-k9-color-pattern data-current-handle="{{ collection.handle | escape }}">
+(function(){
+  'use strict';
+  const script=document.currentScript, current=script.dataset.currentHandle, initial=new URL(location.href), root=initial.searchParams.get('sq_root')||current;
+  if(root!=='k9-dog-gear'||window.__sqK9ColorPattern)return;
+  window.__sqK9ColorPattern=true;
+  const PARAM='sq_k9_color', main=document.getElementById('MainContent');
+  if(!main)return;
+  const clean=v=>String(v==null?'':v).replace(/\s+/g,' ').trim();
+  const key=v=>clean(v).toLowerCase().replace(/\bgray\b/g,'grey');
+  const selected=()=>Array.from(new Set(new URL(location.href).searchParams.getAll(PARAM).map(key)));
+  let side,results,grid,group,status,products=[],poolPromise=null,version=0,ownsGrid=false;
+  const palette=new Map(),byHandle=new Map();
+  if(selected().length)main.dataset.sqK9ColorBusy='true';
+  const style=document.createElement('style');style.textContent='#MainContent[data-sq-k9-color-busy="true"] .sq-refine-v3-results .product-grid,#MainContent[data-sq-k9-color-busy="true"] .sq-refine-v3-pager{visibility:hidden!important}';document.head.appendChild(style);
+  const aliases={'odgreen':'OD Green','od green':'OD Green','tactical od green':'OD Green','mcamblack':'MultiCam Black','mcam black':'MultiCam Black','multicamblack':'MultiCam Black','multicam black':'MultiCam Black','multicam':'MultiCam','multicam arid':'MultiCam Arid','multicam aird':'MultiCam Arid','arid':'MultiCam Arid','multicam tropic':'MultiCam Tropic','multicam alpine':'MultiCam Alpine','m81':'M81 Woodland','cpcamo':'CP Camo','cp camo':'CP Camo','nwu':'NWU','ocp':'OCP','ucp':'UCP','cce':'CCE','digitalgreen':'Digital Green','typhon':'Typhon','lightgrey':'Light Grey','darkgrey':'Dark Grey'};
+  function color(raw){
+    let s=clean(raw).replace(/\s+for\s+\d+\s*dogs?$/i,'').replace(/(?:\s+(?:harness|leash|set\d*))+$/i,'');
+    s=s.replace(/^small\s*(black|white|blue)$/i,'$1');
+    if(!s||/default title|one size|^size\b|\d\s*(?:cm|inch|lb|kg|["'])|\d\s*[x\u00d7]\s*\d|^cv-\d|^\d+$|below\s*\d/i.test(s))return '';
+    const k=key(s);return aliases[k]||s.toLowerCase().replace(/(^|[\s/&-])([a-z])/g,(_,a,b)=>a+b.toUpperCase());
+  }
+  function optionsFor(p){return(p.options||[]).filter(o=>/colou?r|pattern|camo/i.test(o.name||''));}
+  function colorsFor(p){
+    const opts=optionsFor(p), vals=[];
+    opts.forEach(o=>(o.values||[]).forEach(v=>{const c=color(v);if(c)vals.push(c)}));
+    if(!vals.length){
+      (p.options||[]).filter(o=>/^size$/i.test(o.name||'')).forEach(o=>(o.values||[]).forEach(v=>{const m=clean(v).match(/^(black|white|red|blue|green|pink|orange|yellow|tan|grey|gray|coyote brown|ranger green)[ -]+(?:small|medium|large|s\b|m\b|l\b|xl\b)/i);if(m)vals.push(color(m[1]))}));
+      const tags=Array.isArray(p.tags)?p.tags:clean(p.tags).split(',');
+      tags.forEach(t=>{const m=clean(t).match(/^(?:SQ Color\/Pattern|colou?r|pattern|camouflage):\s*(.+)$/i);if(m){const c=color(m[1]);if(c)vals.push(c)}});
+    }
+    return Array.from(new Set(vals));
+  }
+  function contextMatches(p){
+    const q=new URL(location.href).searchParams;
+    for(const [name,actual] of [['filter.p.vendor',p.vendor],['filter.p.product_type',p.product_type]]){const wanted=q.getAll(name);if(wanted.length&&!wanted.some(v=>key(v)===key(actual)))return false;}
+    return true;
+  }
+  function matches(p,wanted){
+    if(!contextMatches(p))return false;
+    if(wanted.length&&!p.__colors.some(c=>wanted.includes(key(c))))return false;
+    const q=new URL(location.href).searchParams,availability=q.getAll('filter.v.availability'),opts=optionsFor(p);
+    if(availability.length===1){
+      const variants=(p.variants||[]).filter(v=>!wanted.length||!opts.length||opts.some(o=>wanted.includes(key(color(v['option'+o.position])))));
+      if(!variants.some(v=>Boolean(v.available)===(availability[0]==='1')))return false;
+    }
+    return true;
+  }
+  async function get(url,json){
+    for(let attempt=0;attempt<3;attempt++){
+      try{const r=await fetch(url,{credentials:'same-origin',signal:AbortSignal.timeout(45000)});if(r.ok)return json?await r.json():await r.text();if(![429,500,502,503,504].includes(r.status))throw new Error('HTTP '+r.status)}catch(e){if(attempt===2)throw e;}
+      await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));
+    }
+    throw new Error('Collection request failed');
+  }
+  async function catalog(){
+    const out=[],seen=new Set();
+    for(let page=1;page<=100;page++){
+      const u=new URL('/collections/'+encodeURIComponent(current)+'/products.json',location.origin);u.searchParams.set('limit','250');u.searchParams.set('page',String(page));
+      const batch=(await get(u,true)).products;if(!Array.isArray(batch))throw new Error('Invalid collection response');
+      let added=0;batch.forEach(p=>{if(!seen.has(p.id)){seen.add(p.id);out.push(p);added++}});
+      if(batch.length<250)return out;if(!added)throw new Error('Collection pagination repeated');
+    }
+    throw new Error('Collection pagination limit reached');
+  }
+  function cardHandle(card){const a=card.querySelector('a[href*="/products/"]');if(!a)return '';try{return decodeURIComponent(new URL(a.href,location.origin).pathname.split('/products/')[1]||'')}catch(_){return '';}}
+  function pool(){
+    if(poolPromise)return poolPromise;
+    poolPromise=(async()=>{
+      const cards=[],seen=new Set();
+      for(let page=1;page<=Math.ceil(products.length/50)+1;page++){
+        const u=new URL(location.pathname,location.origin);initial.searchParams.forEach((v,k)=>{if(k.startsWith('filter.')||k==='sort_by'||k==='preview_theme_id')u.searchParams.append(k,v)});
+        u.searchParams.set('view','sq-refine-v3-products');u.searchParams.set('page',String(page));
+        const doc=new DOMParser().parseFromString(await get(u,false),'text/html');
+        const batch=Array.from(doc.querySelectorAll('.product-grid > .product-grid__item'));
+        if(!doc.querySelector('collection-component,results-list'))throw new Error('Invalid product-card response');
+        let added=0;batch.forEach(c=>{const h=cardHandle(c);if(h&&!seen.has(h)){seen.add(h);cards.push(c);added++}});
+        if(batch.length<50)return cards;if(!added)throw new Error('Product pages repeated');
+      }
+      throw new Error('Product pagination did not end');
+    })().catch(e=>{poolPromise=null;throw e});return poolPromise;
+  }
+  function navigate(url){history.pushState({},'',url.pathname+url.search);render();}
+  function pageUrl(page){const u=new URL(location.href);u.searchParams.delete('page');u.searchParams.set('sq_view_page',String(page));return u;}
+  function sync(){
+    const wanted=selected();group.querySelectorAll('input[data-sq-k9-color]').forEach(i=>{i.checked=wanted.includes(i.value)});
+    group.dataset.active=wanted.length?'true':'false';if(wanted.length)group.open=true;
+    group.querySelector('[data-sq-k9-clear]').hidden=!wanted.length;
+    side.querySelectorAll('input[data-kind="structural"][data-target]').forEach(i=>{try{const u=new URL(i.dataset.target,location.origin);u.searchParams.delete(PARAM);wanted.forEach(v=>u.searchParams.append(PARAM,v));const preview=initial.searchParams.get('preview_theme_id');if(preview)u.searchParams.set('preview_theme_id',preview);i.dataset.target=u.pathname+u.search;}catch(_){}});
+  }
+  function matchedVariant(p,wanted){const opts=optionsFor(p);return(p.variants||[]).find(v=>opts.some(o=>wanted.includes(key(color(v['option'+o.position])))));}
+  function updateCard(card,p,wanted){
+    const v=wanted.length&&matchedVariant(p,wanted);if(!v)return;
+    card.querySelectorAll('a[href*="/products/"]').forEach(a=>{const u=new URL(a.href,location.origin);u.searchParams.set('variant',String(v.id));a.href=u.pathname+u.search});
+    const image=v.featured_image&&v.featured_image.src;if(image){const img=card.querySelector('img');if(img){img.src=image;img.srcset='';}}
+  }
+  async function render(){
+    const turn=++version,wanted=selected();sync();main.dataset.sqK9ColorReady='false';main.dataset.sqK9ColorError='';
+    if(!wanted.length&&!ownsGrid){main.dataset.sqK9ColorReady='true';return;}
+    ownsGrid=true;main.dataset.sqK9ColorBusy='true';results.setAttribute('aria-busy','true');status.hidden=false;status.textContent='Loading matching products...';
+    try{
+      const all=await pool();if(turn!==version)return;
+      const filtered=all.filter(c=>{const p=byHandle.get(cardHandle(c));return p&&matches(p,wanted)});
+      const q=new URL(location.href).searchParams,n=Number(q.get('sq_per_page')),size=[50,100,250].includes(n)?n:50,total=filtered.length,pages=Math.max(1,Math.ceil(total/size)),requested=Math.max(1,Number(q.get('sq_view_page'))||1),page=Math.min(requested,pages);
+      if(page!==requested)history.replaceState({},'',pageUrl(page));
+      const fragment=document.createDocumentFragment();filtered.slice((page-1)*size,page*size).forEach(c=>{const clone=document.importNode(c,true);updateCard(clone,byHandle.get(cardHandle(c)),wanted);fragment.appendChild(clone)});
+      grid.replaceChildren(fragment);
+      results.querySelectorAll('.sq-refine-v3-pager,pagination-component,.pagination').forEach(p=>{p.hidden=true;p.style.setProperty('display','none','important')});
+      let pager=results.querySelector('[data-sq-k9-pager]');if(!pager){pager=document.createElement('nav');pager.className='sq-refine-v3-pager';pager.dataset.sqK9Pager='true';pager.setAttribute('aria-label','Product pages');results.appendChild(pager)}
+      pager.hidden=false;pager.style.removeProperty('display');pager.replaceChildren();
+      const link=(text,to)=>{const a=document.createElement('a');a.textContent=text;const u=pageUrl(to);a.href=u.pathname+u.search;a.addEventListener('click',e=>{e.preventDefault();navigate(u)});pager.appendChild(a)};
+      if(page>1)link('Previous',page-1);const label=document.createElement('span');label.textContent='Page '+page+' of '+pages;pager.appendChild(label);if(page<pages)link('Next',page+1);
+      results.querySelectorAll('.sq-refine-v3-page-size input').forEach(i=>{i.checked=Number(i.value)===size});
+      status.textContent=total?total+' matching products':'No products match these filters.';
+      main.dataset.sqK9ColorTotal=String(total);main.dataset.sqK9ColorReady='true';
+    }catch(e){if(turn!==version)return;status.textContent='Unable to load matching products. Please retry.';const retry=document.createElement('button');retry.type='button';retry.textContent='Retry';retry.addEventListener('click',render);status.appendChild(retry);main.dataset.sqK9ColorError=clean(e.message);grid.replaceChildren();}
+    finally{if(turn===version){main.dataset.sqK9ColorBusy='false';results.setAttribute('aria-busy','false');}}
+  }
+  function buildGroup(){
+    side.querySelectorAll(':scope > details').forEach(d=>{if(/shop by (?:colou?r|pattern)/i.test(d.querySelector('summary')?.textContent||''))d.remove()});
+    group=document.createElement('details');group.className='sq-refine-v3-group';group.dataset.sqK9ColorGroup='true';
+    const summary=document.createElement('summary');summary.textContent='Shop by Color / Pattern';group.appendChild(summary);
+    const choices=document.createElement('div');choices.className='sq-refine-v3-choices';choices.style.maxHeight='360px';choices.style.overflowY='auto';
+    const clear=document.createElement('button');clear.type='button';clear.textContent='Clear color / pattern';clear.dataset.sqK9Clear='true';clear.addEventListener('click',()=>{const u=new URL(location.href);u.searchParams.delete(PARAM);u.searchParams.delete('sq_view_page');u.searchParams.delete('page');navigate(u)});choices.appendChild(clear);
+    Array.from(palette.values()).sort((a,b)=>a.label.localeCompare(b.label)).forEach(x=>{
+      const row=document.createElement('label');row.className='sq-refine-v3-choice';const i=document.createElement('input');i.type='checkbox';i.dataset.sqK9Color='true';i.value=key(x.label);i.setAttribute('aria-label',x.label);const label=document.createElement('span');label.textContent=x.label+' ('+x.count+')';row.append(i,label);choices.appendChild(row);
+      i.addEventListener('change',()=>{const u=new URL(location.href),vals=selected().filter(v=>v!==i.value);if(i.checked)vals.push(i.value);u.searchParams.delete(PARAM);vals.forEach(v=>u.searchParams.append(PARAM,v));u.searchParams.delete('sq_view_page');u.searchParams.delete('page');navigate(u)});
+    });
+    group.appendChild(choices);const before=Array.from(side.children).find(d=>/manufacturer|availability|price/i.test(d.querySelector('summary')?.textContent||''));side.insertBefore(group,before||null);sync();
+  }
+  async function launch(){
+    side=main.querySelector('.sq-refine-v3-sidebar');results=main.querySelector('.sq-refine-v3-results');grid=results&&results.querySelector('.product-grid');if(!side||!grid||main.dataset.sqRefineV3Ready!=='true')return false;
+    status=document.createElement('p');status.dataset.sqK9ColorStatus='true';status.setAttribute('role','status');status.setAttribute('aria-live','polite');status.hidden=true;results.insertBefore(status,results.firstChild);
+    products=await catalog();products.forEach(p=>{p.__colors=colorsFor(p);byHandle.set(p.handle,p);if(contextMatches(p))p.__colors.forEach(c=>{const k=key(c);if(!palette.has(k))palette.set(k,{label:c,count:0});palette.get(k).count++})});
+    buildGroup();
+    main.addEventListener('change',e=>{const i=e.target;if(!i.matches('.sq-refine-v3-page-size input')||!ownsGrid)return;e.stopImmediatePropagation();const u=new URL(location.href);u.searchParams.set('sq_per_page',i.value);u.searchParams.delete('page');u.searchParams.set('sq_view_page','1');navigate(u)},true);
+    window.addEventListener('popstate',render);
+    await render();return true;
+  }
+  let tries=0;const timer=setInterval(()=>{
+    if(main.dataset.sqRefineV3Ready==='true'){clearInterval(timer);launch().catch(e=>{main.dataset.sqK9ColorError=clean(e.message);main.dataset.sqK9ColorBusy='false';if(status){status.hidden=false;status.textContent='Color filters could not load. Please reload this page.'}})}else if(++tries>360)clearInterval(timer);
+  },250);
+})();
+</script>
+{% endif %}
