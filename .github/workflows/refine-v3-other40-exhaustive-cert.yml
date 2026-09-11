@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-# Final latest-code certification trigger after Child Safety navigation fix cf00accd.
+# Final latest-code certification trigger after Child Safety capture-v2 fix 6cad5bd.
 jobs:
   certify:
     strategy:
