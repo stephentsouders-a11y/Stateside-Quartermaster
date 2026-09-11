@@ -1,0 +1,93 @@
+name: Apparel exhaustive Refine Products Chromium audit
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/apparel-refine-exhaustive-chromium-audit.yml'
+      - 'snippets/**'
+      - 'sections/**'
+      - 'templates/**'
+      - 'assets/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Audit every Apparel Refine Products checkbox
+        run: |
+          cat > certify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const target='https://www.statesideqm.com/collections/apparel?preview_theme_id=158561894555';
+          const expectedCats=['Balaclavas, Gaiters & Face Coverings','Beanies & Knit Caps','Boonie & Bucket Hats','Flexfit & Performance Hats','Hoodies & Sweatshirts','Jackets & Outerwear','Pants, Joggers & Leggings','Polos, Flannels & Button-Ups','PT & Training Apparel','Shorts & Swim','T-Shirts & Tops','Tanks & Activewear','Trucker & Snapback Hats','Uniform Caps & Berets'];
+          const report={target,failures:[],checks:[]};
+          fs.mkdirSync('out',{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1000}});
+          const page=await ctx.newPage();
+          page.setDefaultNavigationTimeout(90000);
+          const errs=[]; page.on('pageerror',e=>errs.push(String(e))); page.on('console',m=>{if(m.type()==='error')errs.push(m.text())});
+          const r=await page.goto(target,{waitUntil:'domcontentloaded'});
+          if(r?.status()!==200) report.failures.push(`HTTP ${r?.status()}`);
+          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000}).catch(()=>report.failures.push('V3 ready timeout'));
+          const side=page.locator('#MainContent .sq-refine-v3-sidebar');
+          if(!await side.count()) report.failures.push('Refine Products sidebar missing');
+          const groups=side.locator('details.sq-refine-v3-group');
+          const gcount=await groups.count();
+          const baseline=await page.locator('#MainContent .sq-refine-v3-results .product-grid a[href*="/products/"]').count();
+          for(let gi=0;gi<gcount;gi++){
+            const group=groups.nth(gi); const title=(await group.locator(':scope>summary').innerText()).replace(/\s+/g,' ').trim();
+            const boxes=group.locator('input[type="checkbox"]'); const count=await boxes.count();
+            const choices=[];
+            for(let bi=0;bi<count;bi++){
+              await page.goto(target,{waitUntil:'domcontentloaded'});
+              await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});
+              const g=page.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group').nth(gi);
+              if(!await g.getAttribute('open')) await g.locator(':scope>summary').click();
+              const b=g.locator('input[type="checkbox"]').nth(bi);
+              const label=(await b.locator('xpath=ancestor::label[1]').innerText().catch(()=>b.getAttribute('value')||'')).replace(/\s+/g,' ').trim();
+              const kind=await b.getAttribute('data-kind'); const targetUrl=await b.getAttribute('data-target'); const filterName=await b.getAttribute('data-filter-name'); const value=await b.getAttribute('value');
+              const before=page.url();
+              await b.check({force:true});
+              await page.waitForTimeout(900);
+              await page.waitForLoadState('domcontentloaded').catch(()=>{});
+              const after=page.url();
+              const cards=await page.locator('#MainContent .sq-refine-v3-results .product-grid a[href*="/products/"]').count();
+              const checked=await b.isChecked().catch(()=>false);
+              const titles=await page.locator('#MainContent .sq-refine-v3-results .product-grid .card__heading, #MainContent .sq-refine-v3-results .product-grid h3').allInnerTexts().catch(()=>[]);
+              const entry={group:title,label,kind,target:targetUrl,filterName,value,before,after,cards,checked,sampleTitles:titles.slice(0,8)};
+              choices.push(entry); report.checks.push(entry);
+              if(!checked) report.failures.push(`${title} > ${label}: checkbox did not stay selected`);
+              if(after===before) report.failures.push(`${title} > ${label}: URL did not change`);
+              if(cards<1) report.failures.push(`${title} > ${label}: zero product cards`);
+            }
+            if(title==='Shop by Category'){
+              const labels=choices.map(x=>x.label.replace(/\s+\d+\s*items?.*$/i,'').trim());
+              if(JSON.stringify(labels)!==JSON.stringify(expectedCats)) report.failures.push(`Shop by Category taxonomy mismatch: ${JSON.stringify(labels)}`);
+            }
+          }
+          await page.goto(target,{waitUntil:'domcontentloaded'}); await page.waitForTimeout(1500);
+          await page.screenshot({path:'out/apparel-final.png',fullPage:true});
+          report.baselineProductLinks=baseline; report.consoleAndPageErrors=errs; report.pass=report.failures.length===0;
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify({pass:report.pass,baseline,checks:report.checks.length,failures:report.failures.slice(0,100)},null,2));
+          await browser.close();
+          if(!report.pass) process.exitCode=2;
+          EOF
+          node certify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apparel-refine-exhaustive-chromium-audit
+          path: out
+          retention-days: 14
