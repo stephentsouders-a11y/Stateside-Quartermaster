@@ -1,0 +1,41 @@
+name: Apply Safety Color Pattern Fix
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-safety-color-pattern-fix.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+          fetch-depth: 0
+      - name: Extend existing color pattern filter to Safety Rescue Climbing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('snippets/sq-uniform-color-pattern.liquid')
+          s=p.read_text()
+          old="if((query.get('sq_root')||config.handle)!=='uniforms'||window.__sqUniformColor)return;"
+          new="var activeRoot=query.get('sq_root')||config.handle;if(['uniforms','safety-rescue-climbing'].indexOf(activeRoot)===-1||window.__sqUniformColor)return;"
+          if old not in s:
+              if new in s:
+                  print('Already patched')
+              else:
+                  raise SystemExit('Expected guard not found')
+          else:
+              p.write_text(s.replace(old,new,1))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-uniform-color-pattern.liquid
+          if git diff --cached --quiet; then
+            echo 'No source change required'
+          else
+            git commit -m 'Enable color pattern sidebar for Safety Rescue Climbing'
+            git push origin refine-restart-v3
+          fi
