@@ -1,0 +1,101 @@
+name: Safety Color Pattern Chromium Visual Functional Cert
+on:
+  push:
+    paths:
+      - '.github/workflows/safety-color-pattern-visual-functional-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium tooling
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Run visual and functional test
+        run: |
+          cat > safety-cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const target='https://www.statesideqm.com/collections/safety-rescue-climbing?preview_theme_id=158561894555';
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1000},recordVideo:{dir:'out'}});
+          const page=await ctx.newPage();
+          page.setDefaultTimeout(45000);
+          page.setDefaultNavigationTimeout(90000);
+          const consoleErrors=[]; const pageErrors=[];
+          page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+          page.on('pageerror',e=>pageErrors.push(String(e)));
+          const response=await page.goto(target,{waitUntil:'domcontentloaded'});
+          await page.waitForSelector('#MainContent');
+          await page.waitForTimeout(2500);
+          await page.screenshot({path:'out/01-initial.png',fullPage:true});
+          const initial=await page.evaluate(()=>{
+            const main=document.querySelector('#MainContent');
+            const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
+            const side=main?.querySelector('.sq-refine-v3-sidebar');
+            const summaries=side?[...side.querySelectorAll('details > summary')].map(e=>(e.textContent||'').replace(/\s+/g,' ').trim()):[];
+            const colorSummary=side?[...side.querySelectorAll('details > summary')].find(e=>/shop by color\s*\/\s*pattern/i.test(e.textContent||'')):null;
+            const colorDetails=colorSummary?.parentElement||null;
+            const colorChecks=colorDetails?[...colorDetails.querySelectorAll('input[type="checkbox"]')].filter(vis).map(i=>({value:i.value,checked:i.checked})):[];
+            const grids=[...main.querySelectorAll('.product-grid')].filter(vis);
+            const visibleOutside=[...main.querySelectorAll('.product-grid')].filter(g=>vis(g)&&!main.querySelector('.sq-refine-v3-results')?.contains(g));
+            const cards=[...main.querySelectorAll('.sq-refine-v3-results .product-grid > *')].filter(vis);
+            return {summaries,colorGroup:!!colorDetails,colorChecks,visibleGridCount:grids.length,visibleOutsideGridCount:visibleOutside.length,productCards:cards.length,ready:main?.dataset.sqRefineV3Ready||null,url:location.href};
+          });
+          const report={target,httpStatus:response?.status()??null,initial,interaction:null,consoleErrors,pageErrors,failures:[]};
+          if(report.httpStatus!==200)report.failures.push(`HTTP ${report.httpStatus}`);
+          if(!initial.colorGroup)report.failures.push('Shop by Color / Pattern group missing');
+          if(initial.colorChecks.length<1)report.failures.push('No visible color/pattern checkboxes');
+          if(initial.productCards<1)report.failures.push('No visible product cards');
+          if(initial.visibleOutsideGridCount>0)report.failures.push(`Duplicate/legacy visible product grid count ${initial.visibleOutsideGridCount}`);
+          if(initial.colorGroup&&initial.colorChecks.length){
+            const summary=page.locator('#MainContent .sq-refine-v3-sidebar details > summary').filter({hasText:/Shop by Color\s*\/\s*Pattern/i}).first();
+            const details=summary.locator('..');
+            if(!(await details.getAttribute('open')))await summary.click();
+            const box=details.locator('input[type="checkbox"]').filter({visible:true}).first();
+            const value=await box.getAttribute('value');
+            const beforeUrl=page.url();
+            await box.check();
+            await page.waitForTimeout(2500);
+            await page.screenshot({path:'out/02-after-filter.png',fullPage:true});
+            const after=await page.evaluate(()=>{
+              const main=document.querySelector('#MainContent');
+              const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
+              const side=main?.querySelector('.sq-refine-v3-sidebar');
+              const colorSummary=side?[...side.querySelectorAll('details > summary')].find(e=>/shop by color\s*\/\s*pattern/i.test(e.textContent||'')):null;
+              const checks=colorSummary?.parentElement?[...colorSummary.parentElement.querySelectorAll('input[type="checkbox"]')].filter(vis).map(i=>({value:i.value,checked:i.checked})):[];
+              const customVisible=[...main.querySelectorAll('.sq-uniform-color-results,.sq-color-pattern-results,[data-sq-color-results]')].filter(vis).length;
+              const cards=[...main.querySelectorAll('.sq-refine-v3-results .product-grid > *')].filter(vis).length;
+              const visibleOutside=[...main.querySelectorAll('.product-grid')].filter(g=>vis(g)&&!main.querySelector('.sq-refine-v3-results')?.contains(g)).length;
+              return {url:location.href,checks,customVisible,productCards:cards,visibleOutsideGridCount:visibleOutside};
+            });
+            const selected=after.checks.some(x=>x.checked);
+            const urlChanged=after.url!==beforeUrl || /sq_ucp=/.test(after.url);
+            report.interaction={value,beforeUrl,after,selected,urlChanged};
+            if(!selected)report.failures.push('Checkbox did not remain selected');
+            if(!urlChanged)report.failures.push('Filter interaction did not change state/URL');
+            if(after.visibleOutsideGridCount>0)report.failures.push(`Duplicate/legacy grid visible after filter: ${after.visibleOutsideGridCount}`);
+          }
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          const video=page.video();
+          await page.close(); await ctx.close(); if(video){try{const p=await video.path();fs.copyFileSync(p,'out/test.webm')}catch{}}
+          await browser.close();
+          if(report.failures.length)process.exitCode=2;
+          EOF
+          node safety-cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: safety-color-pattern-visual-functional-cert
+          path: out
+          retention-days: 14
