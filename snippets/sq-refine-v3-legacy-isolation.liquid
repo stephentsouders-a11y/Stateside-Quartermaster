@@ -1,9 +1,6 @@
 {% assign sq_v3_isolation_roots = 'accessories-gifts-collectibles,airsoft-milsim,apparel,armed-forces-gear,art,body-armor-ballistic-protection,literature,child-safety-shop,dive-scuba,firearm-accessories,first-aid-medical-ifak,flags-patriotic-decor,flashlights-lighting,footwear-gloves-eyewear,k9-dog-gear,knives-axes-cutlery,morale-patches-tactical-id,outdoor-preparedness-gear,patriotic-american-heritage,safety-rescue-climbing,sta-brite-insignia,tactical-gear,thin-line,uniforms,watches,zippos-lighters-torches,stateside-quartermaster-logo-merch,army-national-guard-series,air-national-guard-series,products-built-for-the-line-u-s-army,products-built-for-the-line-u-s-navy,products-built-for-the-line-u-s-air-force,products-built-for-the-line-u-s-marine-corps,products-built-for-the-line-u-s-coast-guard,products-built-for-the-line-u-s-space-force,rotc-series,jrotc-series,military-schools-academies,law-enforcement-corrections,firefighting-ems-search-rescue' | split: ',' %}
 {% if request.page_type == 'collection' and sq_v3_isolation_roots contains collection.handle %}
 <style data-sq-refine-v3-first-paint-isolation>
-/* V3 owns these roots. Hide obsolete server-rendered navigation/filter surfaces
-   before MainContent is parsed so customers never see legacy UI flash first.
-   Product grids remain untouched. State Guard is excluded by Liquid. */
 #MainContent [class*="button-tree"],
 #MainContent [class*="root-categories"],
 #MainContent [class*="third-level"],
@@ -203,4 +200,65 @@ html:has(.sq-ps-root) body #MainContent.sq-refine-v3-active .sq-refine-v3-result
 <style data-sq-literature-v3-prepaint>
 #MainContent .sq-books-tree{display:none!important;visibility:hidden!important}
 </style>
+{% endif %}
+{% if request.page_type == 'collection' and collection.handle == 'watches' %}
+<style data-sq-watches-single-surface-prepaint>
+#MainContent [class*="state-guard"],
+#MainContent [class*="state_guard"],
+#MainContent [class*="uniform-builder"],
+#MainContent [class*="uniform_builder"]{display:none!important;visibility:hidden!important}
+#MainContent.sq-refine-v3-active > collection-component:not(.sq-refine-v3-results collection-component){display:none!important}
+</style>
+<script data-sq-watches-single-surface-guard>
+(function(){
+  if(window.__sqWatchesSingleSurfaceGuard)return;
+  window.__sqWatchesSingleSurfaceGuard=true;
+  var scheduled=false;
+  function norm(v){return String(v||'').replace(/\s+/g,' ').trim().toLowerCase()}
+  function visible(el){return !!(el&&el.isConnected&&el.getClientRects().length&&getComputedStyle(el).display!=='none'&&getComputedStyle(el).visibility!=='hidden')}
+  function removeStateGuardContamination(main){
+    var headings=[].slice.call(main.querySelectorAll('h1,h2,h3,h4,h5,h6'));
+    headings.forEach(function(h){
+      var text=norm(h.textContent);
+      if(text!=='state guard uniform builder'&&text!=='build your uniform')return;
+      var target=h.closest('section,.shopify-section,[class*="section"],article,div');
+      if(!target||target===main)return;
+      var body=norm(target.textContent);
+      if(body.indexOf('state guard uniform builder')!==-1||body.indexOf('build your uniform')!==-1)target.remove();
+    });
+  }
+  function productLinks(grid){
+    return Array.from(new Set([].slice.call(grid.querySelectorAll('a[href*="/products/"]')).map(function(a){try{return new URL(a.href,location.href).pathname}catch(_){return a.getAttribute('href')||''}}).filter(Boolean)));
+  }
+  function dedupeProductSurfaces(main){
+    var grids=[].slice.call(main.querySelectorAll('.product-grid,.sq-refine-v3-grid')).filter(function(g){return productLinks(g).length>0});
+    if(grids.length<2)return;
+    var authoritative=grids.find(function(g){return g.closest('.sq-refine-v3-layout')&&visible(g)})||grids.find(visible)||grids[0];
+    var keep=new Set(productLinks(authoritative));
+    grids.forEach(function(grid){
+      if(grid===authoritative)return;
+      var links=productLinks(grid),overlap=links.some(function(href){return keep.has(href)});
+      if(!overlap)return;
+      var host=grid.closest('collection-component');
+      var target=host&&!host.contains(authoritative)?host:grid;
+      target.setAttribute('data-sq-watches-duplicate-surface','true');
+      target.hidden=true;
+      target.style.setProperty('display','none','important');
+      target.setAttribute('aria-hidden','true');
+    });
+  }
+  function reconcile(){
+    scheduled=false;
+    var main=document.getElementById('MainContent');
+    if(!main)return;
+    removeStateGuardContamination(main);
+    dedupeProductSurfaces(main);
+    main.dataset.sqWatchesSingleSurface='true';
+  }
+  function schedule(){if(scheduled)return;scheduled=true;requestAnimationFrame(reconcile)}
+  new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});
+  schedule();
+  document.addEventListener('DOMContentLoaded',function(){reconcile();setTimeout(reconcile,0);setTimeout(reconcile,750);setTimeout(reconcile,2500)},{once:true});
+})();
+</script>
 {% endif %}
