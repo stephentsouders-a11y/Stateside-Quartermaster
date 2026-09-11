@@ -7,16 +7,25 @@ K9 color and pattern refinement from current collection product options. Preserv
   'use strict';
   const script=document.currentScript, current=script.dataset.currentHandle, initial=new URL(location.href), root=initial.searchParams.get('sq_root')||current;
   if(root!=='k9-dog-gear'||window.__sqK9ColorPattern)return;
-  window.__sqK9ColorPattern=true;
   const PARAM='sq_k9_color', main=document.getElementById('MainContent');
   if(!main)return;
+  window.__sqK9ColorPattern=true;
   const clean=v=>String(v==null?'':v).replace(/\s+/g,' ').trim();
   const key=v=>clean(v).toLowerCase().replace(/\bgray\b/g,'grey');
   const selected=()=>Array.from(new Set(new URL(location.href).searchParams.getAll(PARAM).map(key)));
   let side,results,grid,group,status,products=[],poolPromise=null,version=0,ownsGrid=false;
   const palette=new Map(),byHandle=new Map();
   if(selected().length)main.dataset.sqK9ColorBusy='true';
-  const style=document.createElement('style');style.textContent='#MainContent[data-sq-k9-color-busy="true"] .sq-refine-v3-results .product-grid,#MainContent[data-sq-k9-color-busy="true"] .sq-refine-v3-pager{visibility:hidden!important}';document.head.appendChild(style);
+  const style=document.createElement('style');style.textContent=`
+#MainContent[data-sq-k9-color-busy="true"] .sq-refine-v3-results .product-grid,#MainContent[data-sq-k9-color-busy="true"] .sq-refine-v3-pager{visibility:hidden!important}
+#MainContent[data-sq-k9-surface="true"] .product-grid:not([data-sq-k9-grid]){display:none!important}
+#MainContent[data-sq-k9-surface="true"] .sq-refine-v3-sidebar{display:block!important;visibility:visible!important}
+#MainContent[data-sq-k9-surface="true"] .sq-refine-v3-results{min-width:0!important;width:100%!important;max-width:100%!important}
+#MainContent[data-sq-k9-surface="true"] .sq-refine-v3-results [data-sq-k9-grid]{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;width:100%!important;max-width:100%!important;min-width:0!important;margin-inline:0!important;padding-inline:0!important;box-sizing:border-box!important}
+#MainContent[data-sq-k9-surface="true"] [data-sq-k9-grid]>.product-grid__item,#MainContent[data-sq-k9-surface="true"] [data-sq-k9-grid] product-card,#MainContent[data-sq-k9-surface="true"] [data-sq-k9-grid] .product-card__content{min-width:0!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important}
+#MainContent[data-sq-k9-surface="true"] [data-sq-k9-grid] .card-gallery{min-width:0!important;max-width:100%!important;overflow:hidden!important}
+@media(max-width:900px){#MainContent[data-sq-k9-surface="true"] .sq-refine-v3-results [data-sq-k9-grid]{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+`;document.head.appendChild(style);
   const aliases={'odgreen':'OD Green','od green':'OD Green','tactical od green':'OD Green','mcamblack':'MultiCam Black','mcam black':'MultiCam Black','multicamblack':'MultiCam Black','multicam black':'MultiCam Black','multicam':'MultiCam','multicam arid':'MultiCam Arid','multicam aird':'MultiCam Arid','arid':'MultiCam Arid','multicam tropic':'MultiCam Tropic','multicam alpine':'MultiCam Alpine','m81':'M81 Woodland','cpcamo':'CP Camo','cp camo':'CP Camo','nwu':'NWU','ocp':'OCP','ucp':'UCP','cce':'CCE','digitalgreen':'Digital Green','typhon':'Typhon','lightgrey':'Light Grey','darkgrey':'Dark Grey'};
   function color(raw){
     let s=clean(raw).replace(/\s+for\s+\d+\s*dogs?$/i,'').replace(/(?:\s+(?:harness|leash|set\d*))+$/i,'');
@@ -137,6 +146,7 @@ K9 color and pattern refinement from current collection product options. Preserv
   }
   async function launch(){
     side=main.querySelector('.sq-refine-v3-sidebar');results=main.querySelector('.sq-refine-v3-results');grid=results&&results.querySelector('.product-grid');if(!side||!grid||main.dataset.sqRefineV3Ready!=='true')return false;
+    grid.dataset.sqK9Grid='true';main.dataset.sqK9Surface='true';
     status=document.createElement('p');status.dataset.sqK9ColorStatus='true';status.setAttribute('role','status');status.setAttribute('aria-live','polite');status.hidden=true;results.insertBefore(status,results.firstChild);
     products=await catalog();products.forEach(p=>{p.__colors=colorsFor(p);byHandle.set(p.handle,p);if(contextMatches(p))p.__colors.forEach(c=>{const k=key(c);if(!palette.has(k))palette.set(k,{label:c,count:0});palette.get(k).count++})});
     buildGroup();
