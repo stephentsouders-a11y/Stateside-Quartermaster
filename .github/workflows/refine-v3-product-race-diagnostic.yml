@@ -1,0 +1,46 @@
+name: Refine V3 product race diagnostic
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-product-race-diagnostic.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Inspect product surfaces
+        run: |
+          cat > diag.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const B='https://www.statesideqm.com',T='158561894555';
+          const routes=['/collections/stateside-quartermaster-logo-merch','/collections/knives-axes-cutlery','/collections/literature'];
+          const browser=await chromium.launch({headless:true}),c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage();
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          for(const path of routes){
+            const u=new URL(path,B);u.searchParams.set('preview_theme_id',T);
+            const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:70000}).catch(e=>null);
+            console.log('\nROUTE',path,'status',r?.status(),'url',p.url());
+            await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000}).catch(()=>{});
+            for(const ms of [0,250,750,1500,3000,6000]){
+              if(ms)await sleep(ms);
+              const d=await p.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};return{ready:m?.dataset.sqRefineV3Ready,error:m?.dataset.sqRefineV3Error||'',rescued:m?.dataset.sqRefineV3VisibleGridRescued||'',grids:[...document.querySelectorAll('.product-grid')].map((g,i)=>({i,visible:vis(g),items:g.querySelectorAll(':scope > .product-grid__item').length,links:g.querySelectorAll(':scope > .product-grid__item a[href*="/products/"]').length,auth:g.classList.contains('sq-v3-authoritative-grid'),inResults:!!g.closest('.sq-refine-v3-results')}))}});
+              console.log('AT',ms,JSON.stringify(d));
+            }
+            const alt=new URL(path,B);alt.searchParams.set('preview_theme_id',T);alt.searchParams.set('view','sq-refine-v3-products');
+            const rr=await p.request.get(alt.toString(),{timeout:70000});const text=await rr.text();
+            const counts=await p.evaluate(html=>{const d=new DOMParser().parseFromString(html,'text/html');const g=d.querySelector('.product-grid');return{grid:!!g,items:g?.querySelectorAll(':scope > .product-grid__item').length||0,links:g?.querySelectorAll(':scope > .product-grid__item a[href*="/products/"]').length||0,host:!!d.querySelector('[data-sq-refine-v3-fallback-host]'),errorText:(d.body?.innerText||'').slice(0,180)}},text);
+            console.log('ALT',rr.status(),JSON.stringify(counts));
+            await sleep(2500);
+          }
+          await c.close();await browser.close();
+          EOF
+          node diag.mjs
