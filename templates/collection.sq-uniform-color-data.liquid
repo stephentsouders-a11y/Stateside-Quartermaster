@@ -1,0 +1,7 @@
+{% layout none %}
+{% paginate collection.products by 250 %}
+{"total":{{ paginate.items | json }},"pages":{{ paginate.pages | json }},"page":{{ paginate.current_page | json }},"products":[
+{% for item in collection.products %}
+{"id":{{ item.id | json }},"handle":{{ item.handle | json }},"title":{{ item.title | json }},"vendor":{{ item.vendor | json }},"type":{{ item.type | json }},"tags":{{ item.tags | json }},"options":{{ item.options | json }},"created":{{ item.created_at | date: '%s' | json }},"image_ids":{{ item.images | map: 'id' | json }},"image_srcs":{{ item.images | map: 'src' | json }},"variant_ids":{{ item.variants | map: 'id' | json }},"available":{{ item.variants | map: 'available' | json }},"prices":{{ item.variants | map: 'price' | json }},"option1":{{ item.variants | map: 'option1' | json }},"option2":{{ item.variants | map: 'option2' | json }},"option3":{{ item.variants | map: 'option3' | json }},"variant_images":{{ item.variants | map: 'featured_image' | map: 'id' | json }}}{% unless forloop.last %},{% endunless %}
+{% endfor %}]}
+{% endpaginate %}
