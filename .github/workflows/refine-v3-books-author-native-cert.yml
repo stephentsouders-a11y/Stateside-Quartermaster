@@ -1,0 +1,35 @@
+name: Refine V3 Books native author certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-books-author-native-cert.yml']
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  books-native-author:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify exact native author filtering
+        run: |
+          cat > test.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const B='https://www.statesideqm.com',T='158561894555',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const browser=await chromium.launch({headless:true}),p=await browser.newPage({viewport:{width:1440,height:1000}});
+          const make=()=>{const u=new URL('/collections/literature',B);u.searchParams.set('preview_theme_id',T);return u.toString()};
+          async function nav(u){let r;for(let a=0;a<6;a++){r=await p.goto(u,{waitUntil:'domcontentloaded',timeout:80000}).catch(()=>null);if(r?.status()===200)return;await sleep(2000*(a+1))}throw new Error('HTTP '+r?.status())}
+          async function ready(){await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:60000});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3AuthorAuthority==='native-tag',null,{timeout:30000});await sleep(1000)}
+          await nav(make());await ready();
+          const state=await p.evaluate(()=>{const side=document.querySelector('.sq-refine-v3-sidebar'),groups=[...side.querySelectorAll(':scope > details.sq-refine-v3-group')].filter(d=>(d.querySelector(':scope > summary')?.textContent||'').trim()==='Shop by Author');const inputs=groups.flatMap(g=>[...g.querySelectorAll('input[type=checkbox]')]);return{groups:groups.length,count:inputs.length,bad:inputs.filter(i=>!(i.dataset.kind==='native'&&i.dataset.filterName==='filter.p.tag'&&/^(author|book author)\s*:\s*.+/i.test(i.dataset.filterValue||''))).map(i=>({kind:i.dataset.kind,name:i.dataset.filterName,value:i.dataset.filterValue,target:i.dataset.target})),sample:inputs.slice(0,3).map(i=>({author:i.dataset.author,tag:i.dataset.filterValue}))}});
+          console.log('AUTHOR ROOT',JSON.stringify(state));if(state.groups!==1||state.count<1||state.bad.length)throw new Error('author authority invalid '+JSON.stringify(state));
+          const failures=[];
+          for(const s of state.sample){await nav(make());await ready();const i=p.locator(`.sq-refine-v3-sidebar input[data-kind="native"][data-filter-name="filter.p.tag"][data-filter-value=${JSON.stringify(s.tag)}]`).first();const d=i.locator('xpath=ancestor::details[1]');if(await d.getAttribute('open')===null)await d.locator(':scope > summary').click();await i.check();await p.waitForLoadState('domcontentloaded',{timeout:40000}).catch(()=>{});await ready();const u=new URL(p.url());if(!u.searchParams.getAll('filter.p.tag').includes(s.tag))failures.push(s.author+': URL missing exact tag');if(u.searchParams.has('sq_author'))failures.push(s.author+': stale sq_author remains');const links=await p.locator('.sq-refine-v3-results .product-grid:visible .product-grid__item:visible a[href*="/products/"]').evaluateAll(xs=>[...new Set(xs.map(a=>a.href))].slice(0,3));if(!links.length){failures.push(s.author+': no products');continue}let match=0;for(const href of links){await nav(href+'.js');const text=await p.locator('body').innerText();let data;try{data=JSON.parse(text)}catch(_){data={raw:text}}const hay=JSON.stringify(data).toLowerCase();if(hay.includes(s.author.toLowerCase())||hay.includes(s.tag.toLowerCase()))match++}console.log('AUTHOR RESULT',s.author,match+'/'+links.length,links);if(match!==links.length)failures.push(s.author+': relevance '+match+'/'+links.length)}
+          await browser.close();console.log('FAILURES',JSON.stringify(failures));if(failures.length)process.exit(1);console.log('BOOKS NATIVE AUTHOR GREEN');
+          EOF
+          node test.mjs
