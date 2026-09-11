@@ -71,18 +71,6 @@
     [].slice.call(choices.children).forEach(function(node){dest.appendChild(node)});
     syncActive(type);
   }
-  function bindParentChoices(choices){
-    if(!choices||choices.dataset.sqChildSafetyBound==='true')return;
-    choices.dataset.sqChildSafetyBound='true';
-    choices.querySelectorAll('input[data-target]').forEach(function(input){
-      input.addEventListener('click',function(e){
-        var active=parentActive(input.dataset.target);
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        location.assign(active?rootTarget():input.dataset.target);
-      },true);
-    });
-  }
   function parentMarkupMatches(choices){
     if(!choices)return false;
     var inputs=[].slice.call(choices.querySelectorAll(':scope label.sq-refine-v3-choice > input[data-kind="structural"][data-target]'));
@@ -103,22 +91,31 @@
     if(!choices){choices=document.createElement('div');choices.className='sq-refine-v3-choices';cat.appendChild(choices)}
     if(!parentMarkupMatches(choices)){
       choices.innerHTML=PARENTS.map(function(x){var href=withPreview(x.path);return '<label class="sq-refine-v3-choice"><input type="checkbox" data-kind="structural" data-target="'+esc(href)+'"><span>'+esc(x.label)+'</span></label>'}).join('');
-      delete choices.dataset.sqChildSafetyBound;
     }
-    bindParentChoices(choices);
     syncActive(cat);
     return cat;
   }
+  document.addEventListener('click',function(e){
+    var input=e.target&&e.target.closest&&e.target.closest('#MainContent .sq-refine-v3-sidebar input[data-kind="structural"][data-target]');
+    if(!input)return;
+    var targetPath;
+    try{targetPath=cleanPath(new URL(input.dataset.target,location.origin).pathname)}catch(_){return}
+    if(!PARENTS.some(function(x){return x.path===targetPath}))return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    var dest=parentActive(input.dataset.target)?rootTarget():input.dataset.target;
+    location.href=new URL(dest,location.origin).href;
+  },true);
   function stabilizeNested(){
     var main=document.getElementById('MainContent');
     if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
     var s=side();if(!s)return false;
     var nested=parentForPath(currentPath()),cat=categoryGroup();
-    if(!nested){cat=renderParents(cat,s);syncActive(cat);main.dataset.sqChildSafetyTaxonomy='root';return true}
+    if(!nested){cat=renderParents(cat,s);syncActive(cat);main.dataset.sqChildSafetyTaxonomy='root';main.dataset.sqChildSafetyFix='capture-v2';return true}
     promoteNestedChoices(cat,s);
     cat=renderParents(cat,s);
     syncActive(cat);syncActive(typeGroup());
-    main.dataset.sqChildSafetyTaxonomy='stable-parent';
+    main.dataset.sqChildSafetyTaxonomy='stable-parent';main.dataset.sqChildSafetyFix='capture-v2';
     return true;
   }
   function armPathStateSync(){
