@@ -1,0 +1,70 @@
+{% doc %}
+Keeps the Apparel collection under one Refine Products owner and preserves customer-selected pagination and availability.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle == 'apparel' %}
+<style data-sq-apparel-single-owner>
+html[data-sq-apparel-pending] #MainContent .product-grid{opacity:0!important}
+</style>
+<script data-sq-apparel-single-owner="20260911-v1">
+(function(){
+  if(window.__sqApparelSingleOwnerV1)return;
+  window.__sqApparelSingleOwnerV1=true;
+  window.__sqCollectionFacetSidebarV1=true;
+  window.__sqZeroInventoryPreservationV1=true;
+  window.__sqSoldOutPreservationHardGate=true;
+  var html=document.documentElement;
+  html.setAttribute('data-sq-apparel-pending','');
+  var fallback=setTimeout(function(){html.removeAttribute('data-sq-apparel-pending')},20000);
+  function start(){
+    var main=document.getElementById('MainContent');
+    if(!main){html.removeAttribute('data-sq-apparel-pending');return}
+    var observer;
+    function complete(){
+      if(main.dataset.sqRefineV3Ready!=='true')return;
+      if(observer)observer.disconnect();
+      var results=main.querySelector('.sq-refine-v3-results');
+      var grid=results&&results.querySelector('.product-grid');
+      var params=new URLSearchParams(location.search);
+      var size=parseInt(params.get('sq_per_page')||'50',10);
+      if([50,100,250].indexOf(size)===-1)size=50;
+      var view=Math.max(1,parseInt(params.get('sq_view_page')||(size===50?params.get('page'):null)||'1',10)||1);
+      var nativePages=grid?parseInt(grid.dataset.lastPage||'0',10):0;
+      if(results&&grid&&nativePages>0){
+        var pages=Math.max(1,Math.ceil(nativePages/(size/50)));
+        var pager=document.createElement('nav');
+        pager.className='sq-refine-v3-pager';
+        pager.setAttribute('aria-label','Product pages');
+        pager.setAttribute('data-sq-apparel-pager','true');
+        function addLink(page,label,rel){
+          var url=new URL(location.href);
+          url.hash='';
+          url.searchParams.set('sq_per_page',String(size));
+          if(size===50){url.searchParams.set('page',String(page));url.searchParams.delete('sq_view_page')}
+          else{url.searchParams.delete('page');url.searchParams.set('sq_view_page',String(page))}
+          var link=document.createElement('a');
+          link.href=url.pathname+url.search;
+          link.rel=rel;
+          link.textContent=label;
+          pager.appendChild(link);
+        }
+        if(view>1)addLink(view-1,'Previous','prev');
+        var label=document.createElement('span');
+        label.textContent='Page '+view+' of '+pages;
+        label.setAttribute('aria-current','page');
+        pager.appendChild(label);
+        if(view<pages)addLink(view+1,'Next','next');
+        results.querySelectorAll('.sq-refine-v3-pager').forEach(function(old){old.remove()});
+        results.appendChild(pager);
+      }
+      main.dataset.sqApparelRepair='single-owner-v1';
+      clearTimeout(fallback);
+      html.removeAttribute('data-sq-apparel-pending');
+    }
+    observer=new MutationObserver(complete);
+    observer.observe(main,{attributes:true,attributeFilter:['data-sq-refine-v3-ready']});
+    complete();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+})();
+</script>
+{% endif %}
