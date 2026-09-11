@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-# Latest-code certification trigger after Child Safety path-state fix.
+# Final latest-code certification trigger after Child Safety path-state deployment.
 jobs:
   certify:
     strategy:
