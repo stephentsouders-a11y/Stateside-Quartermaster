@@ -1,0 +1,64 @@
+name: Refine V3 final certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-final-certification.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  routes:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify route shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const B='https://www.statesideqm.com',T='158561894555',S=Number(process.env.SHARD),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const routes=[
+            ['Accessories','accessories-gifts-collectibles'],['Airsoft','airsoft-milsim'],['Apparel','apparel'],['Armed Forces Gear','armed-forces-gear'],['Art','art'],
+            ['Body Armor','body-armor-ballistic-protection'],['Books','literature'],['Child Safety','child-safety-shop'],['DIVE / SCUBA','dive-scuba'],['Firearm Accessories','firearm-accessories'],
+            ['First Aid','first-aid-medical-ifak'],['Flags','flags-patriotic-decor'],['Flashlights','flashlights-lighting'],['Footwear','footwear-gloves-eyewear'],['K9','k9-dog-gear'],
+            ['Knives','knives-axes-cutlery'],['Morale Patches','morale-patches-tactical-id'],['Outdoor','outdoor-preparedness-gear'],['Patriotic','patriotic-american-heritage'],['Safety Rescue','safety-rescue-climbing'],
+            ['Sta-Brite','sta-brite-insignia'],['Tactical Gear','tactical-gear'],['Thin Line','thin-line'],['Uniforms','uniforms'],['Watches','watches'],
+            ['Lighters','zippos-lighters-torches'],['Logo Merch','stateside-quartermaster-logo-merch'],['Army National Guard','army-national-guard-series'],['Air National Guard','air-national-guard-series'],['U.S. Army','products-built-for-the-line-u-s-army'],
+            ['U.S. Navy','products-built-for-the-line-u-s-navy'],['U.S. Air Force','products-built-for-the-line-u-s-air-force'],['U.S. Marines','products-built-for-the-line-u-s-marine-corps'],['U.S. Coast Guard','products-built-for-the-line-u-s-coast-guard'],['U.S. Space Force','products-built-for-the-line-u-s-space-force'],
+            ['ROTC','rotc-series'],['JROTC','jrotc-series'],['Military Schools','military-schools-academies'],['Law Enforcement','law-enforcement-corrections'],['Fire EMS SAR','firefighting-ems-search-rescue']
+          ];
+          const mine=routes.filter((_,i)=>i%8===S),browser=await chromium.launch({headless:true}),c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage(),fail=[];
+          const url=h=>{const u=new URL('/collections/'+h,B);u.searchParams.set('preview_theme_id',T);return u.toString()};
+          async function go(h){let r;for(let a=0;a<5;a++){r=await p.goto(url(h),{waitUntil:'domcontentloaded',timeout:70000}).catch(()=>null);if(r?.status()===200)break;console.log('RETRY',h,a+1,r?.status());await sleep(2500*(a+1))}if(r?.status()!==200)throw new Error('HTTP '+r?.status());await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:60000});await p.waitForSelector('#MainContent .sq-refine-v3-sidebar',{state:'visible',timeout:15000});await sleep(1800)}
+          p.on('pageerror',e=>{if(/sq-refine|sq-v3/i.test(e.stack||e.message||''))fail.push('pageerror '+e.message)});
+          for(const [name,h] of mine){try{await go(h);const d=await p.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};const side=[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis),legacy=[...m.querySelectorAll('.sq-global-refine-sidebar,.sq-collection-sidebar,.facets-block-wrapper,.facets-container,.facets-wrapper,[class*="filter-sidebar"]')].filter(e=>vis(e)&&!e.classList.contains('sq-refine-v3-sidebar'));const grids=[...m.querySelectorAll('.sq-refine-v3-results .product-grid')].filter(vis),g=grids.find(x=>x.classList.contains('sq-v3-authoritative-grid'))||grids[0],cards=g?[...g.querySelectorAll(':scope > .product-grid__item')].filter(x=>vis(x)&&x.querySelector('a[href*="/products/"]')):[],style=g?getComputedStyle(g):null,cols=style?style.gridTemplateColumns.split(' ').filter(Boolean).length:0,s=side[0],t=s?.querySelector('.sq-refine-v3-sidebar__title'),sr=s?.getBoundingClientRect(),tr=t?.getBoundingClientRect(),groups=s?[...s.querySelectorAll(':scope > details.sq-refine-v3-group')].map(x=>({label:(x.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),inputs:x.querySelectorAll('input[type=checkbox]').length,struct:[...x.querySelectorAll('input[data-kind=structural][data-target]')].map(i=>i.dataset.target||'')})):[];return{sidebars:side.length,legacy:legacy.length,title:(t?.textContent||'').replace(/\s+/g,' ').trim(),titleBg:t?getComputedStyle(t).backgroundColor:'',sideBg:s?getComputedStyle(s).backgroundColor:'',gap:sr&&tr?Math.abs(sr.right-tr.right):999,pos:s?getComputedStyle(s).position:'',cards:cards.length,cols,width:cards[0]?Math.round(cards[0].getBoundingClientRect().width):0,productHref:cards[0]?.querySelector('a[href*="/products/"]')?.getAttribute('href')||'',pageSizes:[...m.querySelectorAll('.sq-refine-v3-page-size input')].map(i=>i.value),groups,error:m.dataset.sqRefineV3Error||''}});const e=[];if(d.sidebars!==1)e.push('sidebars='+d.sidebars);if(d.legacy)e.push('legacy='+d.legacy);if(d.title.toUpperCase()!=='REFINE PRODUCTS')e.push('title='+d.title);if(d.titleBg!=='rgb(8, 40, 63)'||d.sideBg!=='rgb(8, 40, 63)'||d.gap>2)e.push('header seam');if(d.pos!=='sticky')e.push('position='+d.pos);if(d.cards<1)e.push('cards='+d.cards);if(d.cols!==3)e.push('grid cols='+d.cols);if(d.width<250)e.push('card width='+d.width);if(!d.productHref.includes('/products/'))e.push('product link');if(d.pageSizes.join(',')!=='50,100,250')e.push('page sizes='+d.pageSizes.join(','));if(d.error)e.push('v3error='+d.error);for(const g of d.groups){if(!g.inputs)e.push('empty '+g.label);for(const target of g.struct){if(!target.startsWith('/collections/'))e.push('bad target '+g.label);else if(!new URL(target,B).searchParams.get('sq_root'))e.push('missing sq_root '+g.label)}}if(h==='literature'){for(const label of ['Shop by Author','Shop by Publisher','Shop by War / Conflict','Shop by Branch','Shop by Topic'])if(d.groups.filter(g=>g.label===label).length!==1)e.push(label+' count');if(d.groups.some(g=>g.label==='Shop by Publishers'||g.label==='Shop by Manufacturers'))e.push('plural Literature label')}if(h==='firearm-accessories'&&!d.groups.some(g=>/Make \/ Model/i.test(g.label)&&g.inputs))e.push('Make/Model');const first=p.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group').first();if(await first.count()){const was=await first.getAttribute('open')!==null;await first.locator(':scope > summary').click();const now=await first.getAttribute('open')!==null;if(now===was)e.push('disclosure toggle');await first.locator(':scope > summary').click()}if(e.length){fail.push(name+': '+e.join(' | '));console.log('FAIL',name,JSON.stringify(d),e.join(' | '))}else console.log('PASS',name,JSON.stringify(d));}catch(e){fail.push(name+': '+String(e));console.log('FAIL',name,String(e))}await sleep(2200)}
+          await c.close();await browser.close();console.log('SHARD',S,'FAILURES',JSON.stringify(fail));if(fail.length)process.exit(1);console.log('SHARD',S,'ALL GREEN');
+          EOF
+          node cert.mjs
+  protected:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify protected non-V3 routes
+        run: |
+          cat > protected.mjs <<'EOF'
+          import { chromium } from 'playwright';const B='https://www.statesideqm.com',T='158561894555',browser=await chromium.launch({headless:true}),c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage();for(const [name,path] of [['State Guard','/collections/state-guard-series'],['Armored Vehicles','/pages/armored-vehicles-purchase-inquiry']]){const u=new URL(path,B);u.searchParams.set('preview_theme_id',T);const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:70000});await p.waitForTimeout(1200);const d=await p.evaluate(()=>({v3:!!document.querySelector('[data-sq-refine-v3]'),side:!!document.querySelector('.sq-refine-v3-sidebar')}));console.log(name,r?.status(),JSON.stringify(d));if(r?.status()!==200||d.v3||d.side)throw new Error(name+' isolation failed '+JSON.stringify(d))}await c.close();await browser.close();console.log('PROTECTED ALL GREEN');
+          EOF
+          node protected.mjs
