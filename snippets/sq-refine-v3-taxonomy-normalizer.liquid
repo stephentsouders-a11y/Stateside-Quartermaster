@@ -1,21 +1,53 @@
 {% doc %}
-Normalizes Refine V3 taxonomy after the authoritative sidebar is rendered. Branch-owned concepts are removed from Category, and exact higher-level concepts are removed from Shop by Type. Body Armor also promotes accessory/component families into Shop by Subcategory, removes verified zero-membership facet leakage, and restores selected subcategory state after canonical product-type navigation. State Guard is deliberately excluded.
+Normalizes Refine V3 taxonomy after the authoritative sidebar is rendered. Branch-owned concepts are removed from Category, and exact higher-level concepts are removed from Shop by Type. Active-duty PBTL roots receive explicit shopper-facing Category groups backed by their populated SQ service-category collections. Body Armor promotes accessory/component families into Shop by Subcategory, removes verified zero-membership facet leakage, and restores selected subcategory state after canonical product-type navigation. State Guard is deliberately excluded.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 <script data-sq-refine-v3-taxonomy-normalizer>
 (function(){
   var q=new URLSearchParams(location.search),root=q.get('sq_root')||'{{ collection.handle | escape }}';
   if(root==='state-guard-series')return;
+  var PBTL={
+    'products-built-for-the-line-u-s-army':[
+      ['Apparel','bfl-army-apparel'],['Art & Prints','bfl-army-art-prints'],['Books & Reference','bfl-army-books-reference'],['Field Gear & Equipment','bfl-army-field-gear-equipment'],['Flags','bfl-army-flags'],['Gifts & Collectibles','bfl-army-gifts-collectibles'],['Insignia','bfl-army-insignia'],['Patches & Identification','bfl-army-patches-identification'],['Uniforms & Uniform Accessories','bfl-army-uniforms-uniform-accessories']
+    ],
+    'products-built-for-the-line-u-s-navy':[
+      ['Apparel','bfl-navy-apparel'],['Books & Reference','bfl-navy-books-reference'],['Flags','bfl-navy-flags'],['Gifts & Collectibles','bfl-navy-gifts-collectibles'],['Gifts & Wall Tributes','bfl-navy-gifts-wall-tributes'],['Insignia','bfl-navy-insignia'],['Patches & Identification','bfl-navy-patches-identification'],['Uniforms & Uniform Accessories','bfl-navy-uniforms-uniform-accessories']
+    ],
+    'products-built-for-the-line-u-s-air-force':[
+      ['Apparel','bfl-air-force-apparel'],['Art & Prints','bfl-u-s-air-force-art-prints'],['Awards, Medals & Ribbons','bfl-u-s-air-force-awards-medals-ribbons'],['Books & Reference','bfl-air-force-books-reference'],['Flags','bfl-air-force-flags'],['Gifts & Collectibles','bfl-air-force-gifts-collectibles'],['Insignia','bfl-air-force-insignia'],['Patches & Identification','bfl-air-force-patches-identification'],['Stickers, Decals & Vehicle Accessories','bfl-u-s-air-force-stickers-decals-vehicle-accessories'],['Uniforms & Uniform Accessories','bfl-air-force-uniforms-uniform-accessories']
+    ],
+    'products-built-for-the-line-u-s-marine-corps':[
+      ['Accessories','bfl-marine-corps-accessories'],['Apparel','bfl-marine-corps-apparel'],['Art & Prints','bfl-marine-corps-art-prints'],['Books & Reference','bfl-marine-corps-books-reference'],['Displays & Memorials','bfl-marine-corps-displays-memorials'],['Field Gear & Equipment','bfl-marine-corps-field-gear-equipment'],['Flags & Displays','bfl-marine-corps-flags-displays'],['Gifts & Collectibles','bfl-marine-corps-gifts-collectibles'],['Identification & Decals','bfl-marine-corps-identification-decals'],['Insignia','bfl-marine-corps-insignia'],['Patches & Identification','bfl-marine-corps-patches-identification'],['Uniforms & Uniform Accessories','bfl-marine-corps-uniforms-uniform-accessories']
+    ],
+    'products-built-for-the-line-u-s-coast-guard':[
+      ['Apparel','bfl-coast-guard-apparel'],['Art & Prints','bfl-coast-guard-art-prints'],['Books & Reference','bfl-coast-guard-books-reference'],['Flags','bfl-coast-guard-flags'],['Gifts & Wall Tributes','bfl-coast-guard-gifts-wall-tributes'],['Insignia','bfl-coast-guard-insignia'],['Patches & Identification','bfl-coast-guard-patches-identification']
+    ],
+    'products-built-for-the-line-u-s-space-force':[
+      ['Apparel','bfl-space-force-apparel'],['Books & Reference','bfl-space-force-books-reference'],['Flags & Displays','bfl-space-force-flags-displays'],['Insignia & Rank','bfl-space-force-insignia-rank'],['Patches & Identification','bfl-space-force-patches-identification']
+    ]
+  };
   function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
   function key(v){return clean(v).toLowerCase().replace(/[\u2019']/g,'').replace(/&/g,' ').replace(/\band\b/g,' ').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim()}
   function summary(d){return clean(d&&d.querySelector(':scope > summary')&&d.querySelector(':scope > summary').textContent)}
   function choiceLabel(c){return clean(c&&c.querySelector('span')&&c.querySelector('span').textContent)}
   function detailsBy(side,label){return [].slice.call(side.querySelectorAll('details.sq-refine-v3-group')).find(function(d){return key(summary(d))===key(label)})||null}
   function removeEmpty(d){if(d&&!d.querySelector('.sq-refine-v3-choice'))d.remove()}
+  function targetFor(handle){var u=new URL('/collections/'+handle,location.origin);u.searchParams.set('sq_root',root);var preview=q.get('preview_theme_id');if(preview)u.searchParams.set('preview_theme_id',preview);q.forEach(function(v,k){if(k.indexOf('filter.')===0||k==='sort_by')u.searchParams.append(k,v)});return u.pathname+'?'+u.searchParams.toString()}
+  function ensurePbtlCategory(side){
+    var rows=PBTL[root];if(!rows||detailsBy(side,'Shop by Category'))return;
+    var d=document.createElement('details');d.className='sq-refine-v3-group';d.dataset.active='false';
+    var current=location.pathname.replace(/^\/collections\//,'').replace(/\/$/,'');
+    d.innerHTML='<summary>Shop by Category</summary><div class="sq-refine-v3-choices"></div>';
+    var host=d.querySelector('.sq-refine-v3-choices'),active=false;
+    rows.forEach(function(row){var label=document.createElement('label');label.className='sq-refine-v3-choice';var input=document.createElement('input');input.type='checkbox';input.dataset.kind='structural';input.dataset.target=targetFor(row[1]);input.checked=current===row[1];if(input.checked)active=true;var span=document.createElement('span');span.textContent=row[0];label.appendChild(input);label.appendChild(span);host.appendChild(label);input.addEventListener('change',function(){if(input.checked){d.dataset.active='true';d.open=true;location.assign(input.dataset.target)}else{var u=new URL('/collections/'+root,location.origin);var preview=q.get('preview_theme_id');if(preview)u.searchParams.set('preview_theme_id',preview);location.assign(u.pathname+'?'+u.searchParams.toString())}})});
+    if(active){d.dataset.active='true';d.open=true}
+    var type=detailsBy(side,'Shop by Type');if(type)type.parentNode.insertBefore(d,type);else side.appendChild(d);
+  }
   function apply(){
     var side=document.querySelector('#MainContent .sq-refine-v3-sidebar');if(!side)return false;
     var groups=[].slice.call(side.querySelectorAll('details.sq-refine-v3-group'));
     if(!groups.length)return false;
+    ensurePbtlCategory(side);
 
     var category=detailsBy(side,'Shop by Category'),branch=detailsBy(side,'Shop by Branch');
     if(category&&branch){
@@ -35,22 +67,12 @@ Normalizes Refine V3 taxonomy after the authoritative sidebar is rendered. Branc
       if(type){
         var prune=new Set(['combat uniform pants','medical evacuation equipment','surplus load carriage pouches','surplus protective safety gear'].map(key));
         [].slice.call(type.querySelectorAll('.sq-refine-v3-choice')).forEach(function(c){if(prune.has(key(choiceLabel(c))))c.remove()});
-        var promote=new Set([
-          'armor accessories','ballistic apparel','ballistic backpack inserts','ballistic bags','ballistic barriers','ballistic blankets curtains','ballistic face protection','body armor ventilation','cummerbunds adapters','helmet accessories','helmet covers','helmet face shields visors','helmet liners','plate carrier accessories','plate carrier kits','shield lights'
-        ].map(key));
+        var promote=new Set(['armor accessories','ballistic apparel','ballistic backpack inserts','ballistic bags','ballistic barriers','ballistic blankets curtains','ballistic face protection','body armor ventilation','cummerbunds adapters','helmet accessories','helmet covers','helmet face shields visors','helmet liners','plate carrier accessories','plate carrier kits','shield lights'].map(key));
         var moving=[].slice.call(type.querySelectorAll('.sq-refine-v3-choice')).filter(function(c){return promote.has(key(choiceLabel(c)))});
         var sub=detailsBy(side,'Shop by Subcategory');
-        if(moving.length){
-          if(!sub){sub=document.createElement('details');sub.className='sq-refine-v3-group';sub.dataset.active='false';sub.innerHTML='<summary>Shop by Subcategory</summary><div class="sq-refine-v3-choices"></div>';type.parentNode.insertBefore(sub,type)}
-          var target=sub.querySelector('.sq-refine-v3-choices');moving.forEach(function(c){target.appendChild(c)});
-        }
+        if(moving.length){if(!sub){sub=document.createElement('details');sub.className='sq-refine-v3-group';sub.dataset.active='false';sub.innerHTML='<summary>Shop by Subcategory</summary><div class="sq-refine-v3-choices"></div>';type.parentNode.insertBefore(sub,type)}var target=sub.querySelector('.sq-refine-v3-choices');moving.forEach(function(c){target.appendChild(c)})}
         sub=detailsBy(side,'Shop by Subcategory');
-        if(sub){
-          var selected=new Set(new URLSearchParams(location.search).getAll('filter.p.product_type').map(key));
-          var active=false;
-          [].slice.call(sub.querySelectorAll('.sq-refine-v3-choice')).forEach(function(c){var i=c.querySelector('input');if(i&&selected.has(key(choiceLabel(c)))){i.checked=true;active=true}});
-          if(active||sub.querySelector('input:checked')){sub.dataset.active='true';sub.open=true}else{sub.dataset.active='false'}
-        }
+        if(sub){var selected=new Set(new URLSearchParams(location.search).getAll('filter.p.product_type').map(key)),active=false;[].slice.call(sub.querySelectorAll('.sq-refine-v3-choice')).forEach(function(c){var i=c.querySelector('input');if(i&&selected.has(key(choiceLabel(c)))){i.checked=true;active=true}});if(active||sub.querySelector('input:checked')){sub.dataset.active='true';sub.open=true}else{sub.dataset.active='false'}}
         removeEmpty(type)
       }
     }
