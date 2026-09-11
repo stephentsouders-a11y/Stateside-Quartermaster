@@ -70,3 +70,4 @@ jobs:
           name: sta-brite-final-verified
           path: sta-cert
           retention-days: 14
+# Retest after Sta-Brite parser-safe route isolation commit 2ae10f2
