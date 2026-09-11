@@ -172,7 +172,16 @@ K9 color and pattern refinement from current collection product options. Preserv
     group.appendChild(choices);const before=Array.from(side.children).find(d=>/manufacturer|availability|price/i.test(d.querySelector('summary')?.textContent||''));side.insertBefore(group,before||null);sync();
   }
   async function launch(){
-    side=main.querySelector('.sq-refine-v3-sidebar');results=main.querySelector('.sq-refine-v3-results');grid=results&&results.querySelector('.product-grid');if(!side||!grid||main.dataset.sqRefineV3Ready!=='true')return false;
+    side=main.querySelector('.sq-refine-v3-sidebar');
+    const layout=side&&side.closest('.sq-refine-v3-layout');
+    results=(layout&&layout.querySelector(':scope > .sq-refine-v3-results'))||main.querySelector('.sq-refine-v3-results:has(.product-grid)');
+    grid=(results&&results.querySelector('.product-grid'))||(layout&&layout.querySelector('.product-grid'))||main.querySelector('.product-grid');
+    if(!side||!layout||!grid||main.dataset.sqRefineV3Ready!=='true')return false;
+    if(!results){results=document.createElement('div');results.className='sq-refine-v3-results';layout.appendChild(results);}
+    if(!results.contains(grid)){
+      const host=grid.closest('collection-component')||grid.closest('results-list');
+      results.appendChild(host&&!host.contains(results)&&!host.contains(side)?host:grid);
+    }
     grid.dataset.sqK9Grid='true';main.dataset.sqK9Surface='true';
     status=document.createElement('p');status.dataset.sqK9ColorStatus='true';status.setAttribute('role','status');status.setAttribute('aria-live','polite');status.hidden=true;results.insertBefore(status,results.firstChild);
     products=await catalog();products.forEach(p=>{p.__colors=colorsFor(p);byHandle.set(p.handle,p);if(contextMatches(p))p.__colors.forEach(c=>{const k=key(c);if(!palette.has(k))palette.set(k,{label:c,count:0});palette.get(k).count++})});
