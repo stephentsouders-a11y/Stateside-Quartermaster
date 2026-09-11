@@ -1,13 +1,13 @@
 {% doc %}
-Dispatches the existing color/pattern engine to Uniforms and Body Armor without changing State Guard.
+Dispatches the existing color/pattern engine to Uniforms, Body Armor, and Safety / Rescue / Climbing without changing State Guard.
 {% enddoc %}
-{% if request.page_type == 'collection' and collection.handle == 'body-armor-ballistic-protection' %}
-<script data-sq-body-armor-color-root-shim>
-(function(){var u=new URL(location.href);if(!u.searchParams.has('sq_root')){window.__sqArmorColorInjectedRoot=true;u.searchParams.set('sq_root','uniforms');history.replaceState(history.state,'',u.pathname+u.search+u.hash)}})();
+{% if request.page_type == 'collection' and collection.handle == 'body-armor-ballistic-protection' or request.page_type == 'collection' and collection.handle == 'safety-rescue-climbing' %}
+<script data-sq-color-root-shim>
+(function(){var u=new URL(location.href);if(!u.searchParams.has('sq_root')){window.__sqColorInjectedRoot=true;u.searchParams.set('sq_root','uniforms');history.replaceState(history.state,'',u.pathname+u.search+u.hash)}})();
 </script>
 {% render 'sq-uniform-color-pattern-core' %}
-<script data-sq-body-armor-color-root-cleanup>
-(function(){if(window.__sqArmorColorInjectedRoot){var u=new URL(location.href);u.searchParams.delete('sq_root');history.replaceState(history.state,'',u.pathname+u.search+u.hash);delete window.__sqArmorColorInjectedRoot}})();
+<script data-sq-color-root-cleanup>
+(function(){if(window.__sqColorInjectedRoot){var u=new URL(location.href);u.searchParams.delete('sq_root');history.replaceState(history.state,'',u.pathname+u.search+u.hash);delete window.__sqColorInjectedRoot}})();
 </script>
 {% else %}
 {% render 'sq-uniform-color-pattern-core' %}
