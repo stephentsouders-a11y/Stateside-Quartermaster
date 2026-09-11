@@ -31,6 +31,9 @@ jobs:
           const browser=await chromium.launch({headless:true});
           const report={browser:browser.version(),url,results:[]};
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          async function waitReady(page){
+            await page.waitForFunction(()=>{const m=document.querySelector('#MainContent');return m?.dataset.sqRefineV3Ready==='true'||!!m?.querySelector('.sq-refine-v3-layout')},{timeout:45000});
+          }
           for(const [name,width,height] of sizes){
             const ctx=await browser.newContext({viewport:{width,height}});
             const page=await ctx.newPage();
@@ -44,7 +47,7 @@ jobs:
               requestAnimationFrame(tick);
             },{legacySelectors});
             await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
-            await page.waitForFunction(()=>{const m=document.querySelector('#MainContent');return m?.dataset.sqRefineV3Ready==='true'||!!m?.querySelector('.sq-refine-v3-layout')},{timeout:45000});
+            await waitReady(page);
             await sleep(7000);
             const inspect=async()=>page.evaluate(()=>{const vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&Number(getComputedStyle(e).opacity||1)>0);const main=document.querySelector('#MainContent');const grids=[...main.querySelectorAll('.product-grid,.sq-refine-v3-grid')].filter(g=>vis(g)&&g.querySelector('a[href*="/products/"]'));const cards=grids[0]?[...grids[0].querySelectorAll(':scope > .product-grid__item, :scope > li')].map(c=>c.querySelector('a[href*="/products/"]')).filter(Boolean).map(a=>new URL(a.href,location.href).pathname):[];const groups=[...main.querySelectorAll('.sq-refine-v3-sidebar details.sq-refine-v3-group')];const pageSize=[...main.querySelectorAll('.sq-refine-v3-page-size input')].map(i=>({value:i.value,checked:i.checked}));const sidebar=main.querySelector('.sq-refine-v3-sidebar');const text=(main.innerText||'').toLowerCase();return{theme:window.Shopify?.theme,guard:!!document.querySelector('[data-sq-watches-single-surface-guard]'),marker:main?.dataset.sqWatchesSingleSurface||'',ready:main?.dataset.sqRefineV3Ready||'',layouts:[...main.querySelectorAll('.sq-refine-v3-layout')].filter(vis).length,visibleProductGrids:grids.length,cardCount:cards.length,uniqueCardCount:new Set(cards).size,duplicateCardPaths:[...new Set(cards.filter((x,i,a)=>a.indexOf(x)!==i))],stateGuardBuilder:text.includes('state guard uniform builder')||text.includes('build your uniform'),sidebarVisible:vis(sidebar),sidebarTitle:sidebar?.querySelector('.sq-refine-v3-sidebar__title')?.textContent.trim()||'',sidebarPosition:sidebar?getComputedStyle(sidebar).position:'',groups:groups.map(g=>({label:g.querySelector(':scope>summary')?.textContent.trim()||'',inputs:g.querySelectorAll('input[type="checkbox"]').length,open:g.open})),checkboxCount:main.querySelectorAll('.sq-refine-v3-sidebar input[type="checkbox"]').length,pageSize,flashTrace:window.__sqWatchFlashTrace||[]};});
             const initial=await inspect();
@@ -52,17 +55,39 @@ jobs:
             for(const ratio of [0.25,0.5,0.75,1]){await page.evaluate(r=>window.scrollTo(0,(document.documentElement.scrollHeight-innerHeight)*r),ratio);await sleep(400);scrollSamples.push(await inspect())}
             await page.evaluate(()=>window.scrollTo(0,0));
             const disclosure=await page.evaluate(async()=>{const d=[...document.querySelectorAll('.sq-refine-v3-sidebar details.sq-refine-v3-group')][0];if(!d)return{pass:false,reason:'no group'};const s=d.querySelector(':scope>summary');const before=d.open;s.click();await new Promise(r=>setTimeout(r,100));const changed=d.open!==before;s.click();await new Promise(r=>setTimeout(r,100));return{pass:changed&&d.open===before,before,after:d.open}});
-            const checkbox=await page.evaluate(async()=>{const main=document.querySelector('#MainContent');const inputs=[...main.querySelectorAll('.sq-refine-v3-sidebar input[type="checkbox"]')].filter(i=>!i.disabled);const input=inputs.find(i=>i.dataset.kind==='native')||inputs[0];if(!input)return{pass:false,reason:'no checkbox'};input.scrollIntoView({block:'center'});const beforeUrl=location.href,beforeChecked=input.checked;input.click();await new Promise(r=>setTimeout(r,1800));const afterUrl=location.href;const current=[...document.querySelectorAll('.sq-refine-v3-sidebar input[type="checkbox"]')].find(i=>i.value===input.value&&i.dataset.kind===input.dataset.kind);const checked=!!current?.checked;return{pass:beforeChecked!==checked||beforeUrl!==afterUrl,kind:input.dataset.kind||'',value:input.value||'',beforeUrl,afterUrl,checked}});
-            if(checkbox.afterUrl&&checkbox.afterUrl!==url){await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true'||!!document.querySelector('#MainContent .sq-refine-v3-layout'),{timeout:45000});await sleep(2500)}
+            const checkbox=await (async()=>{
+              const input=page.locator('.sq-refine-v3-sidebar input[type="checkbox"]:not([disabled])').first();
+              if(!(await input.count()))return{pass:false,reason:'no checkbox'};
+              const beforeUrl=page.url();
+              const beforeChecked=await input.isChecked().catch(()=>false);
+              const kind=await input.getAttribute('data-kind');
+              const value=await input.getAttribute('value');
+              await input.scrollIntoViewIfNeeded();
+              const nav=page.waitForURL(u=>u.href!==beforeUrl,{timeout:4000}).catch(()=>null);
+              await input.click({force:true});
+              await nav;
+              await page.waitForLoadState('domcontentloaded',{timeout:10000}).catch(()=>{});
+              await sleep(1200);
+              await waitReady(page).catch(()=>{});
+              const afterUrl=page.url();
+              let checked=false;
+              const current=page.locator('.sq-refine-v3-sidebar input[type="checkbox"]:not([disabled])').filter({has:page.locator('xpath=..')});
+              checked=await page.evaluate(({kind,value})=>{const inputs=[...document.querySelectorAll('.sq-refine-v3-sidebar input[type="checkbox"]')];const x=inputs.find(i=>(i.dataset.kind||'')===(kind||'')&&(i.value||'')===(value||''));return !!x?.checked},{kind,value}).catch(()=>false);
+              return{pass:beforeChecked!==checked||beforeUrl!==afterUrl,kind:kind||'',value:value||'',beforeUrl,afterUrl,checked};
+            })();
+            if(page.url()!==url){await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});await waitReady(page);await sleep(2500)}
             const size100=page.locator('.sq-refine-v3-page-size input[value="100"]').first();
             let pageSize100={pass:false};
             if(await size100.count()){
+              const before=page.url();
+              const nav=page.waitForURL(u=>u.href!==before,{timeout:5000}).catch(()=>null);
               await size100.click({force:true});
-              await sleep(3000);
-              pageSize100=await page.evaluate(()=>({pass:new URL(location.href).searchParams.get('sq_per_page')==='100'||!!document.querySelector('.sq-refine-v3-page-size input[value="100"]:checked'),url:location.href,checked:!!document.querySelector('.sq-refine-v3-page-size input[value="100"]:checked')}));
+              await nav;
+              await page.waitForLoadState('domcontentloaded',{timeout:10000}).catch(()=>{});
+              await sleep(1800);
+              pageSize100=await page.evaluate(()=>({pass:new URL(location.href).searchParams.get('sq_per_page')==='100'||!!document.querySelector('.sq-refine-v3-page-size input[value="100"]:checked'),url:location.href,checked:!!document.querySelector('.sq-refine-v3-page-size input[value="100"]:checked')})).catch(()=>({pass:false,url:location.href,checked:false}));
             }
             await page.screenshot({path:`watches-${name}.png`,fullPage:true});
-            const allStates=[initial,...scrollSamples];
             const pass=initial.guard&&initial.marker==='true'&&initial.layouts===1&&initial.visibleProductGrids===1&&initial.cardCount>0&&initial.cardCount===initial.uniqueCardCount&&!initial.stateGuardBuilder&&initial.sidebarVisible&&initial.sidebarTitle==='Refine Products'&&initial.checkboxCount>0&&initial.groups.length>0&&initial.groups.every(g=>g.inputs>0)&&initial.pageSize.map(x=>x.value).join(',')==='50,100,250'&&initial.flashTrace.length===0&&scrollSamples.every(s=>s.layouts===1&&s.visibleProductGrids===1&&s.cardCount===s.uniqueCardCount&&!s.stateGuardBuilder)&&disclosure.pass&&checkbox.pass&&pageSize100.pass&&errors.length===0;
             report.results.push({name,pass,errors,initial,scrollSamples:scrollSamples.map(s=>({layouts:s.layouts,visibleProductGrids:s.visibleProductGrids,cardCount:s.cardCount,uniqueCardCount:s.uniqueCardCount,stateGuardBuilder:s.stateGuardBuilder})),disclosure,checkbox,pageSize100});
             await ctx.close();
