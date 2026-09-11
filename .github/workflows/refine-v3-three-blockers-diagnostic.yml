@@ -1,4 +1,4 @@
-name: Refine V3 latest failure diagnostics
+name: Refine V3 Child Safety Chromium trace
 on:
   push:
     branches: [refine-restart-v3]
@@ -10,7 +10,7 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/setup-node@v4
         with: { node-version: '24' }
@@ -18,36 +18,63 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Diagnose latest deterministic and throttling failures
+      - name: Trace Child Safety root category type reset on desktop and mobile
         run: |
-          cat > diag.mjs <<'EOF'
+          cat > child-safety-trace.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'node:fs';
-          const browser=await chromium.launch({headless:true});
+          const BASE='https://www.statesideqm.com';
+          const THEME='158561894555';
+          const ROOT='/collections/child-safety-shop';
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          const BASE='https://www.statesideqm.com',THEME='158561894555';
-          function U(path){const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()}
-          async function go(page,path){let last;for(let i=0;i<6;i++){try{const r=await page.goto(U(path),{waitUntil:'domcontentloaded',timeout:90000});const status=r?.status()||0;if(status===200){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000}).catch(()=>{});await sleep(900);return status}last=new Error('HTTP '+status)}catch(e){last=e}await sleep(2500*(i+1))}throw last||new Error('navigation failed')}
-          async function snap(page,label){const d=await page.evaluate(()=>{const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),c=getComputedStyle(e);return r.width>2&&r.height>2&&c.display!=='none'&&c.visibility!=='hidden'};const main=document.querySelector('#MainContent'),side=[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar')].find(vis);const groups=side?[...side.querySelectorAll(':scope>details.sq-refine-v3-group')].map(g=>({title:(g.querySelector(':scope>summary')?.textContent||'').replace(/\s+/g,' ').trim(),active:g.dataset.active||'',open:g.open,items:[...g.querySelectorAll('input[type=checkbox][data-kind]')].map(x=>({label:(x.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),kind:x.dataset.kind||'',target:x.dataset.target||'',name:x.dataset.filterName||'',value:x.dataset.filterValue||'',checked:x.checked,pathActive:x.hasAttribute('data-sq-path-active')}))})):[];const grid=[...document.querySelectorAll('#MainContent .sq-refine-v3-results .product-grid')].find(vis);const cards=grid?[...grid.children].filter(x=>vis(x)&&x.querySelector('a[href*="/products/"]')).length:0;return{href:location.href,collectionHandle:document.querySelector('[data-sq-refine-v3]')?.dataset.currentHandle||'',ready:main?.dataset.sqRefineV3Ready||'',error:main?.dataset.sqRefineV3Error||'',childRoot:document.documentElement.dataset.sqRefineV3ChildRoot||'',childIsolation:document.documentElement.dataset.sqRefineV3ChildIsolation||'',childTaxonomy:main?.dataset.sqChildSafetyTaxonomy||'',cards,groups,pageErrors:window.__diagErrors||[]};});console.log(label+' '+JSON.stringify(d));return d}
-          const cases=[
-            ['child-ballistic','/collections/child-safety-shop/sq-child-safety-ballistic?sq_root=child-safety-shop'],
-            ['child-first-aid','/collections/child-safety-shop/sq-child-safety-first-aid?sq_root=child-safety-shop'],
-            ['airsoft-protection','/collections/airsoft-milsim-protection-apparel?sq_root=airsoft-milsim'],
-            ['afg-marines','/collections/armed-forces-gear-u-s-marine-corps?sq_root=armed-forces-gear'],
-            ['art-patriotic','/collections/art-ben-cantwell-patriotic-art?sq_root=art'],
-            ['dive-surface','/collections/dive-scuba-surface-markers-buoys-dive-reels?sq_root=dive-scuba']
-          ];
-          const out=[];
-          for(const [name,path] of cases){const p=await browser.newPage({viewport:{width:1440,height:1000}});p.on('pageerror',e=>p.evaluate(x=>{window.__diagErrors=window.__diagErrors||[];window.__diagErrors.push(x)},String(e)).catch(()=>{}));try{const status=await go(p,path);const d=await snap(p,name);out.push({name,path,status,...d});await p.screenshot({path:name+'.png',fullPage:true})}catch(e){out.push({name,path,error:String(e),href:p.url()})}await p.close();await sleep(1800)}
-          fs.writeFileSync('latest-failure-diagnostic.json',JSON.stringify(out,null,2));
-          console.log('SUMMARY '+JSON.stringify(out));
-          await browser.close();
+          function u(path){const x=new URL(path,BASE);x.searchParams.set('preview_theme_id',THEME);return x.toString()}
+          async function nav(page,path){let last;for(let i=0;i<6;i++){try{const r=await page.goto(u(path),{waitUntil:'domcontentloaded',timeout:90000});if(r?.status()===200){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:45000});await sleep(900);return}last=new Error('HTTP '+(r?.status()||0))}catch(e){last=e}await sleep(2500*(i+1))}throw last||new Error('navigation failed')}
+          async function state(page){return page.evaluate(()=>{const main=document.querySelector('#MainContent');const sidebar=document.querySelector('#MainContent .sq-refine-v3-sidebar');const groups=sidebar?[...sidebar.querySelectorAll(':scope>details.sq-refine-v3-group')].map(g=>({title:(g.querySelector(':scope>summary')?.textContent||'').replace(/\s+/g,' ').trim(),active:g.dataset.active||'',items:[...g.querySelectorAll('input[type=checkbox][data-kind]')].map(i=>({label:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),kind:i.dataset.kind||'',target:i.dataset.target||'',checked:i.checked,pathActive:i.hasAttribute('data-sq-path-active')}))})):[];const cards=[...document.querySelectorAll('#MainContent .sq-refine-v3-results .product-grid a[href*="/products/"]')].length;return{href:location.href,taxonomy:main?.dataset.sqChildSafetyTaxonomy||'',ready:main?.dataset.sqRefineV3Ready||'',groups,cards,pageErrors:window.__traceErrors||[]}})}
+          function group(s,title){return s.groups.find(g=>g.title.toLowerCase()===title.toLowerCase())}
+          function item(g,label){return g?.items.find(i=>i.label===label)}
+          const categories=['Ballistic Backpacks & Inserts','First Aid & Emergency Kits'];
+          const devices=[['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]];
+          const browser=await chromium.launch({headless:true});
+          const report=[];
+          for(const [device,viewport] of devices){for(const category of categories){const page=await browser.newPage({viewport});page.on('pageerror',e=>page.evaluate(x=>{window.__traceErrors=window.__traceErrors||[];window.__traceErrors.push(x)},String(e)).catch(()=>{}));const row={device,category,checks:[]};try{
+            await nav(page,ROOT);
+            let s=await state(page);row.root=s;
+            let cg=group(s,'Shop by Category'),ci=item(cg,category);
+            row.checks.push(['root category exists',!!ci]);
+            if(!ci)throw new Error('missing root category '+category);
+            const target=ci.target;
+            const rootInput=page.locator('#MainContent .sq-refine-v3-sidebar input[data-kind="structural"][data-target]').filter({has:page.locator('xpath=..').filter({hasText:category})}).first();
+            await rootInput.check({force:true});
+            await page.waitForURL(v=>v.pathname!==ROOT,{timeout:45000});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:45000});await sleep(1200);
+            s=await state(page);row.afterCategory=s;cg=group(s,'Shop by Category');ci=item(cg,category);
+            row.checks.push(['category path reached',new URL(s.href).pathname.startsWith(new URL(target,BASE).pathname)]);
+            row.checks.push(['parent category persists',!!ci]);
+            row.checks.push(['parent category checked',!!ci?.checked]);
+            row.checks.push(['parent path active',!!ci?.pathActive]);
+            row.checks.push(['stable parent taxonomy',s.taxonomy==='stable-parent']);
+            row.checks.push(['products visible',s.cards>0]);
+            row.checks.push(['no page errors',s.pageErrors.length===0]);
+            const tg=group(s,'Shop by Type');const ti=tg?.items.find(x=>x.kind==='structural');
+            row.checks.push(['Shop by Type present',!!tg]);
+            if(ti){
+              const typeInput=page.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group').filter({has:page.locator('summary').filter({hasText:'Shop by Type'})}).locator('input[data-kind="structural"]').first();
+              await typeInput.check({force:true});await page.waitForURL(v=>v.pathname!==new URL(s.href).pathname,{timeout:45000});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:45000});await sleep(1200);
+              const t=await state(page);row.afterType=t;const pc=item(group(t,'Shop by Category'),category);const at=group(t,'Shop by Type')?.items.find(x=>x.checked);
+              row.checks.push(['parent stays checked after type',!!pc?.checked]);row.checks.push(['type becomes checked',!!at]);row.checks.push(['type products visible',t.cards>0]);row.checks.push(['type no page errors',t.pageErrors.length===0]);
+            }
+            const parentInput=page.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group').filter({has:page.locator('summary').filter({hasText:'Shop by Category'})}).locator('input[data-kind="structural"]').filter({has:page.locator('xpath=..').filter({hasText:category})}).first();
+            await parentInput.uncheck({force:true});await page.waitForURL(v=>v.pathname===ROOT,{timeout:45000});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:45000});await sleep(1000);
+            const r=await state(page);row.afterReset=r;row.checks.push(['reset returns root',new URL(r.href).pathname===ROOT]);row.checks.push(['reset clears parent',!item(group(r,'Shop by Category'),category)?.checked]);row.checks.push(['reset no page errors',r.pageErrors.length===0]);
+            await page.screenshot({path:`child-safety-${device}-${category.startsWith('Ballistic')?'ballistic':'first-aid'}.png`,fullPage:true});
+          }catch(e){row.error=String(e)}row.pass=!row.error&&row.checks.every(x=>x[1]===true);report.push(row);await page.close();await sleep(1800)}}
+          fs.writeFileSync('child-safety-trace.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));await browser.close();
+          if(report.some(r=>!r.pass))process.exit(1);
           EOF
-          node diag.mjs
+          node child-safety-trace.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: latest-failure-diagnostics
+          name: child-safety-chromium-trace
           path: |
-            '*.png'
-            latest-failure-diagnostic.json
+            child-safety-trace.json
+            child-safety-*.png
