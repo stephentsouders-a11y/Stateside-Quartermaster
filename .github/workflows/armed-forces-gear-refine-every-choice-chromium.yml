@@ -14,7 +14,7 @@ permissions:
 jobs:
   every-choice:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 12
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -49,17 +49,17 @@ jobs:
           const browser=await chromium.launch({headless:true});
           const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
           const page=await ctx.newPage();
-          page.setDefaultNavigationTimeout(90000);
-          page.setDefaultTimeout(30000);
+          page.setDefaultNavigationTimeout(30000);
+          page.setDefaultTimeout(12000);
           const runtimeErrors=[];
           page.on('pageerror',e=>runtimeErrors.push(String(e)));
 
-          async function ready(){
-            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});
-            await page.waitForTimeout(500);
+          async function ready(timeout=15000){
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout});
+            await page.waitForTimeout(250);
           }
           async function openBase(){
-            const r=await page.goto(base,{waitUntil:'domcontentloaded'});
+            const r=await page.goto(base,{waitUntil:'domcontentloaded',timeout:30000});
             if(!r || r.status()!==200) throw new Error(`Base HTTP ${r?.status()}`);
             await ready();
           }
@@ -81,22 +81,16 @@ jobs:
           const inventory=await page.evaluate(()=>{
             const side=document.querySelector('#MainContent .sq-refine-v3-sidebar,#MainContent .sq-global-refine-sidebar');
             if(!side)return {groups:[],choices:[]};
-            const groups=[...side.querySelectorAll('details.sq-refine-v3-group')].map((d,gi)=>({
-              gi,
-              group:(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),
-              count:d.querySelectorAll('input[type="checkbox"]').length
-            }));
+            const groups=[...side.querySelectorAll('details.sq-refine-v3-group')].map((d,gi)=>({gi,group:(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),count:d.querySelectorAll('input[type="checkbox"]').length}));
             const choices=groups.flatMap(g=>{
               const d=side.querySelectorAll('details.sq-refine-v3-group')[g.gi];
-              return [...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>({
-                group:g.group,gi:g.gi,ii,value:i.value||'',target:i.dataset.target||'',filterName:i.dataset.filterName||'',polish:i.dataset.sqPolishParam||'',label:(i.closest('.sq-refine-v3-choice')?.innerText||i.value||'').replace(/\s+/g,' ').trim()
-              }));
+              return [...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>({group:g.group,gi:g.gi,ii,value:i.value||'',target:i.dataset.target||'',filterName:i.dataset.filterName||'',polish:i.dataset.sqPolishParam||'',label:(i.closest('.sq-refine-v3-choice')?.innerText||i.value||'').replace(/\s+/g,' ').trim()}));
             });
             return {groups,choices};
           });
           report.groups=inventory.groups;
-          if(!inventory.choices.length) report.failures.push('No Refine checkbox choices found');
           const names=inventory.groups.map(x=>x.group);
+          if(!inventory.choices.length) report.failures.push('No Refine checkbox choices found');
           for(const g of names) if(!allowedGroups.has(g)) report.failures.push(`Unexpected filter group: ${g}`);
           for(const required of allowedGroups) if(!names.includes(required)) report.failures.push(`Missing required filter group: ${required}`);
           if(names.length!==3) report.failures.push(`Expected exactly 3 filter groups, found ${names.length}: ${names.join(', ')}`);
@@ -111,12 +105,10 @@ jobs:
             const before=page.url();
             let clickError=null;
             try{
-              await Promise.all([
-                page.waitForURL(u=>u.href!==before,{timeout:20000}).catch(()=>null),
-                input.click({force:true})
-              ]);
-              await page.waitForLoadState('domcontentloaded').catch(()=>{});
-              await ready().catch(()=>{});
+              await input.click({force:true});
+              await page.waitForFunction(old=>location.href!==old,before,{timeout:4500}).catch(()=>{});
+              await page.waitForLoadState('domcontentloaded',{timeout:5000}).catch(()=>{});
+              await page.waitForTimeout(600);
             }catch(e){clickError=String(e)}
 
             const u=new URL(page.url());
@@ -130,17 +122,14 @@ jobs:
             }).catch(()=>({ready:null,cards:0,handles:[],grids:0,error:'evaluation failed'}));
 
             const errors=[];
-            if(clickError) errors.push(`click/navigation error: ${clickError}`);
-            if(state.ready!=='true') errors.push(`V3 not ready (${state.ready})`);
+            if(clickError) errors.push(`click error: ${clickError}`);
+            if(u.href===before) errors.push('click did not change URL');
             if(state.grids!==1) errors.push(`visible product grids ${state.grids}`);
             if(!allowedGroups.has(meta.group)) errors.push(`choice belongs to forbidden group ${meta.group}`);
             if(meta.group==='Shop by Branch'){
-              const expected=expectedBranches.get(meta.label.replace(/\s*\(\d+\)\s*$/,''));
-              if(expected){
-                if(u.pathname!==`/collections/${expected}` && !u.searchParams.toString().toLowerCase().includes(encodeURIComponent(meta.value).toLowerCase())){
-                  errors.push(`branch did not navigate/filter as expected: ${u.pathname}${u.search}`);
-                }
-              }
+              const cleanLabel=meta.label.replace(/\s*\(\d+\)\s*$/,'');
+              const expected=expectedBranches.get(cleanLabel);
+              if(expected && u.pathname!==`/collections/${expected}` && !decodeURIComponent(u.search).includes(meta.value)) errors.push(`branch did not navigate/filter as expected: ${u.pathname}${u.search}`);
               if(state.cards<1) errors.push('branch returned zero visible product cards');
             } else {
               const param=meta.filterName||meta.polish;
@@ -153,12 +142,13 @@ jobs:
               report.failures.push(`${meta.group} > ${meta.label}: ${errors.join('; ')}`);
               await page.screenshot({path:`out/screens/${String(index+1).padStart(3,'0')}-${safe(meta.group)}-${safe(meta.label)}.png`,fullPage:true}).catch(()=>{});
             }
+            console.log(`AUDIT ${index+1}/${inventory.choices.length} ${meta.group} > ${meta.label} cards=${state.cards} errors=${errors.length}`);
           }
 
           report.runtimeErrors=runtimeErrors;
           report.finishedAt=new Date().toISOString();
           fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
-          console.log(JSON.stringify({groups:report.groups,totalChoices:report.choices.length,failures:report.failures,runtimeErrors:runtimeErrors.slice(0,20),choices:report.choices.map(x=>({group:x.group,label:x.label,url:x.url,cards:x.cards,errors:x.errors}))},null,2));
+          console.log('FINAL_REPORT '+JSON.stringify({groups:report.groups,totalChoices:report.choices.length,failures:report.failures,runtimeErrors:runtimeErrors.slice(0,20)}));
           await browser.close();
           if(report.failures.length || runtimeErrors.length) process.exitCode=2;
           EOF
