@@ -1,3 +1,4 @@
+// Fresh exhaustive Body Armor Refine Products certification trigger: 2026-09-11
 import { chromium } from 'playwright';
 const BASE='https://www.statesideqm.com',THEME='158561894555',ROOT='body-armor-ballistic-protection';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
