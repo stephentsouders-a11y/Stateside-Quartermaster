@@ -1,6 +1,14 @@
-name: Collectibles child-route Chromium certification
+name: Refine Products Chromium certification
 on:
   push:
+    paths:
+      - '.github/workflows/collectibles-child-route-chromium-cert.yml'
+      - 'snippets/sq-refine-v3-button01-child-route-rescue.liquid'
+      - 'snippets/sq-refine-v3-button01-accessories-fix.liquid'
+      - 'snippets/sq-refine-v3.liquid'
+      - 'layout/theme.liquid'
+  pull_request:
+    branches: [main]
     paths:
       - '.github/workflows/collectibles-child-route-chromium-cert.yml'
       - 'snippets/sq-refine-v3-button01-child-route-rescue.liquid'
@@ -39,7 +47,7 @@ jobs:
             page.on('pageerror',e=>errors.push(String(e)));
             page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
             await page.goto(child,{waitUntil:'domcontentloaded',timeout:90000});
-            await page.waitForTimeout(2500);
+            await page.waitForTimeout(3000);
             const audit=await page.evaluate(()=>{
               const main=document.querySelector('#MainContent');
               const side=main?.querySelector('.sq-refine-v3-sidebar');
@@ -49,14 +57,7 @@ jobs:
               const resultsRect=results?.getBoundingClientRect();
               const checked=[...(side?.querySelectorAll('input[type="checkbox"]:checked')||[])].map(i=>i.closest('label')?.innerText?.replace(/\s+/g,' ').trim()||i.value);
               const columns=[...new Set(cards.slice(0,10).map(e=>Math.round(e.getBoundingClientRect().left)))].length;
-              return {
-                hasMain:!!main,hasSide:!!side,hasResults:!!results,
-                sideTop:sideRect?.top??null,resultsTop:resultsRect?.top??null,
-                sideLeft:sideRect?.left??null,resultsLeft:resultsRect?.left??null,
-                checked,products:cards.length,columns,
-                rescued:main?.querySelector('.sq-refine-v3-layout')?.dataset.sqButton01ChildRescued||null,
-                duplicateVisibleGrids:[...document.querySelectorAll('#MainContent .product-grid')].filter(g=>{const r=g.getBoundingClientRect(),s=getComputedStyle(g);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'}).length
-              };
+              return {hasSide:!!side,hasResults:!!results,sideTop:sideRect?.top??null,resultsTop:resultsRect?.top??null,sideLeft:sideRect?.left??null,resultsLeft:resultsRect?.left??null,checked,products:cards.length,columns,rescued:main?.querySelector('.sq-refine-v3-layout')?.dataset.sqRefineV3ChildRescued||null,duplicateVisibleGrids:[...document.querySelectorAll('#MainContent .product-grid')].filter(g=>{const r=g.getBoundingClientRect(),s=getComputedStyle(g);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'}).length};
             });
             await page.screenshot({path:`out/${device}-child.png`,fullPage:true});
             report.runs.push({device,audit,errors});
@@ -77,12 +78,12 @@ jobs:
           const browser=await chromium.launch({headless:true});
           const page=await browser.newPage({viewport:{width:1440,height:1000}});
           await page.goto(root,{waitUntil:'domcontentloaded',timeout:90000});
-          await page.waitForTimeout(2000);
+          await page.waitForTimeout(2500);
           const choice=page.locator('#MainContent .sq-refine-v3-sidebar label').filter({hasText:'Collectibles & Cards'}).first();
           if(await choice.count()){
             await choice.click();
             await page.waitForLoadState('domcontentloaded');
-            await page.waitForTimeout(1800);
+            await page.waitForTimeout(2000);
             const u=page.url();
             report.clickUrl=u;
             if(!u.includes('/collections/collectibles-cards')||!u.includes('sq_root=accessories-gifts-collectibles')) report.failures.push(`click path wrong: ${u}`);
@@ -96,6 +97,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: collectibles-child-route-chromium-cert
+          name: refine-products-chromium-cert
           path: out
           retention-days: 14
