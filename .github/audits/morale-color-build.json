@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "theme": "158561894555",
+  "role": "UNPUBLISHED",
+  "sourceChecksumBefore": "8eb78232efa028ba6f8c1b52bb176069",
+  "sourceChecksumAfter": "2cae255ecd0360436671fdb9ea4696e3",
+  "snippetChecksum": "c4872f144387a8f3d38afd26c17a6786",
+  "javascriptParse": true,
+  "liquidValidation": {
+    "success": true,
+    "responses": [
+      {
+        "result": "success",
+        "resultDetail": "sq-refine-v3-morale-color-pattern.liquid passed all checks.",
+        "artifactId": "morale-color-pattern-0911",
+        "artifactRevision": 1
+      }
+    ]
+  },
+  "timestamp": "2026-09-11T19:16:46.995Z"
+}
