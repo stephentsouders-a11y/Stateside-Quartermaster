@@ -1,0 +1,39 @@
+name: Refine V3 sharded route audit
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-sharded-route-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3]
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Audit shard ${{ matrix.shard }}
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          cat > shard.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const BASE='https://www.statesideqm.com',THEME='158561894555',shard=Number(process.env.SHARD||0);
+          const paths=['/collections/accessories-gifts-collectibles','/collections/airsoft-milsim','/collections/apparel','/collections/armed-forces-gear','/collections/art','/collections/body-armor-ballistic-protection','/collections/literature','/collections/child-safety-shop','/collections/dive-scuba','/collections/firearm-accessories','/collections/first-aid-medical-ifak','/collections/flags-patriotic-decor','/collections/flashlights-lighting','/collections/footwear-gloves-eyewear','/collections/k9-dog-gear','/collections/knives-axes-cutlery','/collections/morale-patches-tactical-id','/collections/outdoor-preparedness-gear','/collections/patriotic-american-heritage','/collections/safety-rescue-climbing','/collections/sta-brite-insignia','/collections/tactical-gear','/collections/thin-line','/collections/uniforms','/collections/watches','/collections/zippos-lighters-torches','/collections/stateside-quartermaster-logo-merch','/collections/army-national-guard-series','/collections/air-national-guard-series','/collections/products-built-for-the-line-u-s-army','/collections/products-built-for-the-line-u-s-navy','/collections/products-built-for-the-line-u-s-air-force','/collections/products-built-for-the-line-u-s-marine-corps','/collections/products-built-for-the-line-u-s-coast-guard','/collections/products-built-for-the-line-u-s-space-force','/collections/rotc-series','/collections/jrotc-series','/collections/military-schools-academies','/collections/law-enforcement-corrections','/collections/firefighting-ems-search-rescue'];
+          const mine=paths.filter((_,i)=>i%4===shard),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          function url(path){const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()}
+          const browser=await chromium.launch({headless:true}),c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage(),fails=[];
+          for(const path of mine){try{let r;for(let a=0;a<3;a++){r=await p.goto(url(path),{waitUntil:'domcontentloaded',timeout:60000}).catch(()=>null);if(r?.status()===200)break;await sleep(2500*(a+1))}if(r?.status()!==200)throw new Error('HTTP '+(r?.status()||0));await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:35000});await sleep(600);const d=await p.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};const sides=[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis),side=sides[0],title=side?.querySelector('.sq-refine-v3-sidebar__title'),legacy=[...m.querySelectorAll('.sq-global-refine-sidebar,.sq-collection-sidebar,.facets-block-wrapper,.facets-container,.facets-wrapper,[class*="filter-sidebar"]')].filter(x=>vis(x)&&!x.classList.contains('sq-refine-v3-sidebar')).length,grids=[...m.querySelectorAll('.sq-refine-v3-results .product-grid')].filter(vis),g=grids.find(x=>x.classList.contains('sq-v3-authoritative-grid'))||grids.find(x=>[...x.querySelectorAll(':scope > .product-grid__item')].some(vis)),cards=g?[...g.querySelectorAll(':scope > .product-grid__item')].filter(x=>vis(x)&&x.querySelector('a[href*="/products/"]')):[],rr=cards.slice(0,9).map(x=>x.getBoundingClientRect()),row=rr.length?rr.filter(x=>Math.abs(x.y-rr[0].y)<4).length:0,sr=side?.getBoundingClientRect(),tr=title?.getBoundingClientRect(),groups=side?[...side.querySelectorAll(':scope > details.sq-refine-v3-group')].map(x=>({label:(x.querySelector(':scope>summary')?.textContent||'').trim(),n:x.querySelectorAll('input[type=checkbox]').length})):[];return{ready:m.dataset.sqRefineV3Ready==='true',err:m.dataset.sqRefineV3Error||'',sidebars:sides.length,legacy,title:(title?.textContent||'').trim(),titleBg:title?getComputedStyle(title).backgroundColor:'',sideBg:side?getComputedStyle(side).backgroundColor:'',gap:sr&&tr?Math.max(0,sr.right-tr.right):999,pos:side?getComputedStyle(side).position:'',cards:cards.length,row,width:rr[0]?Math.round(rr[0].width):0,sizes:[...m.querySelectorAll('.sq-refine-v3-page-size input')].map(x=>x.value),groups}});const e=[];if(!d.ready||d.err)e.push('not ready '+d.err);if(d.sidebars!==1)e.push('sidebars '+d.sidebars);if(d.legacy)e.push('legacy '+d.legacy);if(d.title.toUpperCase()!=='REFINE PRODUCTS')e.push('title');if(d.titleBg!=='rgb(8, 40, 63)'||d.sideBg!=='rgb(8, 40, 63)'||d.gap>1.5)e.push('header');if(d.pos!=='sticky')e.push('pos '+d.pos);if(!d.cards)e.push('cards 0');if(d.row!==3)e.push('row '+d.row);if(d.width<250)e.push('width '+d.width);if(d.sizes.join(',')!=='50,100,250')e.push('sizes '+d.sizes.join(','));if(path==='/collections/firearm-accessories'&&!d.groups.some(g=>/Make \/ Model/i.test(g.label)&&g.n))e.push('make/model');if(path==='/collections/literature'){for(const x of ['Shop by Publisher','Shop by War / Conflict','Shop by Branch','Shop by Topic'])if(!d.groups.some(g=>g.label===x&&g.n))e.push('missing '+x)}if(e.length)fails.push(path+' :: '+e.join(' | '));console.log((e.length?'FAIL ':'PASS ')+path+' '+JSON.stringify(d))}catch(e){fails.push(path+' :: '+String(e));console.log('FAIL '+path+' '+e)}}
+          await c.close();await browser.close();console.log('SHARD_FAILURES='+JSON.stringify(fails));if(fails.length)process.exit(1);
+          EOF
+          node shard.mjs
