@@ -1,0 +1,82 @@
+name: Uniforms color pattern build
+on:
+  push:
+    paths:
+      - '.github/workflows/uniforms-color-pattern-build.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Wire Uniforms facet without altering other routes
+        run: |
+          mkdir -p out
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          p=Path('snippets/sq-refine-v3.liquid'); s=p.read_text()
+          before=hashlib.md5(s.encode()).hexdigest()
+          marker="if(rootHandle==='uniforms'&&query.getAll('sq_ucp').length)return;"
+          if marker not in s:
+            old='  async function assembleProducts(){var live='
+            assert s.count(old)==1
+            s=s.replace(old,'  async function assembleProducts(){'+marker+'var live=')
+          if "{% render 'sq-uniform-color-pattern' %}" not in s:
+            pos=s.rfind('{% endif %}');assert pos>0
+            s=s[:pos]+"{% render 'sq-uniform-color-pattern' %}\n"+s[pos:]
+          p.write_text(s)
+          p=Path('snippets/sq-uniform-color-pattern.liquid');s=p.read_text()
+          s=s.replace('function appearance(raw){','function appearance(raw,titleMode){')
+          s=s.replace("if(!n||/\\b(?:sergeant|lieutenant|corporal|specialist|captain|colonel|major|private|count|tactical version|other color)\\b/.test(n))return [];", "if(!n||(!titleMode&&/\\b(?:sergeant|lieutenant|corporal|specialist|captain|colonel|major|private|count|tactical version|other color)\\b/.test(n)))return [];")
+          s=s.replace('if(/cce/.test(n))', 'if(/\\bcce\\b/.test(n))')
+          s=s.replace('fallback=appearance(title)', 'fallback=appearance(title,true)')
+          s=s.replace('preciseTitle=appearance(p.title)', 'preciseTitle=appearance(p.title,true)')
+          p.write_text(s)
+          Path('out/source-checksums.json').write_text(json.dumps({'v3_before_md5':before,'files':{str(p):hashlib.md5(p.read_bytes()).hexdigest() for p in [Path('snippets/sq-refine-v3.liquid'),Path('snippets/sq-uniform-color-pattern.liquid'),Path('templates/collection.sq-uniform-color-data.liquid')]}},indent=2))
+          PY
+      - name: Validate Liquid and JavaScript
+        run: |
+          npm install --no-save @shopify/liquid-html-parser >/dev/null 2>&1
+          cat > validate.cjs <<'EOF'
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+          const {toLiquidHtmlAST}=require('@shopify/liquid-html-parser');
+          const files=['snippets/sq-refine-v3.liquid','snippets/sq-uniform-color-pattern.liquid','templates/collection.sq-uniform-color-data.liquid'];
+          for(const f of files){toLiquidHtmlAST(fs.readFileSync(f,'utf8'));console.log('LIQUID_PASS',f)}
+          const source=fs.readFileSync(files[1],'utf8').match(/<script data-sq-uniform-color-pattern>([\s\S]*?)<\/script>/)[1];new vm.Script(source);
+          const context={window:{},document:{querySelector:()=>({textContent:'{"handle":"uniforms","currency":"USD"}'}),getElementById:()=>null,addEventListener:()=>{}},location:{search:'',href:'https://example.org/collections/uniforms',origin:'https://example.org'},URL,URLSearchParams,MutationObserver:class{observe(){} disconnect(){}},console};vm.createContext(context);vm.runInContext(source,context);const api=context.window.__sqUniformColor;
+          const tests=[['Black',false,['Black']],['Multicam',false,['MultiCam / OCP']],['Scorpion Ocp',false,['MultiCam / OCP']],['Multicam Black',false,['MultiCam Black']],['Coyote Brown',false,['Coyote']],['Ranger Green',false,['Ranger Green']],['O2 First Lieutenant',false,[]],['24 Count',false,[]],['E8 Master Sergeant',false,[]],['Navy Blue',false,['Navy Blue']],['Black, 94% Nylon, 6% Spandex Ripstop',false,['Black']],['Woodland Marpat',false,['Woodland MARPAT']],['Private 2x2 OCP Sew-on Rank',true,['MultiCam / OCP']],['Uniform Accessories',true,[]]];
+          for(const [v,t,expected] of tests)assert.deepEqual(Array.from(api.appearance(v,t)),expected,v);
+          fs.writeFileSync('out/validation.json',JSON.stringify({passed:true,liquidFiles:files,javascriptSyntax:true,classificationTests:tests.length},null,2));console.log('VALIDATION_PASS',tests.length);
+          EOF
+          node validate.cjs
+      - name: Commit validated wiring
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-refine-v3.liquid snippets/sq-uniform-color-pattern.liquid
+          git diff --cached --quiet || git commit -m 'fix(uniforms): wire color-pattern facet and prevent unfiltered pagination takeover'
+          for attempt in 1 2 3; do
+            git pull --rebase origin refine-restart-v3
+            if git push origin HEAD:refine-restart-v3; then break; fi
+            test "$attempt" != 3
+          done
+          git rev-parse HEAD | tee out/commit.txt
+          mkdir -p out/source/snippets out/source/templates
+          cp snippets/sq-refine-v3.liquid snippets/sq-uniform-color-pattern.liquid out/source/snippets/
+          cp templates/collection.sq-uniform-color-data.liquid out/source/templates/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uniforms-color-pattern-build
+          path: out
+          retention-days: 7
