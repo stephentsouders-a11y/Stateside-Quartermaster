@@ -1,5 +1,5 @@
 {% doc %}
-Makes Literature Shop by Author authoritative and exact. It derives authors only from real Author: / Book Author: collection tags and filters with Shopify's native filter.p.tag parameter. This replaces fuzzy search-backed author behavior without changing product data or any non-Literature route.
+Makes Literature Shop by Author authoritative and exact when real Author: / Book Author: collection tags exist. If the catalog has no such native tags, it leaves the existing search-backed Literature author group intact rather than deleting it, so Shop by Author remains usable without changing product data or non-Literature routes.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle == 'literature' %}
 <script data-sq-refine-v3-literature-author-tag-authority>
@@ -16,9 +16,16 @@ Makes Literature Shop by Author authoritative and exact. It derives authors only
   function target(tag,checked){var u=new URL(location.href),vals=u.searchParams.getAll('filter.p.tag').filter(function(v){return v!==tag});if(checked)vals.push(tag);u.searchParams.delete('filter.p.tag');Array.from(new Set(vals)).forEach(function(v){u.searchParams.append('filter.p.tag',v)});u.searchParams.delete('sq_author');u.searchParams.delete('page');u.searchParams.delete('sq_view_page');return u.pathname+'?'+u.searchParams.toString()}
   function build(){
     if(busy||main.dataset.sqRefineV3Ready!=='true')return false;var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;busy=true;
-    var list=authors();removeAuthorGroups(side);
-    if(list.length){var selected=currentTags(),d=document.createElement('details');d.className='sq-refine-v3-group';d.setAttribute('data-sq-author-tag-authority','true');var rows=list.slice(0,200).map(function(x){var checked=selected.has(x.tag);return '<label class="sq-refine-v3-choice"><input type="checkbox" data-kind="native" data-filter-name="filter.p.tag" data-filter-value="'+esc(x.tag)+'" data-author="'+esc(x.name)+'"'+(checked?' checked':'')+'><span>'+esc(x.name)+'</span></label>'}).join('');d.innerHTML='<summary>Shop by Author</summary><div class="sq-refine-v3-choices">'+rows+'</div>';if(d.querySelector('input:checked')){d.open=true;d.dataset.active='true'}var pub=[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')).find(function(g){var s=g.querySelector(':scope > summary');return /^Shop by Publisher/i.test(clean(s&&s.textContent))});if(pub)side.insertBefore(d,pub);else side.appendChild(d);d.querySelectorAll('input[data-filter-name="filter.p.tag"]').forEach(function(i){i.addEventListener('change',function(){location.assign(target(i.dataset.filterValue,i.checked))})});main.dataset.sqRefineV3AuthorAuthority='native-tag';main.dataset.sqRefineV3AuthorCount=String(list.length)}else main.dataset.sqRefineV3AuthorAuthority='no-author-tags';
-    var legacy=new URLSearchParams(location.search).get('sq_author');if(legacy&&list.length){var hit=list.find(function(x){return norm(x.name)===norm(legacy)});if(hit){location.replace(target(hit.tag,true));busy=false;return true}}
+    var list=authors();
+    if(!list.length){
+      main.dataset.sqRefineV3AuthorAuthority='search-fallback';
+      main.dataset.sqRefineV3AuthorCount='0';
+      busy=false;
+      return true;
+    }
+    removeAuthorGroups(side);
+    var selected=currentTags(),d=document.createElement('details');d.className='sq-refine-v3-group';d.setAttribute('data-sq-author-tag-authority','true');var rows=list.slice(0,200).map(function(x){var checked=selected.has(x.tag);return '<label class="sq-refine-v3-choice"><input type="checkbox" data-kind="native" data-filter-name="filter.p.tag" data-filter-value="'+esc(x.tag)+'" data-author="'+esc(x.name)+'"'+(checked?' checked':'')+'><span>'+esc(x.name)+'</span></label>'}).join('');d.innerHTML='<summary>Shop by Author</summary><div class="sq-refine-v3-choices">'+rows+'</div>';if(d.querySelector('input:checked')){d.open=true;d.dataset.active='true'}var pub=[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')).find(function(g){var s=g.querySelector(':scope > summary');return /^Shop by Publisher/i.test(clean(s&&s.textContent))});if(pub)side.insertBefore(d,pub);else side.appendChild(d);d.querySelectorAll('input[data-filter-name="filter.p.tag"]').forEach(function(i){i.addEventListener('change',function(){location.assign(target(i.dataset.filterValue,i.checked))})});main.dataset.sqRefineV3AuthorAuthority='native-tag';main.dataset.sqRefineV3AuthorCount=String(list.length);
+    var legacy=new URLSearchParams(location.search).get('sq_author');if(legacy){var hit=list.find(function(x){return norm(x.name)===norm(legacy)});if(hit){location.replace(target(hit.tag,true));busy=false;return true}}
     if(!observer){observer=new MutationObserver(function(ms){if(ms.some(function(m){return [].slice.call(m.addedNodes||[]).some(function(n){return n.nodeType===1&&((n.matches&&n.matches('details.sq-refine-v3-group'))||(n.querySelector&&n.querySelector('details.sq-refine-v3-group')))})}))setTimeout(build,0)});observer.observe(side,{childList:true,subtree:false})}
     busy=false;return true;
   }
