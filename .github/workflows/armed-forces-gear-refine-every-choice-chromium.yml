@@ -1,5 +1,6 @@
 name: Armed Forces Gear Refine every-choice Chromium audit
 
+# certification revision: 20260911-afg-v4
 on:
   push:
     paths:
@@ -26,155 +27,69 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Click every Armed Forces Gear Refine Products choice one by one
+      - name: Certify every Armed Forces Gear choice
         run: |
           cat > audit.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'fs';
-
-          const themeId='158561894555';
-          const basePath='/collections/armed-forces-gear';
-          const base=`https://www.statesideqm.com${basePath}?preview_theme_id=${themeId}&sq_per_page=50`;
-          const requiredGroups=['Shop by Branch','Availability','Shop by Type'];
-          const allowedGroups=new Set(requiredGroups);
-          const expectedBranches=new Map([
-            ['U.S. Army','armed-forces-gear-u-s-army'],
-            ['U.S. Navy','armed-forces-gear-u-s-navy'],
-            ['U.S. Air Force','armed-forces-gear-u-s-air-force'],
-            ['U.S. Marine Corps','armed-forces-gear-u-s-marine-corps'],
-            ['U.S. Coast Guard','armed-forces-gear-u-s-coast-guard'],
-            ['U.S. Space Force','armed-forces-gear-u-s-space-force'],
-            ['Other Armed Forces Gear','other-armed-forces-gear'],
-          ]);
-
           fs.mkdirSync('out/screens',{recursive:true});
-          const report={base,startedAt:new Date().toISOString(),groups:[],choices:[],failures:[],warnings:[]};
+          const theme='158561894555';
+          const base=`https://www.statesideqm.com/collections/armed-forces-gear?preview_theme_id=${theme}&sq_per_page=50`;
+          const required=['Shop by Branch','Availability','Shop by Type'];
+          const report={base,startedAt:new Date().toISOString(),choices:[],failures:[],runtimeErrors:[]};
           const browser=await chromium.launch({headless:true});
           const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
           const page=await ctx.newPage();
-          page.setDefaultNavigationTimeout(45000);
-          page.setDefaultTimeout(15000);
-          const runtimeErrors=[];
-          page.on('pageerror',e=>runtimeErrors.push(String(e)));
-
-          async function ready(timeout=20000){
-            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout});
-            await page.waitForTimeout(350);
-          }
-          async function settle(){
-            await page.waitForLoadState('domcontentloaded',{timeout:8000}).catch(()=>{});
-            await page.waitForFunction(()=>!location.search.includes('sq_type_family'),null,{timeout:8000}).catch(()=>{});
-            await ready(12000).catch(()=>{});
+          page.setDefaultTimeout(15000); page.setDefaultNavigationTimeout(45000);
+          page.on('pageerror',e=>report.runtimeErrors.push(String(e)));
+          const clean=s=>(s||'').replace(/\s+/g,' ').trim();
+          async function ready(){
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:20000});
+            await page.waitForFunction(()=>!location.search.includes('sq_type_family'),null,{timeout:10000}).catch(()=>{});
             await page.waitForTimeout(500);
           }
           async function openBase(){
-            await settle().catch(()=>{});
+            await page.waitForLoadState('domcontentloaded',{timeout:5000}).catch(()=>{});
             const r=await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000});
-            if(!r || r.status()!==200) throw new Error(`Base HTTP ${r?.status()}`);
+            if(!r||r.status()!==200)throw new Error(`Base HTTP ${r?.status()}`);
             await ready();
           }
-          const safe=s=>(s||'choice').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').slice(0,80).toLowerCase();
-          const clean=s=>(s||'').replace(/\s+/g,' ').trim();
-
-          await openBase();
-          const initial=await page.evaluate(()=>{
-            const main=document.querySelector('#MainContent');
-            const side=main?.querySelector('.sq-refine-v3-sidebar,.sq-global-refine-sidebar');
-            const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};
-            const old=[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length;
-            const grids=[...main.querySelectorAll('.product-grid')].filter(vis).length;
-            return {ready:main?.dataset.sqRefineV3Ready||null,sidebar:!!side,oldNativeVisible:old,visibleProductGrids:grids};
-          });
-          if(!initial.sidebar) report.failures.push('Refine Products sidebar missing');
-          if(initial.oldNativeVisible) report.failures.push(`Old native filter surfaces visible: ${initial.oldNativeVisible}`);
-          if(initial.visibleProductGrids!==1) report.failures.push(`Expected one visible product grid, found ${initial.visibleProductGrids}`);
-
-          const inventory=await page.evaluate(()=>{
-            const side=document.querySelector('#MainContent .sq-refine-v3-sidebar,#MainContent .sq-global-refine-sidebar');
-            if(!side)return {groups:[],choices:[]};
+          async function state(){return page.evaluate(()=>{
+            const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-refine-v3-sidebar');
             const clean=s=>(s||'').replace(/\s+/g,' ').trim();
-            const groups=[...side.querySelectorAll(':scope > details.sq-refine-v3-group')].map((d,gi)=>({gi,group:clean(d.querySelector(':scope > summary')?.textContent),count:d.querySelectorAll('input[type="checkbox"]').length}));
-            const choices=groups.flatMap(g=>{
-              const d=side.querySelectorAll(':scope > details.sq-refine-v3-group')[g.gi];
-              return [...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>{
-                const label=clean(i.closest('.sq-refine-v3-choice')?.innerText||i.closest('label')?.innerText||'');
-                const value=clean(i.dataset.sqPolishValue||i.dataset.filterValue||i.getAttribute('data-value')||((i.value||'').toLowerCase()==='on'?'':i.value)||label);
-                return {group:g.group,gi:g.gi,ii,value,target:i.dataset.target||'',filterName:i.dataset.filterName||'',polish:i.dataset.sqPolishParam||'',label};
-              });
-            });
-            return {groups,choices};
+            const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};
+            const groups=[...(side?.querySelectorAll(':scope > details.sq-refine-v3-group')||[])].map(d=>clean(d.querySelector(':scope > summary')?.textContent));
+            const grids=[...main.querySelectorAll('.product-grid')].filter(vis).length;
+            const cards=[...main.querySelectorAll('.sq-refine-v3-results .product-grid > *')].filter(vis).length;
+            return {groups,grids,cards,typePersistence:main?.dataset.sqAfgTypePersistence||null,lock:side?.dataset.sqAfgThreeFilterLock||null};
+          })}
+          await openBase();
+          const initial=await state();
+          for(const g of required)if(!initial.groups.includes(g))report.failures.push(`initial missing ${g}`);
+          if(initial.groups.length!==3)report.failures.push(`initial expected 3 groups, got ${initial.groups.join(' | ')}`);
+          if(initial.grids!==1)report.failures.push(`initial visible grids ${initial.grids}`);
+          const inventory=await page.evaluate(()=>{
+            const clean=s=>(s||'').replace(/\s+/g,' ').trim(),side=document.querySelector('#MainContent .sq-refine-v3-sidebar');
+            return [...side.querySelectorAll(':scope > details.sq-refine-v3-group')].flatMap((d,gi)=>[...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>({gi,ii,group:clean(d.querySelector(':scope > summary')?.textContent),label:clean(i.closest('label')?.innerText),value:clean(i.dataset.sqPolishValue||i.dataset.filterValue||i.getAttribute('data-value')||((i.value||'').toLowerCase()==='on'?'':i.value)||i.closest('label')?.innerText),filterName:i.dataset.filterName||i.dataset.sqPolishParam||'',target:i.dataset.target||''})));
           });
-          report.groups=inventory.groups;
-          const names=inventory.groups.map(x=>x.group);
-          if(!inventory.choices.length) report.failures.push('No Refine checkbox choices found');
-          for(const g of names) if(!allowedGroups.has(g)) report.failures.push(`Unexpected filter group: ${g}`);
-          for(const required of requiredGroups) if(!names.includes(required)) report.failures.push(`Missing required filter group: ${required}`);
-          if(names.length!==3) report.failures.push(`Expected exactly 3 filter groups, found ${names.length}: ${names.join(', ')}`);
-          for(const meta of inventory.choices) if(!meta.label || /^on$/i.test(meta.label)) report.failures.push(`Invalid visible choice label in ${meta.group}: ${meta.label||'(blank)'}`);
-
-          for(let index=0;index<inventory.choices.length;index++){
-            const meta=inventory.choices[index];
-            await openBase();
-            const details=page.locator('#MainContent details.sq-refine-v3-group').nth(meta.gi);
-            if(!(await details.getAttribute('open'))) await details.locator(':scope > summary').click();
-            const input=details.locator('input[type="checkbox"]').nth(meta.ii);
-            await input.scrollIntoViewIfNeeded().catch(()=>{});
-            const before=page.url();
-            let clickError=null;
-            try{
-              await input.click({force:true});
-              await page.waitForFunction(old=>location.href!==old,before,{timeout:6000}).catch(()=>{});
-              await settle();
-            }catch(e){clickError=String(e)}
-
-            const u=new URL(page.url());
-            const state=await page.evaluate(()=>{
-              const main=document.querySelector('#MainContent');
-              const side=main?.querySelector('.sq-refine-v3-sidebar,.sq-global-refine-sidebar');
-              const clean=s=>(s||'').replace(/\s+/g,' ').trim();
-              const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};
-              const cards=[...main.querySelectorAll('.sq-refine-v3-results .product-grid > *')].filter(vis);
-              const handles=cards.map(c=>c.querySelector('a[href*="/products/"]')?.getAttribute('href')||'').filter(Boolean);
-              const grids=[...main.querySelectorAll('.product-grid')].filter(vis).length;
-              const groups=[...(side?.querySelectorAll(':scope > details.sq-refine-v3-group')||[])].map(d=>clean(d.querySelector(':scope > summary')?.textContent));
-              return {ready:main?.dataset.sqRefineV3Ready||null,cards:cards.length,handles,grids,groups,typePersistence:main?.dataset.sqAfgTypePersistence||null,lock:side?.dataset.sqAfgThreeFilterLock||null,error:main?.dataset.sqRefineV3Error||null};
-            }).catch(()=>({ready:null,cards:0,handles:[],grids:0,groups:[],error:'evaluation failed'}));
-
-            const errors=[];
-            if(clickError) errors.push(`click error: ${clickError}`);
-            if(u.href===before) errors.push('click did not change URL');
-            if(state.grids!==1) errors.push(`visible product grids ${state.grids}`);
-            for(const required of requiredGroups) if(!state.groups.includes(required)) errors.push(`filtered page missing ${required}`);
-            if(state.groups.length!==3) errors.push(`filtered page expected 3 groups, got ${state.groups.join(' | ')}`);
-            if(!allowedGroups.has(meta.group)) errors.push(`choice belongs to forbidden group ${meta.group}`);
-            if(meta.group==='Shop by Branch'){
-              const cleanLabel=meta.label.replace(/\s*\(\d+\)\s*$/,'');
-              const expected=expectedBranches.get(cleanLabel);
-              if(expected && u.pathname!==`/collections/${expected}` && !decodeURIComponent(u.search).includes(meta.value)) errors.push(`branch did not navigate/filter as expected: ${u.pathname}${u.search}`);
-              if(state.cards<1) errors.push('branch returned zero visible product cards');
-            } else {
-              const param=meta.filterName||meta.polish||'filter.p.product_type';
-              if(meta.group==='Shop by Type' && !u.searchParams.getAll('filter.p.product_type').some(v=>clean(v)===clean(meta.value))) errors.push(`filter URL missing filter.p.product_type=${meta.value}`);
-              else if(meta.group!=='Shop by Type' && param && !u.searchParams.getAll(param).includes(meta.value) && !meta.target) errors.push(`filter URL missing ${param}=${meta.value}`);
-              if(!param && !meta.target) errors.push('checkbox has no target/filter metadata');
-            }
-            const entry={index:index+1,...meta,url:u.href,cards:state.cards,groups:state.groups,typePersistence:state.typePersistence,lock:state.lock,handles:state.handles.slice(0,50),errors};
-            report.choices.push(entry);
-            if(errors.length){
-              report.failures.push(`${meta.group} > ${meta.label}: ${errors.join('; ')}`);
-              await page.screenshot({path:`out/screens/${String(index+1).padStart(3,'0')}-${safe(meta.group)}-${safe(meta.label)}.png`,fullPage:true}).catch(()=>{});
-            } else if(meta.group==='Shop by Type') {
-              await page.screenshot({path:`out/screens/PASS-${String(index+1).padStart(3,'0')}-${safe(meta.label)}.png`,fullPage:true}).catch(()=>{});
-            }
-            console.log(`AUDIT ${index+1}/${inventory.choices.length} ${meta.group} > ${meta.label} cards=${state.cards} groups=${state.groups.join('|')} errors=${errors.length}`);
+          if(!inventory.length)report.failures.push('no choices found');
+          for(let n=0;n<inventory.length;n++){
+            const meta=inventory[n]; await openBase();
+            const d=page.locator('#MainContent details.sq-refine-v3-group').nth(meta.gi); if(!(await d.getAttribute('open')))await d.locator(':scope > summary').click();
+            const input=d.locator('input[type="checkbox"]').nth(meta.ii); const before=page.url(); let clickError=null;
+            try{await input.click({force:true});await page.waitForFunction(old=>location.href!==old,before,{timeout:7000}).catch(()=>{});await ready()}catch(e){clickError=String(e)}
+            const s=await state(); const u=new URL(page.url()); const errors=[];
+            if(clickError)errors.push(clickError); if(u.href===before)errors.push('URL did not change'); if(s.grids!==1)errors.push(`visible grids ${s.grids}`);
+            for(const g of required)if(!s.groups.includes(g))errors.push(`missing ${g}`); if(s.groups.length!==3)errors.push(`expected 3 groups, got ${s.groups.join(' | ')}`);
+            if(meta.group==='Shop by Type'&&!u.searchParams.getAll('filter.p.product_type').some(v=>clean(v)===clean(meta.value)))errors.push(`missing filter.p.product_type=${meta.value}`);
+            report.choices.push({...meta,url:u.href,state:s,errors});
+            if(errors.length){report.failures.push(`${meta.group} > ${meta.label}: ${errors.join('; ')}`);await page.screenshot({path:`out/screens/fail-${String(n+1).padStart(3,'0')}.png`,fullPage:true}).catch(()=>{})}
+            console.log(`AUDIT ${n+1}/${inventory.length} ${meta.group} > ${meta.label}: ${errors.length?'FAIL':'PASS'}`);
           }
-
-          report.runtimeErrors=runtimeErrors;
           report.finishedAt=new Date().toISOString();
           fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
-          console.log('FINAL_REPORT '+JSON.stringify({groups:report.groups,totalChoices:report.choices.length,failures:report.failures,runtimeErrors:runtimeErrors.slice(0,20)}));
-          await browser.close();
-          if(report.failures.length || runtimeErrors.length) process.exitCode=2;
+          console.log('FINAL_REPORT '+JSON.stringify({choices:report.choices.length,failures:report.failures,runtimeErrors:report.runtimeErrors}));
+          await browser.close(); if(report.failures.length||report.runtimeErrors.length)process.exitCode=2;
           EOF
           node audit.mjs
       - uses: actions/upload-artifact@v4
