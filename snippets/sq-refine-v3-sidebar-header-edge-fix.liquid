@@ -1,5 +1,5 @@
 {% doc %}
-Ensures the V3 Refine Products navy title bar reaches both rounded top corners while the filter body stays white throughout scrolling, preserving the sticky desktop sidebar. Armed Forces Gear is hard-locked to Shop by Branch, Availability, and Type in that order.
+Ensures the V3 Refine Products navy title bar reaches both rounded top corners while the filter body stays white throughout scrolling, preserving the sticky desktop sidebar. Armed Forces Gear is hard-locked to Shop by Branch, Availability, and Shop by Type in that order.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 {% render 'sq-refine-v3-sidebar-polish-rescue' %}
@@ -22,29 +22,16 @@ Ensures the V3 Refine Products navy title bar reaches both rounded top corners w
 {% render 'sq-refine-v3-single-grid-guard' %}
 {% render 'sq-refine-v3-footwear-color-pattern' %}
 <style data-sq-refine-v3-header-edge-fix>
-/* Paint the actual scrollport white; a viewport-sized overlay scrolls away. */
-#MainContent .sq-refine-v3-sidebar{
-  background-color:#fff!important;
-  background-image:none!important;
-  scrollbar-gutter:auto!important;
-  scrollbar-width:none!important;
-}
-#MainContent .sq-refine-v3-sidebar::before{
-  content:none!important;
-  display:none!important;
-}
+#MainContent .sq-refine-v3-sidebar{background-color:#fff!important;background-image:none!important;scrollbar-gutter:auto!important;scrollbar-width:none!important}
+#MainContent .sq-refine-v3-sidebar::before{content:none!important;display:none!important}
 #MainContent .sq-refine-v3-sidebar>*{position:relative;z-index:1}
 #MainContent .sq-refine-v3-sidebar::-webkit-scrollbar{width:0!important;height:0!important;display:none!important}
-#MainContent .sq-refine-v3-sidebar__title{
-  position:relative!important;z-index:2!important;display:flex!important;align-items:center!important;
-  width:100%!important;max-width:none!important;min-height:40px!important;box-sizing:border-box!important;
-  margin:0!important;padding:0 12px!important;border-radius:9px 9px 0 0!important;background:#08283f!important;color:#fff!important;
-}
+#MainContent .sq-refine-v3-sidebar__title{position:relative!important;z-index:2!important;display:flex!important;align-items:center!important;width:100%!important;max-width:none!important;min-height:40px!important;box-sizing:border-box!important;margin:0!important;padding:0 12px!important;border-radius:9px 9px 0 0!important;background:#08283f!important;color:#fff!important}
 #MainContent .sq-refine-v3-sidebar__title::after{display:none!important;content:none!important}
 @media (min-width:901px){#MainContent.sq-refine-v3-active .sq-refine-v3-sidebar{position:sticky!important;top:18px!important}}
 @media (max-width:900px){#MainContent.sq-refine-v3-active .sq-refine-v3-sidebar{position:static!important}}
 </style>
-<script data-sq-afg-three-filter-lock>
+<script data-sq-afg-three-filter-lock data-revision="afg-three-groups-20260911-v2">
 (function(){
   var main=document.getElementById('MainContent');if(!main)return;
   var params=new URLSearchParams(location.search),core=document.querySelector('script[data-sq-refine-v3]'),current=core&&core.dataset.currentHandle||'';
@@ -56,15 +43,16 @@ Ensures the V3 Refine Products navy title bar reaches both rounded top corners w
     var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;
     var groups=[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')),keep={};
     groups.forEach(function(d){var r=role(d);if(!r||keep[r])d.remove();else keep[r]=d});
-    setTitle(keep.branch,'Shop by Branch');setTitle(keep.availability,'Availability');setTitle(keep.type,'Type');
+    setTitle(keep.branch,'Shop by Branch');setTitle(keep.availability,'Availability');setTitle(keep.type,'Shop by Type');
     var ordered=[keep.branch,keep.availability,keep.type].filter(Boolean),currentGroups=[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group'));
     var same=currentGroups.length===ordered.length&&ordered.every(function(d,i){return currentGroups[i]===d});
     if(!same)ordered.forEach(function(d){side.appendChild(d)});
-    side.dataset.sqAfgThreeFilterLock='true';
+    side.dataset.sqAfgThreeFilterLock=ordered.length===3?'true':'incomplete';
     return ordered.length===3
   }
   var tries=0,t=setInterval(function(){tries++;if(enforce()||tries>160)clearInterval(t)},50);
   var mo=new MutationObserver(function(){enforce()});mo.observe(main,{childList:true,subtree:true});
+  setTimeout(function(){enforce();mo.disconnect()},12000);
 })();
 </script>
 {% endif %}
