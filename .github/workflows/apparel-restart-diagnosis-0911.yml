@@ -1,0 +1,62 @@
+name: Apparel restart Chromium diagnosis 0911
+on:
+  push:
+    paths:
+      - '.github/workflows/apparel-restart-diagnosis-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium tools
+        run: |
+          npm init -y >/dev/null
+          npm install playwright@1.55.0 agent-browser >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Agent browser snapshot
+        continue-on-error: true
+        run: |
+          mkdir -p out
+          export AGENT_BROWSER_EXECUTABLE_PATH="$(node -e "console.log(require('playwright').chromium.executablePath())")"
+          npx agent-browser open 'https://www.statesideqm.com/collections/apparel?preview_theme_id=158561894555'
+          npx agent-browser snapshot -i > out/agent-browser-snapshot.txt
+          npx agent-browser screenshot out/agent-browser.png
+          npx agent-browser close
+      - name: Chromium navigation and duplicate-grid trace
+        run: |
+          cat > diagnose.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          fs.mkdirSync('out/videos',{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          const report={browser:browser.version(),createdAt:new Date().toISOString(),cases:[]};
+          for(const [name,query,width,height] of [['live','',1440,1000],['draft','?preview_theme_id=158561894555',1440,1000],['draft-page2','?preview_theme_id=158561894555&page=2',1440,1000],['draft-mobile','?preview_theme_id=158561894555',390,844]]){
+           const c=await browser.newContext({viewport:{width,height},recordVideo:{dir:'out/videos',size:{width:Math.min(width,1280),height:Math.min(height,900)}}});
+           const p=await c.newPage(); const nav=[],errors=[];
+           p.on('framenavigated',f=>{if(f===p.mainFrame())nav.push(f.url())});p.on('pageerror',e=>errors.push(String(e)));
+           await p.addInitScript(()=>{window.__apparelFrames=[];function sample(){const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'};const grids=[...document.querySelectorAll('#MainContent .product-grid')].filter(vis);window.__apparelFrames.push({t:Math.round(performance.now()),grids:grids.map(g=>({owner:g.closest('.sq-refine-v3-results')?'v3':'native',count:g.querySelectorAll('.product-grid__item').length,first:g.querySelector('[data-product-id]')?.dataset.productId}))});if(performance.now()<10000)setTimeout(sample,50)}sample()});
+           const entry={name,url:'https://www.statesideqm.com/collections/apparel'+query};
+           try{
+            const r=await p.goto(entry.url,{waitUntil:'domcontentloaded',timeout:90000});entry.status=r?.status();
+            await p.waitForTimeout(10500);fs.writeFileSync(`out/${name}.html`,await p.content());
+            entry.state=await p.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'};return{url:location.href,theme:window.Shopify?.theme,ready:m?.dataset.sqRefineV3Ready,text:m?.innerText.slice(0,2000),grids:[...document.querySelectorAll('#MainContent .product-grid')].map(g=>({visible:vis(g),owner:g.closest('.sq-refine-v3-results')?'v3':'native',host:g.closest('.shopify-section')?.id,top:g.getBoundingClientRect().top+scrollY,ids:[...g.querySelectorAll('.product-grid__item[data-product-id]')].map(e=>e.dataset.productId),titles:[...g.querySelectorAll('.product-grid__item')].slice(0,4).map(e=>e.innerText.trim())})),groups:[...document.querySelectorAll('.sq-refine-v3-sidebar details')].map(e=>({label:e.querySelector('summary')?.innerText,choices:[...e.querySelectorAll('input')].map(x=>({name:x.name,value:x.value,checked:x.checked}))})),controls:[...document.querySelectorAll('.sq-refine-v3-page-size,.sq-refine-v3-pagination,.pagination')].map(e=>e.outerHTML),frames:window.__apparelFrames,scripts:[...document.scripts].filter(s=>s.src).map(s=>s.src)}});
+            await p.screenshot({path:`out/${name}-top.png`});await p.evaluate(()=>scrollTo(0,1500));await p.waitForTimeout(300);await p.screenshot({path:`out/${name}-middle.png`});await p.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));await p.waitForTimeout(300);await p.screenshot({path:`out/${name}-bottom.png`});
+            if(name==='draft')for(const src of entry.state.scripts.filter(x=>/sq-refine|vac-stock|global-refine/.test(x))){try{const r=await p.request.get(src);fs.writeFileSync('out/'+new URL(src).pathname.split('/').pop(),await r.text())}catch{}}
+           }catch(e){entry.error=String(e)}
+           entry.nav=nav;entry.errors=errors;report.cases.push(entry);console.log('CASE',name,JSON.stringify({status:entry.status,error:entry.error,url:entry.state?.url,theme:entry.state?.theme,ready:entry.state?.ready,grids:entry.state?.grids,nav,errors}));await c.close();
+          }
+          await browser.close();fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          EOF
+          node diagnose.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apparel-restart-baseline-0911
+          path: out
+          retention-days: 14
