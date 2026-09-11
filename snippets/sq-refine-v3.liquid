@@ -37,7 +37,7 @@ Clean Refine Products V3 for Stateside Quartermaster collection roots. State Gua
 @media (min-width:901px){#MainContent .sq-refine-v3-sidebar{position:sticky;top:18px;height:calc(100vh - 36px);min-height:720px;max-height:calc(100vh - 36px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable;padding-bottom:28px}}
 @media (max-width:900px){#MainContent.sq-refine-v3-active .sq-refine-v3-layout{width:min(calc(100% - 20px),1440px);display:block;margin-top:14px}#MainContent .sq-refine-v3-sidebar{position:static;height:auto;min-height:0;max-height:none;overflow:visible;margin-bottom:16px}#MainContent.sq-refine-v3-active .product-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}#MainContent .sq-refine-v3-page-size{justify-content:flex-start}}
 </style>
-<script data-sq-refine-v3 data-current-handle="{{ collection.handle | escape }}">
+<script data-sq-refine-v3 data-sq-category-source="collection-interior-20260911" data-current-handle="{{ collection.handle | escape }}">
 (function(){
   if(window.__sqRefineV3)return;window.__sqRefineV3=true;
   var script=document.currentScript,currentHandle=(script&&script.dataset.currentHandle)||'';
@@ -54,18 +54,84 @@ Clean Refine Products V3 for Stateside Quartermaster collection roots. State Gua
   function collectionHandle(raw){try{var m=new URL(raw,location.origin).pathname.match(/^\/collections\/([^/?#]+)/);return m?decodeURIComponent(m[1]):''}catch(_){return''}}
   function canonicalGroup(t){var n=norm(t);if(/manufacturer|vendor|brand/.test(n))return'Shop by Manufacturer';if(/branch|service/.test(n))return'Shop by Branch';if(/sub.?categor/.test(n))return'Shop by Subcategory';if(/product type|shop by type|by type/.test(n))return'Shop by Type';if(/pattern|camo|camouflage/.test(n)&&!/color/.test(n))return'Shop by Pattern';if(/color|colour/.test(n)&&!/pattern/.test(n))return'Shop by Color';if(/availability/.test(n))return'Availability';if(/price/.test(n))return'Price';if(/categor/.test(n))return'Shop by Category';return clean(t).replace(/:$/,'')}
   function patternish(v){return /(multicam|ocp|scorpion|woodland|m81|marpat|nwu|flecktarn|tropentarn|strichtarn|mtp|ucp|acu|cce|kryptek|a[- ]?tacs|tiger stripe|lizard|camo|camouflage|digital|pattern)/i.test(clean(v))}
-  function labelOf(a){var x=a.querySelector('[class*="title"],[class*="label"],strong,h3,h4');return clean(x?x.textContent:(a.getAttribute('aria-label')||a.textContent)).replace(/^shop\s+(?:all\s+)?/i,'')}
-  function structural(a){if(!a||!collectionHandle(a.href)||a.closest('.sq-refine-v3-sidebar'))return false;if(a.closest('collection-component,results-list,.product-grid,product-card,#ResultsList'))return false;var c=String(a.className||'')+' '+String(a.parentElement&&a.parentElement.className||'');return /(?:sq-|vac-|subcategory|third-level|button-tree|branch|category|program|folder|type-grid|match-grid|navigation)/i.test(c)}
-  function groupName(a){var node=a;for(var i=0;i<8&&node&&node!==main;i++,node=node.parentElement){var h=node.querySelector&&node.querySelector(':scope > h2,:scope > h3,:scope > header h2,:scope > header h3');if(h&&clean(h.textContent))return canonicalGroup(clean(h.textContent).replace(/\s*\(.*?\)\s*$/,''))}var s=(a.href+' '+labelOf(a)).toLowerCase();if(/army|navy|air force|marine|coast guard|space force/.test(s)&&/branch|service|series/.test(s))return'Shop by Branch';if(/type/.test(s))return'Shop by Type';return'Shop by Category'}
-  function sourceContainer(a){var node=a;for(var i=0;i<8&&node&&node!==main;i++,node=node.parentElement){if(node.matches&&node.matches('section,.sq-subcategory-section,[class*="button-tree"],[class*="category-section"],[class*="navigation"],[class*="program-tree"],[class*="third-level"],[class*="branch-grid"],[class*="type-grid"],[class*="root-categories"]'))return node}return a}
-  function extractStructural(doc){var map=new Map();[].slice.call(doc.querySelectorAll('a[href*="/collections/"]')).filter(structural).forEach(function(a){var h=collectionHandle(a.href),lab=labelOf(a);if(!h||!lab||h===rootHandle)return;var g=groupName(a),k=norm(g);if(!map.has(k))map.set(k,{label:g,items:[]});var b=map.get(k);if(!b.items.some(function(x){return x.handle===h}))b.items.push({label:lab,handle:h,href:a.href});if(doc===document)sourceNodes.add(sourceContainer(a))});return Array.from(map.values()).filter(function(g){return g.items.length})}
+  // Category choices come from this collection's old interior buttons, never site navigation.
+  function labelOf(a){
+    var x=a.querySelector('.sq-subcategory-name,.sq-third-level__name,.sq-ts-match-name,.sq-line-series-categories__name,[data-sq-category-label],[class*="title"],[class*="label"],strong,h3,h4');
+    if(x)return clean(x.textContent);
+    var aria=a.getAttribute('aria-label');
+    if(aria)return clean(aria).replace(/^shop\s+/i,'');
+    var copy=a.cloneNode(true);
+    copy.querySelectorAll('img,svg,[aria-hidden="true"],[class*="media"],[class*="count"],[class*="arrow"],small').forEach(function(n){n.remove()});
+    return clean(copy.textContent);
+  }
+  function structural(a){
+    if(!a||!a.closest('#MainContent'))return false;
+    if(a.closest('header,footer,nav,[role="navigation"],.sq-refine-v3-sidebar,.sq-global-refine-sidebar,.sq-refine-taxonomy,.sq-maker-browser,collection-component,results-list,.product-grid,product-card,#ResultsList,.vac-category-section,[data-sq-category-duplicate-hidden="true"]'))return false;
+    if(!collectionHandle(a.getAttribute('href')||a.href))return false;
+    var c=String(a.className||'')+' '+String(a.parentElement&&a.parentElement.className||'');
+    return /(?:sq-|vac-|subcategory|third-level|button-tree|branch|category|program|folder|type-grid|match-grid|navigation)/i.test(c);
+  }
+  function groupName(a){
+    var scope=a.closest('#MainContent'),node=a.parentElement;
+    // Start ABOVE the card: its own h3 is its label, not a new filter group.
+    for(var i=0;i<12&&node&&node!==scope;i++,node=node.parentElement){
+      var h=node.querySelector&&node.querySelector(':scope > h2,:scope > h3,:scope > header h2,:scope > header h3,:scope > .section-header h2,:scope > .section-header h3');
+      if(h&&/categor|\btype\b|branch|service|color|colour|pattern|manufacturer|brand|war|conflict|topic/i.test(clean(h.textContent)))return canonicalGroup(clean(h.textContent).replace(/\s*\(.*?\)\s*$/,''));
+    }
+    if(a.closest('.sq-subcategory-section,.sq-line-program-tree,.sq-line-series-categories'))return'Shop by Category';
+    if(a.closest('.sq-third-level,[class*="type-grid"]'))return'Shop by Type';
+    if(a.closest('.sq-afg-branch-section,[class*="branch-grid"]'))return'Shop by Branch';
+    return'Shop by Category';
+  }
+  function sourceContainer(a){
+    var scope=a.closest('#MainContent'),node=a.parentElement;
+    for(var i=0;i<12&&node&&node!==scope;i++,node=node.parentElement){
+      if(node.matches('section,.sq-subcategory-section,[class*="button-tree"],[class*="category-section"],[class*="program-tree"],[class*="third-level"],[class*="branch-grid"],[class*="type-grid"],[class*="root-categories"]'))return node;
+    }
+    return a;
+  }
+  function structuralKey(raw){
+    var u=new URL(raw,location.origin+'/collections/'+rootHandle);
+    ['preview_theme_id','sq_root','page','sq_per_page','sq_view_page','sort_by'].forEach(function(k){u.searchParams.delete(k)});
+    u.searchParams.sort();
+    return u.pathname.replace(/\/$/,'')+(u.searchParams.size?'?'+u.searchParams.toString():'');
+  }
+  function structuralChecked(item){
+    var u=new URL(item.href,location.origin);
+    if(u.pathname.replace(/\/$/,'')!==location.pathname.replace(/\/$/,''))return false;
+    var matches=true;
+    u.searchParams.forEach(function(v,k){if(['preview_theme_id','sq_root','page','sq_per_page','sq_view_page','sort_by'].indexOf(k)<0&&query.getAll(k).indexOf(v)<0)matches=false});
+    return matches;
+  }
+  function extractStructural(doc){
+    var pageMain=doc.getElementById('MainContent'),map=new Map();
+    if(!pageMain)return[];
+    // Books have a replacement tree; the old flat department list remains hidden in the HTML.
+    var books=pageMain.querySelector('.sq-books-tree');
+    var preferred=books||pageMain.querySelector('.sq-subcategory-section')||pageMain.querySelector('.sq-line-program-tree')||pageMain.querySelector('.sq-ts-match-section');
+    [].slice.call(pageMain.querySelectorAll('a[href*="/collections/"]')).filter(structural).forEach(function(a){
+      if(books&&!books.contains(a))return;
+      var raw=a.getAttribute('href')||a.href,u;
+      try{u=new URL(raw,location.origin+'/collections/'+rootHandle)}catch(_){return}
+      if(u.origin!==location.origin)return;
+      var h=collectionHandle(u.href),lab=labelOf(a),id=structuralKey(u.href);
+      if(!h||!lab||id==='/collections/'+rootHandle)return;
+      var g=groupName(a),k=norm(g);
+      if(g==='Shop by Category'&&preferred&&!preferred.contains(a))return;
+      if(!map.has(k))map.set(k,{label:g,items:[]});
+      var bucket=map.get(k);
+      if(!bucket.items.some(function(x){return x.key===id}))bucket.items.push({label:lab,handle:h,href:u.href,key:id});
+      if(doc===document)sourceNodes.add(sourceContainer(a));
+    });
+    return Array.from(map.values()).filter(function(g){return g.items.length});
+  }
   async function fetchText(u,attempts){var last;for(var i=0;i<(attempts||4);i++){try{var r=await fetch(u,{credentials:'same-origin'});if(r.ok)return r.text();last=new Error('HTTP '+r.status);if([429,500,502,503,504].indexOf(r.status)<0)throw last}catch(e){last=e}await delay(500*(i+1)*(i+1))}throw last||new Error('request failed')}
   async function rootDocument(){if(currentHandle===rootHandle)return document;var u=new URL('/collections/'+rootHandle,location.origin);var preview=query.get('preview_theme_id');if(preview)u.searchParams.set('preview_theme_id',preview);return new DOMParser().parseFromString(await fetchText(u.pathname+'?'+u.searchParams.toString(),5),'text/html')}
   function productSourcePath(){return currentHandle==='air-national-guard-series'?'/collections/products-built-for-the-line-u-s-air-force':location.pathname}
   function alternateUrl(page){var u=new URL(productSourcePath(),location.origin);query.forEach(function(v,k){if(k.indexOf('filter.')===0||k==='sort_by'||k==='preview_theme_id')u.searchParams.append(k,v)});u.searchParams.set('view','sq-refine-v3-products');if(page)u.searchParams.set('page',String(page));return u.pathname+'?'+u.searchParams.toString()}
   async function ensureProductHost(){productHost=main.querySelector('collection-component:has(.product-grid)')||main.querySelector('collection-component');if(productHost&&productHost.querySelector('.product-grid'))return true;var html=await fetchText(alternateUrl(1),4),doc=new DOMParser().parseFromString(html,'text/html'),host=doc.querySelector('[data-sq-refine-v3-fallback-host]')||doc.querySelector('collection-component:has(.product-grid)');if(!host)throw new Error('fallback product host missing');productHost=document.importNode(host,true);usingFallback=true;main.appendChild(productHost);return true}
   function structuralTarget(item){var u=new URL(item.href,location.origin);['page','sq_per_page','sq_view_page','view'].forEach(function(k){u.searchParams.delete(k)});u.searchParams.set('sq_root',rootHandle);query.forEach(function(v,k){if(k.indexOf('filter.')===0||k==='sort_by')u.searchParams.append(k,v)});var preview=query.get('preview_theme_id');if(preview)u.searchParams.set('preview_theme_id',preview);return u.pathname+'?'+u.searchParams.toString()}
-  function groupMarkup(g,kind){var active=false,rows=g.items.map(function(x){var checked=kind==='structural'?currentHandle===x.handle:!!x.checked;if(checked)active=true;var attrs=kind==='structural'?'data-kind="structural" data-target="'+esc(structuralTarget(x))+'"':'data-kind="native" data-filter-name="'+esc(x.name)+'" data-filter-value="'+esc(x.value)+'"';return'<label class="sq-refine-v3-choice"><input type="checkbox" '+attrs+(checked?' checked':'')+'><span>'+esc(x.label)+'</span></label>'}).join('');return'<details class="sq-refine-v3-group" data-active="'+(active?'true':'false')+'"'+(active?' open':'')+'><summary>'+esc(g.label)+'</summary><div class="sq-refine-v3-choices">'+rows+'</div></details>'}
+  function groupMarkup(g,kind){var active=false,rows=g.items.map(function(x){var checked=kind==='structural'?structuralChecked(x):!!x.checked;if(checked)active=true;var attrs=kind==='structural'?'data-kind="structural" data-target="'+esc(structuralTarget(x))+'"':'data-kind="native" data-filter-name="'+esc(x.name)+'" data-filter-value="'+esc(x.value)+'"';return'<label class="sq-refine-v3-choice"><input type="checkbox" '+attrs+(checked?' checked':'')+'><span>'+esc(x.label)+'</span></label>'}).join('');return'<details class="sq-refine-v3-group" data-active="'+(active?'true':'false')+'"'+(active?' open':'')+'><summary>'+esc(g.label)+'</summary><div class="sq-refine-v3-choices">'+rows+'</div></details>'}
   function nativeGroups(){var inputs=[].slice.call(productHost.querySelectorAll('input[type="checkbox"][name^="filter."],input[type="radio"][name^="filter."]')),map=new Map();inputs.forEach(function(input){var details=input.closest('details'),heading=clean(details&&details.querySelector(':scope>summary')&&details.querySelector(':scope>summary').textContent);if(!heading){var fs=input.closest('fieldset');heading=clean(fs&&fs.querySelector('legend')&&fs.querySelector('legend').textContent)}if(!heading)heading=input.name.replace(/^filter\.[^.]+\./,'').replace(/[._-]+/g,' ');var group=canonicalGroup(heading),lab='',id=input.id;if(id){var l=productHost.querySelector('label[for="'+CSS.escape(id)+'"]');if(l)lab=clean(l.textContent)}if(!lab)lab=clean(input.closest('label')&&input.closest('label').textContent)||clean(input.value);if(!lab)return;if(/color/.test(norm(group))&&/pattern/.test(norm(group)))group=patternish(lab)?'Shop by Pattern':'Shop by Color';var key=norm(group),entry={label:lab,name:input.name,value:clean(input.value),checked:input.checked};if(!map.has(key))map.set(key,{label:group,items:[]});var a=map.get(key).items;if(!a.some(function(x){return x.name===entry.name&&x.value===entry.value}))a.push(entry)});return Array.from(map.values()).filter(function(g){return g.items.length})}
   function parseBookTags(doc){var n=doc.querySelector('[data-sq-refine-v3-book-tags]');if(!n)return[];try{return JSON.parse(n.textContent||'[]')}catch(_){return[]}}
   function bookGroups(tags){var specs=[['Shop by Author',['author','book author']],['Shop by Publisher',['publisher','book publisher']],['Shop by War / Conflict',['war','conflict','war conflict']],['Shop by Branch',['branch','service','service branch']],['Shop by Topic',['topic','subject','book topic']]],out=[];specs.forEach(function(spec){var vals=[];tags.forEach(function(tag){var m=clean(tag).match(/^([^:]+):\s*(.+)$/);if(!m||spec[1].indexOf(norm(m[1]))<0)return;var lab=clean(m[2]);if(lab&&!vals.some(function(x){return norm(x.label)===norm(lab)}))vals.push({label:lab,tag:clean(tag)})});if(vals.length)out.push({label:spec[0],items:vals})});return out}
@@ -80,7 +146,7 @@ Clean Refine Products V3 for Stateside Quartermaster collection roots. State Gua
   function gridCards(doc){var grid=doc.querySelector('.product-grid');if(!grid)return{grid:null,cards:[]};return{grid:grid,cards:[].slice.call(grid.querySelectorAll(':scope > .product-grid__item')).filter(function(x){return x.querySelector('a[href*="/products/"]')})}}
   async function altCards(page){var html=await fetchText(alternateUrl(page),4),doc=new DOMParser().parseFromString(html,'text/html');return gridCards(doc).cards}
   async function assembleProducts(){if(rootHandle==='uniforms'&&query.getAll('sq_ucp').length)return;var live=gridCards(document);if(!live.grid)return;var target=pageSize(),view=Math.max(1,parseInt(query.get('sq_view_page')||'1',10)||1),globalStart=(view-1)*target,startPage=Math.floor(globalStart/50)+1,offset=globalStart%50,need=offset+target+1,cards=[],p=startPage,nativeNext=!!productHost.querySelector('a[rel="next"],pagination-component a[href*="page=2"],.pagination a[href*="page=2"],.pagination__item--next a');if(!(target===50&&view===1&&offset===0&&live.cards.length)){while(cards.length<need&&p<startPage+8){var batch=await altCards(p);if(!batch.length)break;cards=cards.concat(batch);if(batch.length<50)break;p++}}else{cards=live.cards.slice();}var sliced=cards.slice(offset,offset+target),hasNext=(target===50&&view===1&&offset===0)?nativeNext:cards.length>offset+target;if(!sliced.length)return;var frag=document.createDocumentFragment();sliced.forEach(function(c){frag.appendChild(document.importNode(c,true))});live.grid.replaceChildren(frag);var pagers=productHost.querySelectorAll('pagination-component,.pagination');pagers.forEach(function(x){x.style.display='none'});var pager=document.createElement('nav');pager.className='sq-refine-v3-pager';pager.setAttribute('aria-label','Product pages');function vu(n){var u=new URL(location.href);u.searchParams.delete('page');u.searchParams.set('sq_per_page',String(target));u.searchParams.set('sq_view_page',String(n));return u.pathname+'?'+u.searchParams.toString()}pager.innerHTML=(view>1?'<a href="'+esc(vu(view-1))+'">Previous</a>':'')+'<span>Page '+view+'</span>'+(hasNext?'<a href="'+esc(vu(view+1))+'">Next</a>':'');live.grid.parentElement.appendChild(pager)}
-  async function launch(){try{var rootDoc=await rootDocument(),structuralGroups=extractStructural(rootDoc);await ensureProductHost();makeLayout();var native=nativeGroups(),books=rootHandle==='literature'?bookGroups(parseBookTags(rootDoc)):[],html='<h2 class="sq-refine-v3-sidebar__title">Refine Products</h2>';structuralGroups.forEach(function(g){html+=groupMarkup(g,'structural')});books.forEach(function(g){html+=bookMarkup(g)});native.forEach(function(g){html+=groupMarkup(g,'native')});sidebar.innerHTML=html;hideSources();bindSidebar();installPageSize();await assembleProducts();guardSingleProductGrid();main.dataset.sqRefineV3Ready='true';main.dataset.sqRefineV3Fallback=usingFallback?'true':'false'}catch(e){main.dataset.sqRefineV3Error=clean(e&&e.message||e);console.error('[SQ V3]',e)}}
+  async function launch(){try{var rootDoc=await rootDocument(),structuralGroups=extractStructural(rootDoc);await ensureProductHost();makeLayout();var native=nativeGroups(),books=rootHandle==='literature'?bookGroups(parseBookTags(rootDoc)):[],html='<h2 class="sq-refine-v3-sidebar__title">Refine Products</h2>';structuralGroups.forEach(function(g){html+=groupMarkup(g,'structural')});books.forEach(function(g){html+=bookMarkup(g)});native.forEach(function(g){html+=groupMarkup(g,'native')});sidebar.innerHTML=html;hideSources();bindSidebar();installPageSize();await assembleProducts();guardSingleProductGrid();main.dataset.sqRefineV3CategorySource='collection-interior-20260911';main.dataset.sqRefineV3Ready='true';main.dataset.sqRefineV3Fallback=usingFallback?'true':'false'}catch(e){main.dataset.sqRefineV3Error=clean(e&&e.message||e);console.error('[SQ V3]',e)}}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',launch,{once:true});else launch();
 })();
 </script>
