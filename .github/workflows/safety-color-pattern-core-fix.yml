@@ -1,0 +1,69 @@
+name: Safety Color Pattern Core Fix
+on:
+  push:
+    paths:
+      - '.github/workflows/safety-color-pattern-core-fix.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+          fetch-depth: 0
+      - name: Patch color pattern activation guard
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('snippets/sq-uniform-color-pattern-core.liquid')
+          s=p.read_text()
+          old="if((query.get('sq_root')||config.handle)!=='uniforms'||window.__sqUniformColor)return;"
+          new="var activeRoot=query.get('sq_root')||config.handle;if(['uniforms','safety-rescue-climbing'].indexOf(activeRoot)===-1||window.__sqUniformColor)return;"
+          if old in s:
+              p.write_text(s.replace(old,new,1))
+          elif new not in s:
+              raise SystemExit('Expected core activation guard not found')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-uniform-color-pattern-core.liquid
+          if ! git diff --cached --quiet; then
+            git commit -m 'Enable color pattern filter for Safety Rescue Climbing'
+            git push origin refine-restart-v3
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify source and storefront in Chromium
+        run: |
+          grep -F "['uniforms','safety-rescue-climbing']" snippets/sq-uniform-color-pattern-core.liquid
+          cat > verify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1100}});
+          const errors=[];page.on('pageerror',e=>errors.push(e.message));
+          const url='https://www.statesideqm.com/collections/safety-rescue-climbing?preview_theme_id=158561894555';
+          await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
+          await page.waitForSelector('.sq-refine-v3-sidebar',{timeout:60000});
+          await page.waitForTimeout(8000);
+          const state=await page.evaluate(()=>({groups:[...document.querySelectorAll('.sq-refine-v3-sidebar>details')].map(d=>d.querySelector('summary')?.textContent?.trim()),api:window.__sqUniformColor?{ready:window.__sqUniformColor.ready,choices:window.__sqUniformColor.choices,resultIds:window.__sqUniformColor.resultIds}:null}));
+          console.log(JSON.stringify({state,errors},null,2));
+          await page.screenshot({path:'safety-color-pattern.png',fullPage:true});
+          await browser.close();
+          EOF
+          node verify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: safety-color-pattern-core-fix
+          path: safety-color-pattern.png
+          retention-days: 7
