@@ -87,11 +87,31 @@ jobs:
             },{timeout:30000}).catch(()=>{});
             await sleep(300);
           }
+          async function productPaths(page,selector){
+            return await page.$$eval(selector,els=>[...new Set(els.map(el=>{
+              const h=(el.getAttribute('data-product-handle')||'').trim();
+              if(h)return `/products/${encodeURIComponent(h)}`;
+              return el.querySelector('a[href*="/products/"]')?.href||'';
+            }).filter(Boolean))]);
+          }
           async function customerHrefs(page){
-            return await page.$$eval(cardSelector,els=>[...new Set(els.map(el=>el.querySelector('a[href*="/products/"]')?.href).filter(Boolean))]);
+            return await productPaths(page,cardSelector);
           }
           async function sourceHrefs(page){
+            const handles=await productPaths(page,'[data-sq-refine-v3-fallback-host] .product-grid__item[data-product-handle], .product-grid__item[data-product-handle]');
+            if(handles.length)return handles;
             return await page.$$eval('.product-grid a[href*="/products/"]',els=>[...new Set(els.map(a=>a.href).filter(Boolean))]);
+          }
+          async function sourceDiagnostic(page){
+            return await page.evaluate(()=>({
+              url:location.href,
+              title:document.title,
+              handleCards:document.querySelectorAll('[data-product-handle]').length,
+              gridItems:document.querySelectorAll('.product-grid__item').length,
+              productLinks:document.querySelectorAll('a[href*="/products/"]').length,
+              fallbackHosts:document.querySelectorAll('[data-sq-refine-v3-fallback-host]').length,
+              bodyText:(document.body?.innerText||'').slice(0,500)
+            }));
           }
           async function pagerState(page){
             return await page.evaluate(()=>{
@@ -115,6 +135,7 @@ jobs:
             const page=await context.newPage();
             const expected=new Set();
             const counts=[];
+            const diagnostics=[];
             let terminated=false;
             try{
               for(let nativePage=1;nativePage<=150;nativePage++){
@@ -126,7 +147,11 @@ jobs:
                 await gotoWithRetry(page,u.toString(),`${route.handle} source page ${nativePage}`);
                 const links=(await sourceHrefs(page)).map(norm);
                 counts.push(links.length);
-                if(!links.length){terminated=true;break;}
+                if(!links.length){
+                  diagnostics.push({nativePage,...await sourceDiagnostic(page)});
+                  terminated=true;
+                  break;
+                }
                 links.forEach(x=>expected.add(x));
                 if(links.length<50){terminated=true;break;}
                 await sleep(400);
@@ -134,7 +159,7 @@ jobs:
               if(!terminated)fail(route.handle,null,150,'source enumeration did not terminate');
             }catch(e){fail(route.handle,null,counts.length+1,`source enumeration failed: ${String(e)}`)}
             await page.close();
-            report.source.push({handle:route.handle,totalUniqueProducts:expected.size,nativePageCounts:counts});
+            report.source.push({handle:route.handle,totalUniqueProducts:expected.size,nativePageCounts:counts,diagnostics});
             return expected;
           }
           for(const route of routes){
