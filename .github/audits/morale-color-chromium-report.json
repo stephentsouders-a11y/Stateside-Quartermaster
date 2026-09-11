@@ -2,13 +2,66 @@
   "status": "FAIL",
   "theme": "158561894555",
   "publication": "UNPUBLISHED",
-  "sourceCommit": "304eb3e7fe76cdff654c6e2fa54a4fe3c0d3ad8b",
-  "started": "2026-09-11T19:39:45.272Z",
-  "checks": [],
+  "sourceCommit": "e42ab118a280bdadb41129eb78b2f8d5766ad249",
+  "started": "2026-09-11T19:53:42.676Z",
+  "checks": [
+    "Desktop: exact heading, unique real checkbox options, one sidebar"
+  ],
   "pageErrors": [],
   "tests": [],
   "browserVersion": "140.0.7339.16",
-  "failure": "page.waitForFunction: Timeout 15000ms exceeded.\n    at ready (/tmp/morale-verify/test.mjs:22:14)\n    at async go (/tmp/morale-verify/test.mjs:28:132)\n    at async file:///tmp/morale-verify/test.mjs:51:3",
-  "failureUrl": "https://www.statesideqm.com/collections/morale-patches-tactical-id?filter.v.availability=1",
-  "finished": "2026-09-11T19:40:18.183Z"
+  "groups": [
+    "Shop by Category",
+    "Shop by Type",
+    "Shop by Color / Pattern",
+    "Shop by Manufacturers",
+    "Availability"
+  ],
+  "mode": "tags-v2",
+  "options": [
+    {
+      "label": "Black",
+      "tag": "SQ Color/Pattern: Black"
+    },
+    {
+      "label": "Blue",
+      "tag": "SQ Color/Pattern: Blue"
+    },
+    {
+      "label": "Brown / Tan",
+      "tag": "SQ Color/Pattern: Brown / Tan"
+    },
+    {
+      "label": "Camouflage",
+      "tag": "SQ Color/Pattern: Camouflage"
+    },
+    {
+      "label": "Gray",
+      "tag": "SQ Color/Pattern: Gray"
+    },
+    {
+      "label": "Green",
+      "tag": "SQ Color/Pattern: Green"
+    },
+    {
+      "label": "Orange",
+      "tag": "SQ Color/Pattern: Orange"
+    },
+    {
+      "label": "Pink",
+      "tag": "SQ Color/Pattern: Pink"
+    },
+    {
+      "label": "Red",
+      "tag": "SQ Color/Pattern: Red"
+    },
+    {
+      "label": "White",
+      "tag": "SQ Color/Pattern: White"
+    }
+  ],
+  "baselineVisibleCount": 50,
+  "failure": "AssertionError [ERR_ASSERTION]: Product does not match selected color: be-polite-be-professional-but-have-a-plan-patch\n    at truth (file:///tmp/morale-verify/test.mjs:40:37)\n    at async file:///tmp/morale-verify/test.mjs:67:18",
+  "failureUrl": "https://www.statesideqm.com/collections/morale-patches-tactical-id?filter.v.availability=1&filter.p.tag=SQ+Color%2FPattern%3A+Gray",
+  "finished": "2026-09-11T19:54:06.520Z"
 }
