@@ -1,7 +1,7 @@
 {% doc %}
-Adds tag-based color/pattern refinement to Morale Patches and Patriotic & American Heritage collections.
+Adds the Morale Patches collection's existing color/pattern product tags to Refine Products.
 {% enddoc %}
-{% if request.page_type == 'collection' and collection.handle == 'morale-patches-tactical-id' or request.page_type == 'collection' and collection.handle == 'patriotic-american-heritage' %}
+{% if request.page_type == 'collection' and collection.handle == 'morale-patches-tactical-id' %}
 <script type="application/json" data-sq-morale-color-tags>{{ collection.all_tags | json }}</script>
 <script type="application/json" data-sq-morale-color-fallback>["SQ Color/Pattern: Black","SQ Color/Pattern: Blue","SQ Color/Pattern: Brown / Tan","SQ Color/Pattern: Camouflage","SQ Color/Pattern: Gray","SQ Color/Pattern: Green","SQ Color/Pattern: Orange","SQ Color/Pattern: Pink","SQ Color/Pattern: Red","SQ Color/Pattern: White"]</script>
 <script data-sq-morale-color-controller>
@@ -12,12 +12,13 @@ Adds tag-based color/pattern refinement to Morale Patches and Patriotic & Americ
   var main = document.getElementById('MainContent');
   if (!main) return;
   var prefix = /^SQ Color\/Pattern:\s*/i;
+  var tags = [];
   function readJson(selector) {
     var node = document.querySelector(selector);
     if (!node) return [];
     try { return JSON.parse(node.textContent) || []; } catch (_) { return []; }
   }
-  var tags = readJson('[data-sq-morale-color-tags]').filter(function (tag) {
+  tags = readJson('[data-sq-morale-color-tags]').filter(function (tag) {
     return prefix.test(tag) && tag.replace(prefix, '').trim();
   });
   if (!tags.length) tags = readJson('[data-sq-morale-color-fallback]');
