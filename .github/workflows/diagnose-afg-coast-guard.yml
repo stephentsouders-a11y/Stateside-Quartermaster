@@ -9,7 +9,7 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/setup-node@v4
         with: {node-version: '24'}
@@ -17,33 +17,32 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Trace exact Chromium exception source
+      - name: Trace exact Chromium exception source with 5xx retry
         run: |
           cat > trace.mjs <<'EOF'
           import { chromium } from 'playwright';
           const url='https://www.statesideqm.com/collections/armed-forces-gear?preview_theme_id=158561894555';
           const browser=await chromium.launch({headless:true});
-          const context=await browser.newContext({viewport:{width:1440,height:1000}});
-          const page=await context.newPage();
-          const cdp=await context.newCDPSession(page);
-          await cdp.send('Runtime.enable');
-          await cdp.send('Debugger.enable');
-          const scripts=new Map();
-          cdp.on('Debugger.scriptParsed',e=>{scripts.set(e.scriptId,{url:e.url,startLine:e.startLine,startColumn:e.startColumn,endLine:e.endLine,endColumn:e.endColumn});});
-          cdp.on('Runtime.exceptionThrown',async e=>{
-            const d=e.exceptionDetails||{};
-            const ex=d.exception||{};
-            const frames=d.stackTrace?.callFrames||[];
-            console.log('CDP_EXCEPTION '+JSON.stringify({text:d.text,description:ex.description,value:ex.value,url:d.url,lineNumber:d.lineNumber,columnNumber:d.columnNumber,scriptId:d.scriptId,frames},null,2));
-            const sid=d.scriptId||frames[0]?.scriptId;
-            if(sid){try{const src=await cdp.send('Debugger.getScriptSource',{scriptId:sid});const meta=scripts.get(sid)||{};const lines=String(src.scriptSource||'').split(/\r?\n/);const ln=Number(d.lineNumber ?? frames[0]?.lineNumber ?? 0);const from=Math.max(0,ln-4),to=Math.min(lines.length,ln+5);console.log('SCRIPT_META '+JSON.stringify({scriptId:sid,...meta,line:ln,column:d.columnNumber ?? frames[0]?.columnNumber ?? null}));console.log('SCRIPT_CONTEXT\n'+lines.slice(from,to).map((x,i)=>String(from+i+1).padStart(5)+': '+x).join('\n'));}catch(err){console.log('SOURCE_ERROR '+String(err))}}
-          });
-          page.on('pageerror',e=>console.log('PAGEERROR '+(e.stack||String(e))));
-          page.on('console',m=>{if(m.type()==='error')console.log('CONSOLE_ERROR '+m.text())});
-          const r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
-          console.log('HTTP '+r.status());
-          await page.waitForTimeout(12000);
-          console.log('FINAL '+JSON.stringify(await page.evaluate(()=>({ready:document.querySelector('#MainContent')?.dataset.sqRefineV3Ready||'',scripts:[...document.scripts].map((s,i)=>({i,src:s.src||'',type:s.type||'',head:(s.textContent||'').trim().slice(0,100)})).filter(x=>x.src||x.head)}))));
-          await browser.close();
+          for(let attempt=1;attempt<=5;attempt++){
+            const context=await browser.newContext({viewport:{width:1440,height:1000}});
+            const page=await context.newPage();
+            const cdp=await context.newCDPSession(page);
+            await cdp.send('Runtime.enable'); await cdp.send('Debugger.enable');
+            const scripts=new Map(); let exceptionCount=0;
+            cdp.on('Debugger.scriptParsed',e=>scripts.set(e.scriptId,{url:e.url,startLine:e.startLine,startColumn:e.startColumn,endLine:e.endLine,endColumn:e.endColumn}));
+            cdp.on('Runtime.exceptionThrown',async e=>{
+              exceptionCount++;
+              const d=e.exceptionDetails||{}, ex=d.exception||{}, frames=d.stackTrace?.callFrames||[];
+              console.log('CDP_EXCEPTION '+JSON.stringify({text:d.text,description:ex.description,value:ex.value,url:d.url,lineNumber:d.lineNumber,columnNumber:d.columnNumber,scriptId:d.scriptId,frames},null,2));
+              const sid=d.scriptId||frames[0]?.scriptId;
+              if(sid){try{const src=await cdp.send('Debugger.getScriptSource',{scriptId:sid});const meta=scripts.get(sid)||{};const ln=Number(d.lineNumber ?? frames[0]?.lineNumber ?? 0), lines=String(src.scriptSource||'').split(/\r?\n/);const from=Math.max(0,ln-6),to=Math.min(lines.length,ln+7);console.log('SCRIPT_META '+JSON.stringify({scriptId:sid,...meta,line:ln,column:d.columnNumber ?? frames[0]?.columnNumber ?? null}));console.log('SCRIPT_CONTEXT\n'+lines.slice(from,to).map((x,i)=>String(from+i+1).padStart(5)+': '+x).join('\n'));}catch(err){console.log('SOURCE_ERROR '+String(err))}}
+            });
+            page.on('pageerror',e=>console.log('PAGEERROR '+(e.stack||String(e))));
+            let r=null; try{r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000})}catch(e){console.log('NAV_ERROR '+String(e))}
+            const status=r?.status()||0; console.log(`ATTEMPT ${attempt} HTTP ${status}`);
+            if(status===200){await page.waitForTimeout(15000);console.log('FINAL '+JSON.stringify(await page.evaluate(()=>({ready:document.querySelector('#MainContent')?.dataset.sqRefineV3Ready||'',error:document.querySelector('#MainContent')?.dataset.sqRefineV3Error||'',path:location.pathname})))) ;console.log('EXCEPTION_COUNT '+exceptionCount);await context.close();await browser.close();process.exit(0)}
+            await context.close(); await new Promise(r=>setTimeout(r,attempt*3000));
+          }
+          await browser.close(); process.exit(2);
           EOF
           node trace.mjs
