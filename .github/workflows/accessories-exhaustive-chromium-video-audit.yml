@@ -36,10 +36,9 @@ jobs:
           const target='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
           const expectedCats=['Challenge Coins & Displays','Collectibles & Cards','Drinkware','Keychains & Lanyards','Memorial & Personalized Gifts','Military Surplus & Collectibles','Pins, Buttons & Small Insignia','Sword & Knife Display Cases','Wallets & Pocket Gifts'];
           const report={target,devices:[],failures:[],warnings:[]};
-          const visible=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
           for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
             const browser=await chromium.launch({headless:true});
-            const ctx=await browser.newContext({viewport,recordVideo:{dir:'out/videos',size:{width:device==='desktop'?1280:390,height:device==='desktop'?720:720}}});
+            const ctx=await browser.newContext({viewport,recordVideo:{dir:'out/videos',size:{width:device==='desktop'?1280:390,height:720}}});
             const page=await ctx.newPage();
             page.setDefaultNavigationTimeout(90000);
             const consoleErrors=[],pageErrors=[],requestFailures=[];
@@ -82,7 +81,8 @@ jobs:
               const native=[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis);
               const text=(main.innerText||'').replace(/\s+/g,' ').trim();
               const broken=[...main.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.currentSrc||i.src).filter(Boolean);
-              return {missingMain:false,ready:main.dataset.sqRefineV3Ready||null,error:main.dataset.sqRefineV3Error||null,groups,categoryChoices:category?.choices||[],categoryExact:JSON.stringify(category?.choices||[])===JSON.stringify(expectedCats),productCards:cards.length,columns:xs.length,nativeVisible:native.length,stateGuard:/State Guard Uniform Builder|Build Your Uniform|PT Uniform/i.test(text),pageSizeText:(main.querySelector('.sq-refine-v3-page-size')?.innerText||'').replace(/\s+/g,' ').trim(),duplicateProductGrids:[...main.querySelectorAll('.product-grid')].filter(g=>vis(g)&&!main.querySelector('.sq-refine-v3-results')?.contains(g)&&g.querySelector('a[href*="/products/"]')).length,brokenImages:broken,horizontalOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+3,firstPaint:window.__sqFirstPaintAudit||[]};
+              const invalidInputs=side?[...side.querySelectorAll('input[type="checkbox"]')].filter(i=>!i.dataset.target&&!i.dataset.filterName&&!i.dataset.sqPolishParam).map(i=>({value:i.value,html:i.outerHTML.slice(0,240)})):[];
+              return {missingMain:false,ready:main.dataset.sqRefineV3Ready||null,error:main.dataset.sqRefineV3Error||null,groups,categoryChoices:category?.choices||[],categoryExact:JSON.stringify(category?.choices||[])===JSON.stringify(expectedCats),productCards:cards.length,columns:xs.length,nativeVisible:native.length,stateGuard:/State Guard Uniform Builder|Build Your Uniform|PT Uniform/i.test(text),pageSizeText:(main.querySelector('.sq-refine-v3-page-size')?.innerText||'').replace(/\s+/g,' ').trim(),duplicateProductGrids:[...main.querySelectorAll('.product-grid')].filter(g=>vis(g)&&!main.querySelector('.sq-refine-v3-results')?.contains(g)&&g.querySelector('a[href*="/products/"]')).length,brokenImages:broken,horizontalOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+3,invalidInputs,firstPaint:window.__sqFirstPaintAudit||[]};
             },{expectedCats});
             const interactions=[];
             if(!audit.missingMain){
@@ -90,9 +90,9 @@ jobs:
               const n=await summaries.count();
               for(let i=0;i<n;i++){
                 const s=summaries.nth(i),title=(await s.innerText().catch(()=>'' )).trim();
-                let opened=false,closed=false;
-                try{await s.click();opened=await s.evaluate(e=>e.parentElement.open);await s.click();closed=!(await s.evaluate(e=>e.parentElement.open));}catch{}
-                interactions.push({title,opened,closed});
+                let initial=null,after1=null,after2=null,toggled=false;
+                try{initial=await s.evaluate(e=>e.parentElement.open);await s.click();after1=await s.evaluate(e=>e.parentElement.open);await s.click();after2=await s.evaluate(e=>e.parentElement.open);toggled=after1!==initial&&after2===initial;}catch{}
+                interactions.push({title,initial,after1,after2,toggled});
               }
             }
             await page.screenshot({path:`out/screens/${device}-final.png`,fullPage:true}).catch(()=>{});
@@ -114,8 +114,9 @@ jobs:
               if(device==='mobile'&&audit.columns!==2)report.failures.push(`mobile: expected 2 product columns, got ${audit.columns}`);
               const badFrames=audit.firstPaint.filter(x=>x.native||x.legacy);
               if(badFrames.length)report.failures.push(`${device}: old/contaminated layout visible during first paint in ${badFrames.length} sampled frames, first at ${badFrames[0].t}ms`);
-              const badGroup=interactions.find(x=>!x.opened||!x.closed);if(badGroup)report.failures.push(`${device}: Refine group interaction failed: ${badGroup.title}`);
+              const badGroup=interactions.find(x=>!x.toggled);if(badGroup)report.failures.push(`${device}: Refine group interaction failed: ${badGroup.title}`);
               const empty=audit.groups.filter(g=>g.inputs<1);if(empty.length)report.failures.push(`${device}: Refine groups without checkbox inputs: ${empty.map(x=>x.title).join(', ')}`);
+              if(audit.invalidInputs.length)report.failures.push(`${device}: ${audit.invalidInputs.length} checkbox inputs lack navigation/filter metadata`);
             }
             if(consoleErrors.length)report.warnings.push(`${device}: ${consoleErrors.length} console errors`);
             const video=page.video(); await page.close(); await ctx.close();
@@ -123,7 +124,7 @@ jobs:
             await browser.close();
           }
           fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
-          console.log(JSON.stringify({failures:report.failures,warnings:report.warnings,devices:report.devices.map(d=>({device:d.device,status:d.status,readyMs:d.readyMs,groups:d.audit.groups?.map(g=>({title:g.title,choices:g.choices.length,inputs:g.inputs})),categories:d.audit.categoryChoices,productCards:d.audit.productCards,columns:d.audit.columns,nativeVisible:d.audit.nativeVisible,stateGuard:d.audit.stateGuard,pageSize:d.audit.pageSizeText,firstPaintBad:d.audit.firstPaint?.filter(x=>x.native||x.legacy).slice(0,5),interactions:d.interactions}))},null,2));
+          console.log(JSON.stringify({failures:report.failures,warnings:report.warnings,devices:report.devices.map(d=>({device:d.device,status:d.status,readyMs:d.readyMs,groups:d.audit.groups?.map(g=>({title:g.title,choices:g.choices.length,inputs:g.inputs})),categories:d.audit.categoryChoices,productCards:d.audit.productCards,columns:d.audit.columns,nativeVisible:d.audit.nativeVisible,stateGuard:d.audit.stateGuard,pageSize:d.audit.pageSizeText,invalidInputs:d.audit.invalidInputs?.length,firstPaintBad:d.audit.firstPaint?.filter(x=>x.native||x.legacy).slice(0,5),interactions:d.interactions}))},null,2));
           if(report.failures.length)process.exitCode=2;
           EOF
           node certify.mjs
