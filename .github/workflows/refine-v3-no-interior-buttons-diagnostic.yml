@@ -1,0 +1,32 @@
+name: Refine V3 no interior buttons diagnostic
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-no-interior-buttons-diagnostic.yml']
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Inspect legacy button surfaces before and after refine navigation
+        run: |
+          cat > diag.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const B='https://www.statesideqm.com',T='158561894555',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const routes=['accessories-gifts-collectibles','apparel','armed-forces-gear','tactical-gear','products-built-for-the-line-u-s-army','literature','law-enforcement-corrections'];
+          const browser=await chromium.launch({headless:true}),c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage();
+          const make=h=>{const u=new URL('/collections/'+h,B);u.searchParams.set('preview_theme_id',T);return u.toString()};
+          async function settle(){await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:60000});await sleep(1400)}
+          async function scan(label){const out=await p.evaluate(()=>{const m=document.querySelector('#MainContent'),layout=m?.querySelector('.sq-refine-v3-layout');const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'};return [...m.querySelectorAll('section,div,nav,ul')].filter(e=>vis(e)&&!e.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results,.sq-refine-v3-page-size')&&!(layout&&layout.contains(e))).map(e=>{const cs=[...e.querySelectorAll('a[href*="/collections/"]')].filter(vis),ps=e.querySelectorAll('a[href*="/products/"]').length;if(cs.length<2||ps)return null;return{tag:e.tagName,id:e.id,cls:e.className,links:cs.slice(0,12).map(a=>({text:(a.textContent||'').replace(/\s+/g,' ').trim().slice(0,80),href:a.getAttribute('href'),cls:a.className}))}}).filter(Boolean).slice(0,30)});console.log(label,JSON.stringify(out));return out}
+          for(const h of routes){let r=await p.goto(make(h),{waitUntil:'domcontentloaded',timeout:70000});if(r?.status()!==200){console.log('HTTP',h,r?.status());continue}await settle();await scan('BEFORE '+h);const q=p.locator('.sq-refine-v3-sidebar input[data-kind="structural"][data-target^="/collections/"]').first();if(await q.count()){const target=await q.getAttribute('data-target');console.log('TARGET '+h+' '+target);await q.check({force:true}).catch(()=>{});await p.waitForLoadState('domcontentloaded',{timeout:70000}).catch(()=>{});await settle().catch(()=>{});await scan('AFTER '+h)}await sleep(1200)}
+          await browser.close();
+          EOF
+          node diag.mjs
