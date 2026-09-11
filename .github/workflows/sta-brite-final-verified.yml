@@ -1,0 +1,72 @@
+name: Sta-Brite final verified Chromium
+on:
+  push:
+    paths:
+      - '.github/workflows/sta-brite-final-verified.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install browser and validators
+        run: |
+          npm install --no-save playwright@1.55.0 agent-browser @shopify/liquid-html-parser @shopify/theme-check-node >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          mkdir -p sta-cert/videos sta-cert/screens sta-cert/frames
+      - name: Validate both patched Liquid files and JavaScript
+        run: |
+          cat > validate.mjs <<'EOF'
+          import fs from 'node:fs';import vm from 'node:vm';import {toLiquidHtmlAST} from '@shopify/liquid-html-parser';import {themeCheckRun} from '@shopify/theme-check-node';
+          const files=['sections/sq-thin-stabrite-subcategories.liquid','snippets/sq-refine-v3-child-route-isolation.liquid'];
+          const result=await themeCheckRun(process.cwd(),undefined,()=>{});const reports=[];
+          for(const file of files){const c=fs.readFileSync(file,'utf8');toLiquidHtmlAST(c);const schema=c.match(/{% schema %}([\s\S]*?){% endschema %}/);if(schema)JSON.parse(schema[1]);for(const [,js] of c.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(js.replace(/{{\s*collection.handle\s*\|\s*json\s*}}/g,'"sta-brite-insignia"'));const offenses=result.offenses.filter(o=>o.uri.endsWith(file));reports.push({file,liquidParsed:true,javascriptParsed:true,offenses});}
+          fs.writeFileSync('sta-cert/liquid-validation.json',JSON.stringify(reports,null,2));console.log(JSON.stringify(reports,null,2));if(reports.some(r=>r.offenses.length))process.exitCode=1;
+          EOF
+          node validate.mjs --model 'GPT-6 Astra Pro' --client-name ChatGPT --client-version 1 --artifact-id sta-brite-final-validation --revision 2
+      - name: Prepare complete certification with paced navigation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+          source=Path('.github/workflows/sta-brite-repaired-chromium-cert.yml').read_text()
+          code=textwrap.dedent(source.split("          cat > sta-cert.mjs <<'EOF'\n",1)[1].split('\n          EOF',1)[0])
+          code=code.replace("i.closest('label').innerText.trim()","i.closest('label').textContent.trim()")
+          code=code.replace("[['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]","[['mobile',{width:390,height:844}],['desktop',{width:1440,height:1000}]]")
+          code=code.replace('waitForTimeout(1200)','waitForTimeout(2500)').replace('waitForTimeout(1000)','waitForTimeout(2500)')
+          code=code.replace("page.on('pageerror',e=>errors.push(String(e)));page.setDefaultTimeout(15000);", "page.on('pageerror',e=>errors.push(String(e)));page.setDefaultTimeout(20000);const navigations=[];page.on('framenavigated',f=>{if(f===page.mainFrame()){navigations.push({t:Date.now(),url:f.url()});if(navigations.filter(n=>n.t>Date.now()-10000).length>6){errors.push('Redirect loop detected; browser closed to stop requests');page.close().catch(()=>{});}}});")
+          code=code.replace("const result={device,errors,checks:[]}","const result={device,errors,navigations,checks:[]}")
+          code=code.replace("if(errors.length)report.failures.push(device+':runtime errors '+JSON.stringify(errors));","if(errors.length)report.failures.push(device+':runtime errors '+JSON.stringify(errors));await new Promise(r=>setTimeout(r,8000));")
+          Path('sta-cert.mjs').write_text(code)
+          PY
+          node --check sta-cert.mjs
+      - name: Chromium mobile and desktop cold loads, filters, pagination and branch navigation
+        if: always()
+        run: node sta-cert.mjs
+      - name: Agent-browser independent visual check
+        if: always()
+        run: |
+          npx agent-browser install >/dev/null 2>&1
+          npx agent-browser open 'https://www.statesideqm.com/collections/sta-brite-insignia?preview_theme_id=158561894555'
+          npx agent-browser wait '.sq-refine-v3-sidebar'
+          npx agent-browser snapshot -s '#MainContent' > sta-cert/agent-browser-snapshot.txt
+          npx agent-browser screenshot sta-cert/agent-browser.png
+          npx agent-browser close
+      - name: Produce video filmstrips
+        if: always()
+        run: |
+          for d in desktop mobile; do
+            if test -f "sta-cert/$d.webm"; then ffmpeg -hide_banner -loglevel error -i "sta-cert/$d.webm" -t 6 -vf 'fps=4,scale=480:-1,tile=4x6' -frames:v 1 "sta-cert/$d-filmstrip.png" || true; fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sta-brite-final-verified
+          path: sta-cert
+          retention-days: 14
