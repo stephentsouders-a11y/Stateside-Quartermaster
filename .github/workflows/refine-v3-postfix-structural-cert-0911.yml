@@ -23,7 +23,7 @@ jobs:
           npx playwright install --with-deps chromium >/dev/null 2>&1
       - name: Verify structural failures after fix
         run: |
-          cat > /tmp/postfix.mjs <<'EOF'
+          cat > postfix.mjs <<'EOF'
           import { chromium } from 'playwright';
           const base='https://www.statesideqm.com', theme='158561894555';
           const routes=[
@@ -56,11 +56,11 @@ jobs:
           }
           await browser.close(); console.log(`POSTFIX_SUMMARY failures=${fails} checks=${routes.length*2}`); if(fails)process.exit(2);
           EOF
-          node /tmp/postfix.mjs
+          node postfix.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: refine-v3-postfix-structural-evidence
           path: '*.png'
           if-no-files-found: ignore
-# wired-rescue rerun 2026-09-11
+# post-Shopify-sync structural rerun 2026-09-11
