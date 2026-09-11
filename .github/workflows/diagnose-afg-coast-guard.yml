@@ -17,7 +17,7 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Trace exact Chromium exception source with 5xx retry
+      - name: Extract exact malformed AFG document script
         run: |
           cat > trace.mjs <<'EOF'
           import { chromium } from 'playwright';
@@ -25,24 +25,17 @@ jobs:
           const browser=await chromium.launch({headless:true});
           for(let attempt=1;attempt<=5;attempt++){
             const context=await browser.newContext({viewport:{width:1440,height:1000}});
-            const page=await context.newPage();
-            const cdp=await context.newCDPSession(page);
-            await cdp.send('Runtime.enable'); await cdp.send('Debugger.enable');
-            const scripts=new Map(); let exceptionCount=0;
-            cdp.on('Debugger.scriptParsed',e=>scripts.set(e.scriptId,{url:e.url,startLine:e.startLine,startColumn:e.startColumn,endLine:e.endLine,endColumn:e.endColumn}));
-            cdp.on('Runtime.exceptionThrown',async e=>{
-              exceptionCount++;
-              const d=e.exceptionDetails||{}, ex=d.exception||{}, frames=d.stackTrace?.callFrames||[];
-              console.log('CDP_EXCEPTION '+JSON.stringify({text:d.text,description:ex.description,value:ex.value,url:d.url,lineNumber:d.lineNumber,columnNumber:d.columnNumber,scriptId:d.scriptId,frames},null,2));
-              const sid=d.scriptId||frames[0]?.scriptId;
-              if(sid){try{const src=await cdp.send('Debugger.getScriptSource',{scriptId:sid});const meta=scripts.get(sid)||{};const ln=Number(d.lineNumber ?? frames[0]?.lineNumber ?? 0), lines=String(src.scriptSource||'').split(/\r?\n/);const from=Math.max(0,ln-6),to=Math.min(lines.length,ln+7);console.log('SCRIPT_META '+JSON.stringify({scriptId:sid,...meta,line:ln,column:d.columnNumber ?? frames[0]?.columnNumber ?? null}));console.log('SCRIPT_CONTEXT\n'+lines.slice(from,to).map((x,i)=>String(from+i+1).padStart(5)+': '+x).join('\n'));}catch(err){console.log('SOURCE_ERROR '+String(err))}}
-            });
-            page.on('pageerror',e=>console.log('PAGEERROR '+(e.stack||String(e))));
-            let r=null; try{r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000})}catch(e){console.log('NAV_ERROR '+String(e))}
-            const status=r?.status()||0; console.log(`ATTEMPT ${attempt} HTTP ${status}`);
-            if(status===200){await page.waitForTimeout(15000);console.log('FINAL '+JSON.stringify(await page.evaluate(()=>({ready:document.querySelector('#MainContent')?.dataset.sqRefineV3Ready||'',error:document.querySelector('#MainContent')?.dataset.sqRefineV3Error||'',path:location.pathname})))) ;console.log('EXCEPTION_COUNT '+exceptionCount);await context.close();await browser.close();process.exit(0)}
-            await context.close(); await new Promise(r=>setTimeout(r,attempt*3000));
+            const page=await context.newPage(); let detail=null;
+            const cdp=await context.newCDPSession(page); await cdp.send('Runtime.enable');
+            cdp.on('Runtime.exceptionThrown',e=>{const d=e.exceptionDetails||{};if((d.exception?.description||'').includes('SyntaxError'))detail={line:Number(d.lineNumber||0),column:Number(d.columnNumber||0),url:d.url||''};});
+            let r=null;try{r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000})}catch{}
+            const status=r?.status()||0;console.log(`ATTEMPT ${attempt} HTTP ${status}`);
+            if(status===200){await page.waitForTimeout(3000);const html=await page.content();const lines=html.split(/\n/);console.log('DETAIL '+JSON.stringify(detail));if(detail){for(let n=Math.max(0,detail.line-8);n<Math.min(lines.length,detail.line+9);n++)console.log(String(n+1).padStart(6)+': '+lines[n]);}
+              const scripts=await page.evaluate(()=>[...document.scripts].map((s,i)=>({i,src:s.src||'',text:s.textContent||'',outer:s.outerHTML||''})).filter(x=>x.text));
+              for(const s of scripts){if(/armed|forces|branch|manufacturer|refine|collection|products/i.test(s.text)){console.log(`INLINE_SCRIPT ${s.i} LEN ${s.text.length}`);console.log(s.text.slice(0,12000));}}
+              await context.close();await browser.close();process.exit(0)}
+            await context.close();await new Promise(r=>setTimeout(r,attempt*3000));
           }
-          await browser.close(); process.exit(2);
+          await browser.close();process.exit(2);
           EOF
           node trace.mjs
