@@ -1,0 +1,45 @@
+{% doc %}
+Normalizes Refine V3 taxonomy after the authoritative sidebar is rendered. It removes duplicate concepts from Shop by Type when a higher structural group already owns that concept. Body Armor also promotes accessory/component families from Type into a dedicated Shop by Subcategory disclosure. State Guard is deliberately excluded.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<script data-sq-refine-v3-taxonomy-normalizer>
+(function(){
+  var q=new URLSearchParams(location.search),root=q.get('sq_root')||'{{ collection.handle | escape }}';
+  if(root==='state-guard-series')return;
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
+  function key(v){return clean(v).toLowerCase().replace(/[\u2019']/g,'').replace(/&/g,' ').replace(/\band\b/g,' ').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim()}
+  function summary(d){return clean(d&&d.querySelector(':scope > summary')&&d.querySelector(':scope > summary').textContent)}
+  function choiceLabel(c){return clean(c&&c.querySelector('span')&&c.querySelector('span').textContent)}
+  function detailsBy(side,label){return [].slice.call(side.querySelectorAll('details.sq-refine-v3-group')).find(function(d){return key(summary(d))===key(label)})||null}
+  function removeEmpty(d){if(d&&!d.querySelector('.sq-refine-v3-choice'))d.remove()}
+  function apply(){
+    var side=document.querySelector('#MainContent .sq-refine-v3-sidebar');if(!side)return false;
+    var groups=[].slice.call(side.querySelectorAll('details.sq-refine-v3-group'));
+    if(!groups.length)return false;
+    var higher=new Set();
+    groups.forEach(function(d){var s=key(summary(d));if(s===key('Shop by Category')||s===key('Shop by Subcategory')||s===key('Shop by Branch'))[].slice.call(d.querySelectorAll('.sq-refine-v3-choice')).forEach(function(c){var k=key(choiceLabel(c));if(k)higher.add(k)})});
+    var type=detailsBy(side,'Shop by Type');
+    if(type){[].slice.call(type.querySelectorAll('.sq-refine-v3-choice')).forEach(function(c){var k=key(choiceLabel(c));if(k&&higher.has(k))c.remove()});removeEmpty(type)}
+    if(root==='body-armor-ballistic-protection'){
+      type=detailsBy(side,'Shop by Type');
+      if(type){
+        var promote=new Set([
+          'armor accessories','ballistic apparel','ballistic backpack inserts','ballistic bags','ballistic barriers','ballistic blankets curtains','ballistic face protection','body armor ventilation','cummerbunds adapters','helmet accessories','helmet covers','helmet face shields visors','helmet liners','plate carrier accessories','plate carrier kits','shield lights'
+        ].map(key));
+        var moving=[].slice.call(type.querySelectorAll('.sq-refine-v3-choice')).filter(function(c){return promote.has(key(choiceLabel(c)))});
+        if(moving.length){
+          var sub=detailsBy(side,'Shop by Subcategory');
+          if(!sub){sub=document.createElement('details');sub.className='sq-refine-v3-group';sub.dataset.active='false';sub.innerHTML='<summary>Shop by Subcategory</summary><div class="sq-refine-v3-choices"></div>';type.parentNode.insertBefore(sub,type)}
+          var target=sub.querySelector('.sq-refine-v3-choices');moving.forEach(function(c){target.appendChild(c)});
+          if(sub.querySelector('input:checked')){sub.dataset.active='true';sub.open=true}
+          removeEmpty(type)
+        }
+      }
+    }
+    side.dataset.sqRefineV3TaxonomyNormalized='true';return true
+  }
+  var tries=0,t=setInterval(function(){tries++;if(apply()||tries>120)clearInterval(t)},50);
+  new MutationObserver(function(){apply()}).observe(document.getElementById('MainContent')||document.documentElement,{subtree:true,childList:true});
+})();
+</script>
+{% endif %}
