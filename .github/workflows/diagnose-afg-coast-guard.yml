@@ -1,15 +1,16 @@
-name: Diagnose Armed Forces Gear page error
+name: Certify Armed Forces Gear Chromium
 on:
   push:
     branches: [refine-restart-v3]
     paths:
       - '.github/workflows/diagnose-afg-coast-guard.yml'
+      - 'snippets/sq-afg-global-sidebar-bridge.liquid'
 permissions:
   contents: read
 jobs:
-  diagnose:
+  certify-afg:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/setup-node@v4
         with: {node-version: '24'}
@@ -17,57 +18,64 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Capture malformed AFG script and source context
+      - name: Chromium desktop and mobile certification
         run: |
-          cat > trace.mjs <<'EOF'
-          import fs from 'node:fs';
+          cat > certify.mjs <<'EOF'
           import { chromium } from 'playwright';
+          import fs from 'node:fs';
           const url='https://www.statesideqm.com/collections/armed-forces-gear?preview_theme_id=158561894555';
           const browser=await chromium.launch({headless:true});
-          let completed=false;
-          for(let attempt=1;attempt<=6&&!completed;attempt++){
-            const context=await browser.newContext({viewport:{width:1440,height:1000}});
-            const page=await context.newPage();
-            const cdp=await context.newCDPSession(page); await cdp.send('Runtime.enable'); await cdp.send('Debugger.enable');
-            let detail=null,scriptSource='';
-            cdp.on('Runtime.exceptionThrown',async e=>{
-              const d=e.exceptionDetails||{},desc=d.exception?.description||'';
-              if(!desc.includes('SyntaxError'))return;
-              detail={description:desc,line:Number(d.lineNumber||0),column:Number(d.columnNumber||0),url:d.url||'',scriptId:d.scriptId||''};
-              try{if(d.scriptId){const x=await cdp.send('Debugger.getScriptSource',{scriptId:d.scriptId});scriptSource=x.scriptSource||'';}}catch(_){}
-            });
-            let r=null;try{r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000})}catch(e){console.log('GOTO_ERROR '+String(e))}
-            const status=r?.status()||0; console.log(`ATTEMPT ${attempt} HTTP ${status}`);
-            if(status===200){
-              await page.waitForTimeout(3000);
-              const raw=await r.text(); fs.writeFileSync('raw.html',raw);
-              fs.writeFileSync('detail.json',JSON.stringify(detail,null,2));
-              fs.writeFileSync('offending-script.js',scriptSource||'');
-              const lines=raw.split(/\r?\n/),target=Math.max(0,(detail?.line||30580)-1),a=Math.max(0,target-20),b=Math.min(lines.length,target+21);
-              fs.writeFileSync('raw-context.txt',lines.slice(a,b).map((x,i)=>String(a+i+1).padStart(6)+': '+x).join('\n'));
-              const scripts=[...raw.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].map((m,i)=>({i,attrs:m[1],text:m[2]})).filter(x=>/U\.S\. Air Force|U\.S\. Coast Guard|U\.S\. Space Force|U\.S\. Marine Corps|canonical|branch/i.test(x.text));
-              fs.writeFileSync('matching-scripts.txt',scripts.map(s=>`SCRIPT ${s.i} ATTRS ${s.attrs}\n${s.text}\n\n`).join(''));
-              console.log('DETAIL '+JSON.stringify(detail));
-              console.log(fs.readFileSync('raw-context.txt','utf8'));
-              console.log('OFFENDING_SCRIPT_START\n'+(scriptSource||'').slice(0,12000)+'\nOFFENDING_SCRIPT_END');
-              completed=true;
+          const report={url,checks:[],failures:[]};
+          for(const spec of [{name:'desktop',viewport:{width:1440,height:1000}},{name:'mobile',viewport:{width:390,height:844}}]){
+            let passed=false;
+            for(let attempt=1;attempt<=5&&!passed;attempt++){
+              const context=await browser.newContext({viewport:spec.viewport,recordVideo:{dir:'videos/'+spec.name,size:spec.viewport}});
+              const page=await context.newPage(); const pageErrors=[]; page.on('pageerror',e=>pageErrors.push(String(e)));
+              let r=null; try{r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000})}catch(e){}
+              const status=r?.status()||0;
+              if(status!==200){await context.close(); await new Promise(r=>setTimeout(r,attempt*2500)); continue}
+              await page.waitForTimeout(7000);
+              const data=await page.evaluate(()=>{
+                const main=document.querySelector('[data-sq-refine-v3-root],.sq-refine-v3');
+                const sidebar=document.querySelector('.sq-refine-v3-sidebar,.sq-global-refine-sidebar');
+                const groups=[...document.querySelectorAll('.sq-refine-v3-sidebar details summary,.sq-global-refine-sidebar details summary')].map(x=>x.textContent.trim());
+                const cards=[...document.querySelectorAll('.sq-refine-v3-product-card,.sq-refine-v3-main .card-wrapper,.sq-refine-v3-main li.grid__item')].filter(x=>getComputedStyle(x).display!=='none');
+                const inputs=[...document.querySelectorAll('.sq-refine-v3-sidebar input[type=checkbox],.sq-global-refine-sidebar input[type=checkbox]')].filter(x=>x.offsetParent!==null);
+                const old=[...document.querySelectorAll('.sq-maker-browser,.facets-toggle__wrapper,theme-drawer#filters-drawer,.sq-root-categories,.sq-category-grid,.sq-navigation-grid')].filter(x=>x.offsetParent!==null).length;
+                const overflow=document.documentElement.scrollWidth>document.documentElement.clientWidth+2;
+                let rowCount=0;if(cards.length){const y=cards[0].getBoundingClientRect().top;rowCount=cards.filter(c=>Math.abs(c.getBoundingClientRect().top-y)<8).length}
+                return {ready:!!main,sidebar:!!sidebar,groups,cards:cards.length,inputs:inputs.length,old,overflow,rowCount,title:sidebar?.querySelector('h2')?.textContent?.trim()||''};
+              });
+              await page.screenshot({path:`${spec.name}.png`,fullPage:true});
+              const expectedRow=spec.name==='desktop'?3:2;
+              const failures=[];
+              if(pageErrors.length)failures.push('pageErrors='+JSON.stringify(pageErrors));
+              if(!data.ready)failures.push('V3 not ready');
+              if(!data.sidebar)failures.push('sidebar missing');
+              if(data.cards<1)failures.push('no products');
+              if(data.rowCount!==expectedRow)failures.push(`rowCount ${data.rowCount} expected ${expectedRow}`);
+              if(data.old)failures.push(`legacy/native visible ${data.old}`);
+              if(data.overflow)failures.push('horizontal overflow');
+              if(!data.groups.some(x=>/Branch/i.test(x)))failures.push('Branch group missing');
+              if(data.inputs<1)failures.push('no checkboxes');
+              report.checks.push({mode:spec.name,status,data,pageErrors,failures});
+              if(failures.length)report.failures.push(...failures.map(x=>spec.name+': '+x));
+              passed=true; await context.close();
             }
-            await context.close();
-            if(!completed)await new Promise(r=>setTimeout(r,attempt*3000));
+            if(!passed)report.failures.push(spec.name+': no HTTP 200 after retries');
           }
-          await browser.close();
-          if(!completed)process.exit(2);
+          await browser.close(); fs.writeFileSync('afg-cert.json',JSON.stringify(report,null,2)); console.log(JSON.stringify(report,null,2));
+          if(report.failures.length)process.exit(1);
           EOF
-          node trace.mjs
-      - name: Upload AFG diagnostic source
+          node certify.mjs
+      - name: Upload AFG certification artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: afg-malformed-script-source
+          name: afg-chromium-cert
           path: |
-            raw.html
-            detail.json
-            offending-script.js
-            raw-context.txt
-            matching-scripts.txt
+            afg-cert.json
+            desktop.png
+            mobile.png
+            videos
           if-no-files-found: warn
