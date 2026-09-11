@@ -62,11 +62,14 @@
           group.querySelectorAll('input[data-kind="structural"][data-target]').forEach(function(input){
             try{
               var selected=new URL(input.dataset.target,location.origin).pathname.replace(/\/$/,'')===activePath;
-              input.checked=selected;
+              if(input.checked!==selected)input.checked=selected;
               if(selected)active=true;
             }catch(_){}
           });
-          if(active){group.dataset.active='true';group.open=true;}
+          if(active){
+            if(group.dataset.active!=='true')group.dataset.active='true';
+            if(!group.open)group.open=true;
+          }
         });
       }
       markActiveCategory();
