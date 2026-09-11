@@ -1,0 +1,82 @@
+name: Refine V3 41 alphabetical exhaustive Chromium certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/scripts/refine-v3-other40-exhaustive-cert.mjs'
+      - '.github/workflows/refine-v3-41-alphabetical-exhaustive-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+# Definitive 41-button alphabetical certification. State Guard is intentionally excluded/frozen.
+jobs:
+  certify:
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SHARD: ${{ matrix.shard }}
+      SHARDS: 41
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Build exact 41-button alphabetical route matrix
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const f='.github/scripts/refine-v3-other40-exhaustive-cert.mjs';
+          let s=fs.readFileSync(f,'utf8');
+          const needle="const routes=[\n";
+          if(!s.includes(needle)) throw new Error('route array start not found');
+          s=s.replace(needle, needle+"['Accessories, Gifts & Collectibles','/collections/accessories-gifts-collectibles','v3'],");
+          const guard="if(routes.some(r=>r[1].includes('state-guard-series')))";
+          if(!s.includes(guard)) throw new Error('State Guard exclusion guard missing');
+          s=s.replace(guard,"routes.sort((a,b)=>a[0].localeCompare(b[0], 'en', {sensitivity:'base'}));\nif(routes.length!==41) throw new Error('Expected exactly 41 routes, got '+routes.length);\nif(routes.some(r=>r[1].includes('state-guard-series'))) throw new Error('State Guard must never enter this certification');\n// Existing guard retained below as a second fail-closed check.\n"+guard);
+          fs.writeFileSync(f,s);
+          NODE
+      - name: Show alphabetical route assigned to this shard
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const s=fs.readFileSync('.github/scripts/refine-v3-other40-exhaustive-cert.mjs','utf8');
+          const m=s.match(/const routes=\[(.*?)\];\nroutes\.sort/s);
+          if(!m) throw new Error('unable to inspect route list');
+          const arr=Function('return ['+m[1]+']')();
+          arr.sort((a,b)=>a[0].localeCompare(b[0], 'en', {sensitivity:'base'}));
+          const i=Number(process.env.SHARD);
+          console.log(String(i+1).padStart(2,'0')+'/41 '+arr[i][0]+' '+arr[i][1]);
+          NODE
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Exhaustive desktop/mobile checkbox, reset, page-size, responsive and page-error certification
+        run: node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: Hard gate page errors and incomplete checkbox coverage
+        if: always()
+        run: |
+          REPORT="other40-exhaustive/shard-${SHARD}/report.json"
+          test -f "$REPORT" || { echo "Missing report"; exit 1; }
+          PAGE_ERRORS=$(jq '[.routes[] | select(.type=="v3") | .desktop.pageErrors[], .mobile.pageErrors[]] | length' "$REPORT")
+          FAILED_INTERACTIONS=$(jq '[.routes[] | select(.type=="v3") | .desktop.interactions.items[], .mobile.interactions.items[] | select(.pass!=true)] | length' "$REPORT")
+          COUNT=$(jq '.interactionCount' "$REPORT")
+          PASSED=$(jq '.interactionPassed' "$REPORT")
+          ROUTE=$(jq -r '.routes[0].name // "unknown"' "$REPORT")
+          echo "route=$ROUTE pageErrors=$PAGE_ERRORS checkboxInteractions=$PASSED/$COUNT failedInteractions=$FAILED_INTERACTIONS"
+          test "$PAGE_ERRORS" -eq 0
+          test "$FAILED_INTERACTIONS" -eq 0
+          test "$COUNT" -eq "$PASSED"
+      - name: Upload alphabetical exhaustive certification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alphabetical41-route-${{ matrix.shard }}
+          path: other40-exhaustive/shard-${{ matrix.shard }}
+          if-no-files-found: warn
+          retention-days: 14
