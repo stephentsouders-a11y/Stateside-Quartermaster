@@ -1,0 +1,17 @@
+{% doc %}
+Rebuilds the Accessories, Gifts & Collectibles Availability group as a synthetic V3 filter so it uses the same proven URL navigation model as Type and Manufacturer instead of the legacy native Availability path. State Guard is excluded.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<script data-sq-refine-v3-button01-availability-v3>
+(function(){
+  var current={{ collection.handle | json }},initial=new URLSearchParams(location.search),root=initial.get('sq_root')||current;
+  if(root!=='accessories-gifts-collectibles')return;
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
+  function key(v){return clean(v).toLowerCase().replace(/[\u2019']/g,'').replace(/&/g,' ').replace(/\band\b/g,' ').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim()}
+  function href(value,checked){var u=new URL(location.href),name='filter.v.availability',vals=u.searchParams.getAll(name).filter(function(v){return v!==value});if(checked)vals.push(value);u.searchParams.delete(name);Array.from(new Set(vals)).forEach(function(v){u.searchParams.append(name,v)});u.searchParams.delete('page');u.searchParams.delete('sq_view_page');u.searchParams.delete('preview_theme_id');return u.pathname+(u.searchParams.toString()?'?'+u.searchParams.toString():'')}
+  function choice(label,value,selected){var row=document.createElement('label');row.className='sq-refine-v3-choice';row.dataset.sqButton01AvailabilityV3='true';var input=document.createElement('input');input.type='checkbox';input.dataset.sqPolishParam='filter.v.availability';input.dataset.sqPolishValue=value;input.dataset.filterName='filter.v.availability';input.dataset.filterValue=value;input.checked=selected;var span=document.createElement('span');span.textContent=label;input.addEventListener('change',function(e){e.stopImmediatePropagation();var next=href(value,input.checked);window.__sqButton01LastOwnedClick={owner:'availability-v3-change',name:'filter.v.availability',value:value,checked:input.checked,href:next};location.assign(next)},true);row.appendChild(input);row.appendChild(span);return row}
+  function apply(){var main=document.getElementById('MainContent');if(!main||main.dataset.sqRefineV3Ready!=='true')return false;var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;var group=[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')).find(function(d){return key(d.querySelector(':scope > summary')&&d.querySelector(':scope > summary').textContent)==='availability'});if(!group)return false;if(group.dataset.sqButton01AvailabilityV3==='true')return true;var host=group.querySelector(':scope > .sq-refine-v3-choices');if(!host){host=document.createElement('div');host.className='sq-refine-v3-choices';group.appendChild(host)}var q=new URLSearchParams(location.search),selected=q.getAll('filter.v.availability');host.replaceChildren(choice('In stock','1',selected.indexOf('1')>-1),choice('Out of stock','0',selected.indexOf('0')>-1));group.dataset.sqButton01AvailabilityV3='true';group.dataset.active=host.querySelector('input:checked')?'true':'false';if(host.querySelector('input:checked'))group.open=true;return true}
+  var tries=0,t=setInterval(function(){tries++;try{if(apply()||tries>180)clearInterval(t)}catch(e){clearInterval(t)}},100);[600,1200,2400].forEach(function(ms){setTimeout(apply,ms)});
+})();
+</script>
+{% endif %}
