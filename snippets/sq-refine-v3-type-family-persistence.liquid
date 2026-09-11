@@ -2,7 +2,7 @@
 Canonicalizes legacy broad V3 Shop by Type family selections to Shopify's authoritative product_type filter so the V3 server-rendered product feed actually changes. For Armed Forces Gear, preserve the complete Type choice set across filtered navigations even when Shopify suppresses the native product_type facet because only one type is currently selected. State Guard is excluded.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
-<script data-sq-refine-v3-type-family-persistence data-revision="afg-type-persist-20260911-v2">
+<script data-sq-refine-v3-type-family-persistence data-revision="afg-type-persist-20260911-v3">
 (function(){
   var main=document.getElementById('MainContent');if(!main)return;
   var params=new URLSearchParams(location.search),core=document.querySelector('script[data-sq-refine-v3]'),current=core&&core.dataset.currentHandle||'';
@@ -18,7 +18,7 @@ Canonicalizes legacy broad V3 Shop by Type family selections to Shopify's author
     var type=typeGroup(side);if(!type)return false;
     var summary=type.querySelector(':scope > summary');if(summary)summary.textContent='Shop by Type';
     var inputs=[].slice.call(type.querySelectorAll('input[type=checkbox]'));if(!inputs.length)return false;
-    try{sessionStorage.setItem(CACHE,type.outerHTML)}catch(_){}
+    try{var clone=type.cloneNode(true);delete clone.dataset.sqTypePersistenceBound;sessionStorage.setItem(CACHE,clone.outerHTML)}catch(_){}
     return true;
   }
   function setParam(u,param,value,checked){
@@ -26,7 +26,8 @@ Canonicalizes legacy broad V3 Shop by Type family selections to Shopify's author
     u.searchParams.delete(param);vals.forEach(function(v){u.searchParams.append(param,v)});if(checked)u.searchParams.append(param,value);
   }
   function bindRestored(type){
-    if(!type||type.dataset.sqTypePersistenceBound==='true')return;
+    if(!type)return;
+    if(type.dataset.sqTypePersistenceBound==='true')return;
     type.dataset.sqTypePersistenceBound='true';
     type.querySelectorAll('input[type=checkbox]').forEach(function(i){
       i.addEventListener('change',function(){
@@ -43,7 +44,7 @@ Canonicalizes legacy broad V3 Shop by Type family selections to Shopify's author
     var type=typeGroup(side);
     if(!type){
       var html='';try{html=sessionStorage.getItem(CACHE)||''}catch(_){}
-      if(html){var box=document.createElement('div');box.innerHTML=html;type=box.querySelector('details.sq-refine-v3-group')}
+      if(html){var box=document.createElement('div');box.innerHTML=html;type=box.querySelector('details.sq-refine-v3-group');if(type)delete type.dataset.sqTypePersistenceBound}
       if(!type){
         var selected=paramsFromLocation().getAll('filter.p.product_type');if(!selected.length)return false;
         type=document.createElement('details');type.className='sq-refine-v3-group';
@@ -54,8 +55,8 @@ Canonicalizes legacy broad V3 Shop by Type family selections to Shopify's author
       if(avail)avail.after(type);else side.appendChild(type);
     }
     var summary=type.querySelector(':scope > summary');if(summary)summary.textContent='Shop by Type';
-    var selected=paramsFromLocation().getAll('filter.p.product_type');var found=false;
-    type.querySelectorAll('input[type=checkbox]').forEach(function(i){var value=choiceValue(i);var checked=selected.some(function(v){return clean(v)===clean(value)});i.checked=checked;if(checked)found=true});
+    var selected=paramsFromLocation().getAll('filter.p.product_type');
+    type.querySelectorAll('input[type=checkbox]').forEach(function(i){var value=choiceValue(i);i.checked=selected.some(function(v){return clean(v)===clean(value)})});
     if(selected.length){type.open=true;type.dataset.active='true'}else delete type.dataset.active;
     bindRestored(type);main.dataset.sqAfgTypePersistence='true';
     return !!type;
@@ -73,14 +74,12 @@ Canonicalizes legacy broad V3 Shop by Type family selections to Shopify's author
   }
   function sync(){
     if(main.dataset.sqRefineV3Ready!=='true')return false;
-    remember();
-    if(isAfg)restoreAfgType();
+    remember();if(isAfg)restoreAfgType();
     var selected=paramsFromLocation().getAll('filter.p.product_type');if(!selected.length)return true;
     var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;
     var type=typeGroup(side);if(!type)return false;
-    var found=false;
-    [].slice.call(type.querySelectorAll('input[type=checkbox]')).forEach(function(i){var value=choiceValue(i);if(selected.some(function(v){return clean(v)===clean(value)})){i.checked=true;type.open=true;type.dataset.active='true';found=true}});
-    return found||!!type;
+    [].slice.call(type.querySelectorAll('input[type=checkbox]')).forEach(function(i){var value=choiceValue(i);if(selected.some(function(v){return clean(v)===clean(value)})){i.checked=true;type.open=true;type.dataset.active='true'}});
+    return !!type;
   }
   var tries=0,t=setInterval(function(){tries++;if(main.dataset.sqRefineV3Ready==='true'){remember();restoreAfgType();if(tries>8)clearInterval(t)}if(tries>160)clearInterval(t)},100);
   setTimeout(function(){remember();if(canonicalize())return;sync()},0);
