@@ -1,0 +1,104 @@
+name: Thin Line zero-flash Chromium certification
+on:
+  push:
+    paths:
+      - '.github/workflows/thin-line-zero-flash-cert-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: thin-line-zero-flash-cert
+  cancel-in-progress: false
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OPT_OUT_INSTRUMENTATION: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium and Shopify validation
+        run: |
+          mkdir -p out/screens out/videos out/source validation-tools
+          npm install --no-save playwright@1.55.0 agent-browser @shopify/theme-check-common @shopify/theme-check-node @shopify/theme-check-docs-updater
+          npx playwright install --with-deps chromium
+          curl --fail --retry 3 -L https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/search_docs.mjs -o validation-tools/search_docs.mjs
+          curl --fail --retry 3 -L https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/validate.mjs -o validation-tools/validate.mjs
+      - name: Search Shopify Liquid documentation
+        run: node validation-tools/search_docs.mjs 'collection.handle inline critical CSS first paint' --model 'GPT-6 Astra Pro' --client-name ChatGPT --client-version 1 > out/shopify-documentation.txt
+      - name: Validate exact committed section
+        id: liquid
+        continue-on-error: true
+        run: |
+          cp sections/sq-thin-stabrite-subcategories.liquid out/source/
+          node validation-tools/validate.mjs --filename sq-thin-stabrite-subcategories.liquid --filetype sections --file sections/sq-thin-stabrite-subcategories.liquid --model 'GPT-6 Astra Pro' --client-name ChatGPT --client-version 1 --artifact-id thin-line-section-first-paint --revision 1 > out/liquid-validation.txt
+      - name: Agent browser inspect deployed draft
+        run: |
+          npx agent-browser --session thin-line-cert open 'https://www.statesideqm.com/collections/thin-line?preview_theme_id=158561894555'
+          npx agent-browser --session thin-line-cert snapshot -i > out/agent-browser-snapshot.txt
+          npx agent-browser --session thin-line-cert screenshot out/screens/agent-browser.png
+          npx agent-browser --session thin-line-cert close
+      - name: Chromium cold-load and interaction certification
+        id: browser
+        run: |
+          cat > thin-line-cert.mjs <<'JS'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          const preview='158561894555',base='https://www.statesideqm.com/collections/thin-line';
+          const expected=['thin-line-shop-general-multi-line','thin-line-shop-thin-blue-line','thin-line-shop-thin-camo-line','thin-line-shop-thin-gold-line','thin-line-shop-thin-gray-line','thin-line-shop-thin-green-line','thin-line-shop-thin-orange-line','thin-line-shop-thin-pink-line','thin-line-shop-thin-purple-teal-line','thin-line-shop-thin-red-line','thin-line-shop-thin-white-line','thin-line-shop-thin-yellow-line'];
+          const browser=await chromium.launch({headless:true});const results=[];
+          function check(row,name,ok,detail){row.checks.push({name,ok:!!ok,detail});}
+          async function state(page){return page.evaluate(()=>{
+            const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return !!(r.width&&r.height&&s.visibility!=='hidden'&&s.display!=='none'&&s.opacity!=='0'&&e.getClientRects().length)};
+            const main=document.querySelector('#MainContent'),grids=[...document.querySelectorAll('#MainContent .product-grid')].filter(vis),cards=[...document.querySelectorAll('.sq-refine-v3-results .product-grid__item')].filter(vis);
+            const keys=cards.map(e=>e.dataset.productId||e.querySelector('product-card')?.dataset.productId||e.querySelector('a[href*="/products/"]')?.href?.split('?')[0]||e.textContent.trim());
+            const groups=[...document.querySelectorAll('.sq-refine-v3-sidebar details.sq-refine-v3-group')].map(e=>({name:e.querySelector('summary')?.textContent.trim(),choices:[...e.querySelectorAll('label.sq-refine-v3-choice')].map(l=>({text:l.textContent.trim(),...l.querySelector('input')?.dataset,checked:!!l.querySelector('input')?.checked}))}));
+            return {url:location.href,theme:window.Shopify?.theme,ready:main?.dataset.sqRefineV3Ready,error:main?.dataset.sqRefineV3Error,marker:!!document.querySelector('[data-sq-thin-line-first-paint="20260911"]'),legacyVisible:[...document.querySelectorAll('#MainContent .sq-ts-match-card')].filter(vis).length,grids:grids.length,cards:cards.length,duplicates:keys.length-new Set(keys).size,columns:grids.map(e=>getComputedStyle(e).gridTemplateColumns),sidebar:[...document.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis).length,overflow:document.documentElement.scrollWidth>innerWidth+2,groups,trace:window.__thinPaint||[],samples:window.__thinSamples||0,body:document.body.className};
+          });}
+          async function instrument(page){await page.addInitScript(()=>{
+            window.__thinPaint=[];window.__thinSamples=0;let previous='';
+            const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return !!(r.width&&r.height&&s.visibility!=='hidden'&&s.display!=='none'&&s.opacity!=='0'&&e.getClientRects().length)};
+            function sample(){window.__thinSamples++;const main=document.getElementById('MainContent');
+              if(main){const legacy=[...main.querySelectorAll('.sq-ts-match-card')].filter(visible).length;const grids=[...main.querySelectorAll('.product-grid')].filter(visible).length;const sidebar=[...main.querySelectorAll('.sq-refine-v3-sidebar')].filter(visible).length;const ready=main.dataset.sqRefineV3Ready||'';const key=[legacy,grids,sidebar,ready].join('|');if(key!==previous){window.__thinPaint.push({t:Math.round(performance.now()),legacy,grids,sidebar,ready});previous=key;}}
+              if(performance.now()<25000)requestAnimationFrame(sample);
+            }requestAnimationFrame(sample);
+          });}
+          async function ready(page){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:90000});await page.waitForTimeout(2200);}
+          const cases=[['desktop-cold',1440,1000,false],['mobile-cold',390,844,false],['desktop-slow',1440,1000,true],['mobile-slow',390,844,true]];
+          for(const [name,width,height,slow] of cases){
+            const row={name,checks:[],errors:[]};const context=await browser.newContext({viewport:{width,height},recordVideo:{dir:'out/videos',size:{width,height}}});const page=await context.newPage();page.on('pageerror',e=>row.errors.push(String(e)));await instrument(page);
+            const cdp=await context.newCDPSession(page);await cdp.send('Network.enable');await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
+            if(slow){await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:120,downloadThroughput:1500000,uploadThroughput:750000});}
+            try{
+              const response=await page.goto(base+'?preview_theme_id='+preview,{waitUntil:'domcontentloaded',timeout:90000});check(row,'HTTP 200',response.status()===200,response.status());
+              const html=await response.text();fs.writeFileSync('out/'+name+'-server.html',html);await page.screenshot({path:'out/screens/'+name+'-initial.png'});await ready(page);await page.waitForTimeout(3500);
+              row.final=await state(page);const s=row.final;check(row,'Correct draft theme',String(s.theme?.id)===preview,s.theme);check(row,'Deployed first-paint fix',s.marker);check(row,'Zero legacy-button frames',s.trace.length>0&&s.trace.every(f=>f.legacy===0),s.trace);check(row,'One sidebar and product grid',s.sidebar===1&&s.grids===1,{sidebar:s.sidebar,grids:s.grids});check(row,'50 unique product cards',s.cards===50&&s.duplicates===0,{cards:s.cards,duplicates:s.duplicates});check(row,'Responsive columns',s.columns.length===1&&s.columns[0].split(' ').length===(width<900?2:3),s.columns);check(row,'No horizontal overflow',!s.overflow);check(row,'No runtime exceptions',row.errors.length===0,row.errors);
+              const categories=s.groups.find(g=>g.name==='Shop by Category');const targets=(categories?.choices||[]).map(x=>new URL(x.target,base).pathname.split('/').pop());check(row,'All original Thin Line categories only',targets.length===expected.length&&expected.every(h=>targets.includes(h)),targets);
+              await page.screenshot({path:'out/screens/'+name+'-final.png',fullPage:true});fs.writeFileSync('out/'+name+'-dom.html',await page.content());
+              if(name==='desktop-cold'){
+                row.interactions=[];
+                for(const count of [100,250,50]){await page.locator('.sq-refine-v3-page-size input[value="'+count+'"]').check();await page.waitForLoadState('domcontentloaded');await ready(page);const p=await state(page);row.interactions.push({action:'page-size-'+count,...p});check(row,'Page size '+count,p.cards===count&&p.duplicates===0&&p.grids===1,{cards:p.cards,duplicates:p.duplicates});}
+                const cat=page.locator('.sq-refine-v3-group').filter({has:page.locator('summary',{hasText:/^Shop by Category$/})}).first();if(!(await cat.getAttribute('open')))await cat.locator('summary').click();
+                const blue=page.locator('.sq-refine-v3-sidebar input[data-target*="thin-line-shop-thin-blue-line"]').first();await blue.check();await page.waitForLoadState('domcontentloaded');await ready(page);const b=await state(page);row.interactions.push({action:'Thin Blue Line category',...b});check(row,'Thin Blue Line checkbox navigates to matching products',new URL(b.url).pathname==='/collections/thin-line-shop-thin-blue-line'&&new URL(b.url).searchParams.get('sq_root')==='thin-line'&&b.cards>0&&b.grids===1&&b.duplicates===0,{url:b.url,cards:b.cards,grids:b.grids});await page.screenshot({path:'out/screens/thin-blue-line-filter.png',fullPage:true});
+              }
+            }catch(e){row.exception=String(e);check(row,'Scenario completes',false,String(e));await page.screenshot({path:'out/screens/'+name+'-failure.png',fullPage:true}).catch(()=>{});row.last=await state(page).catch(()=>null);}
+            row.pass=row.checks.every(c=>c.ok);results.push(row);const video=page.video();await page.close();await context.close();await video.saveAs('out/videos/'+name+'.webm');console.log(name,row.pass,JSON.stringify(row.checks));
+          }
+          for(const nojs of [false,true]){const name=nojs?'draft-no-js':'public-live';const row={name,checks:[],errors:[]};const context=await browser.newContext({viewport:{width:1440,height:1000},javaScriptEnabled:!nojs});const page=await context.newPage();try{const r=await page.goto(base+(nojs?'?preview_theme_id='+preview:''),{waitUntil:'domcontentloaded',timeout:90000});await page.waitForTimeout(3000);row.status=r.status();row.final=await state(page);await page.screenshot({path:'out/screens/'+name+'.png',fullPage:true});if(nojs)check(row,'No-JavaScript category fallback available',row.final.legacyVisible===12,row.final.legacyVisible);}catch(e){row.exception=String(e)}results.push(row);await context.close();}
+          await browser.close();const report={checkedAt:new Date().toISOString(),sourceCommit:process.env.GITHUB_SHA,sectionMd5:crypto.createHash('md5').update(fs.readFileSync('sections/sq-thin-stabrite-subcategories.liquid')).digest('hex'),previewTheme:preview,browser:'Chromium',pass:results.filter(r=>r.name!=='public-live').every(r=>!r.exception&&r.checks.every(c=>c.ok)),results};fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify({pass:report.pass,results:results.map(r=>({name:r.name,pass:r.pass,exception:r.exception,checks:r.checks}))},null,2));if(!report.pass)process.exitCode=1;
+          JS
+          node thin-line-cert.mjs
+      - name: Publish evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thin-line-zero-flash-cert-0911
+          path: out
+          retention-days: 14
+      - name: Validation gate
+        if: always()
+        run: test '${{ steps.liquid.outcome }}' = success && test '${{ steps.browser.outcome }}' = success
