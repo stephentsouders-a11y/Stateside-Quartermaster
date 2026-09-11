@@ -1,9 +1,9 @@
 {% assign sq_v3_isolation_roots = 'accessories-gifts-collectibles,airsoft-milsim,apparel,armed-forces-gear,art,body-armor-ballistic-protection,literature,child-safety-shop,dive-scuba,firearm-accessories,first-aid-medical-ifak,flags-patriotic-decor,flashlights-lighting,footwear-gloves-eyewear,k9-dog-gear,knives-axes-cutlery,morale-patches-tactical-id,outdoor-preparedness-gear,patriotic-american-heritage,safety-rescue-climbing,sta-brite-insignia,tactical-gear,thin-line,uniforms,watches,zippos-lighters-torches,stateside-quartermaster-logo-merch,army-national-guard-series,air-national-guard-series,products-built-for-the-line-u-s-army,products-built-for-the-line-u-s-navy,products-built-for-the-line-u-s-air-force,products-built-for-the-line-u-s-marine-corps,products-built-for-the-line-u-s-coast-guard,products-built-for-the-line-u-s-space-force,rotc-series,jrotc-series,military-schools-academies,law-enforcement-corrections,firefighting-ems-search-rescue' | split: ',' %}
 {% if request.page_type == 'collection' and sq_v3_isolation_roots contains collection.handle %}
 <style data-sq-refine-v3-first-paint-isolation>
-/* V3 owns these roots. Hide the obsolete server-rendered taxonomy/button trees
-   before MainContent is parsed so customers never see them flash before V3 is ready.
-   Product grids are deliberately not targeted. State Guard is excluded by Liquid. */
+/* V3 owns these roots. Hide obsolete server-rendered navigation/filter surfaces
+   before MainContent is parsed so customers never see legacy UI flash first.
+   Product grids remain untouched. State Guard is excluded by Liquid. */
 #MainContent [class*="button-tree"],
 #MainContent [class*="root-categories"],
 #MainContent [class*="third-level"],
@@ -15,7 +15,12 @@
 #MainContent .sq-subcategory-section,
 #MainContent .sq-subcategory-card,
 #MainContent .sqbfl,
-#MainContent [data-sq-refine-v3-hidden-nav="true"]{
+#MainContent [data-sq-refine-v3-hidden-nav="true"],
+#MainContent .sq-maker-browser,
+#MainContent .sq-global-refine-sidebar,
+#MainContent .facets-block-wrapper--horizontal .facets__filters-wrapper,
+#MainContent .facets-toggle__wrapper,
+#MainContent theme-drawer#filters-drawer{
   display:none!important;
   visibility:hidden!important;
   pointer-events:none!important;
@@ -23,9 +28,6 @@
 </style>
 {% if collection.handle == 'accessories-gifts-collectibles' %}
 <style data-sq-refine-v3-accessories-prepaint-isolation>
-/* Accessories has a legacy standalone manufacturer browser that is rendered by
-   the collection template before V3 builds the Refine Products sidebar. Keep it
-   out of first paint; manufacturer choices remain available inside V3. */
 #MainContent .sq-maker-browser{
   display:none!important;
   visibility:hidden!important;
@@ -33,9 +35,6 @@
 }
 </style>
 <script data-sq-refine-v3-accessories-prepaint-guard>
-/* A late taxonomy helper can transiently insert an obsolete Shop by Branch group
-   into Accessories. Remove that direct V3 sidebar child in a MutationObserver
-   microtask, before the browser paints the mutation. */
 (function(){
   if(window.__sqAccessoriesPrepaintGuard)return;
   window.__sqAccessoriesPrepaintGuard=true;
@@ -84,9 +83,6 @@ if(location.pathname==='/collections/thin-line'){
     },0);
   },{once:true});
 }
-/* V3 owns these collection roots. Block the older PBTL unified-tree runtime and
-   both legacy recovery loops before they can replace MainContent. State Guard is
-   not in this root list and is therefore unaffected. */
 (function(){
   function lock(name,value){
     try{Object.defineProperty(window,name,{configurable:false,enumerable:true,get:function(){return value},set:function(){}})}
@@ -152,11 +148,6 @@ if(location.pathname==='/collections/thin-line'){
     return nativeFetch(input,init);
   };
 })();
-/* Preserve the native product area's exact DOM position before V3 moves the
-   collection component into its combined Refine + Results layout. The V3 base
-   runtime appends its layout to MainContent; this marker relocates that layout
-   back to the product area's original slot so the sidebar never starts halfway
-   down a collection page. */
 (function(){
   if(window.__sqRefineV3OriginPlacementFix)return;
   window.__sqRefineV3OriginPlacementFix=true;
@@ -201,9 +192,6 @@ if(location.pathname==='/collections/thin-line'){
 </script>
 {% if collection.handle == 'law-enforcement-corrections' or collection.handle == 'firefighting-ems-search-rescue' %}
 <style data-sq-refine-v3-public-safety-product-visibility>
-/* The legacy public-safety root template hides every collection-component while
-   .sq-ps-root exists. V3 imports its product surface as a collection-component,
-   so restore visibility only inside V3 results on these two roots. */
 html:has(.sq-ps-root) body #MainContent.sq-refine-v3-active .sq-refine-v3-results collection-component{
   display:block!important;
   visibility:visible!important;
