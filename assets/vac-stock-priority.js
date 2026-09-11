@@ -1,0 +1,1 @@
+/* Stateside Quartermaster audit theme: legacy in-stock-only forcing disabled. Collection pages now preserve the full listed catalog, including sold-out products. Native customer filtering remains available without a forced default. */
