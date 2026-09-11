@@ -1,5 +1,5 @@
 name: MSA final certification
-# Fresh focused rerun after global V3 first-paint isolation repair.
+# Fresh focused rerun after MSA Refine Products title restoration.
 on:
   push:
     branches: [refine-restart-v3]
