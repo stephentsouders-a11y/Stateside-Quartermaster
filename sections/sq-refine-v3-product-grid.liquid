@@ -13,7 +13,7 @@
       {% paginate collection.products by 50 %}
         {% capture children %}
           {% for product in collection.products %}
-            <li id="{{ section.id }}-{{ product.id }}" class="product-grid__item product-grid__item--{{ forloop.index0 }}" data-page="{{ paginate.current_page }}" data-product-id="{{ product.id }}" ref="cards[]">
+            <li id="{{ section.id }}-{{ product.id }}" class="product-grid__item product-grid__item--{{ forloop.index0 }}" data-page="{{ paginate.current_page }}" data-product-id="{{ product.id }}" data-product-handle="{{ product.handle | escape }}" ref="cards[]">
               {% content_for 'block', type: '_product-card', id: 'product-card', closest.product: product, product_view_context: 'collection' %}
             </li>
           {% endfor %}
@@ -23,6 +23,48 @@
     </div>
   </results-list>
 </collection-component>
+<script data-sq-product-grid-dedupe-v1>
+(function(){
+  var host=document.currentScript&&document.currentScript.previousElementSibling;
+  if(!host)return;
+  function keyFor(node){
+    if(!node||node.nodeType!==1)return '';
+    var id=node.getAttribute('data-product-id');
+    if(id)return 'id:'+id;
+    var handle=node.getAttribute('data-product-handle');
+    if(handle)return 'handle:'+handle;
+    var link=node.querySelector&&node.querySelector('a[href*="/products/"]');
+    if(!link)return '';
+    try{
+      var m=new URL(link.getAttribute('href')||link.href,location.origin).pathname.match(/^\/products\/([^/?#]+)/);
+      return m?'handle:'+decodeURIComponent(m[1]):'';
+    }catch(_){return ''}
+  }
+  function cards(){
+    return Array.from(host.querySelectorAll('[data-product-id], [data-product-handle], .product-grid__item'));
+  }
+  function dedupe(){
+    var seen=new Set();
+    cards().forEach(function(card){
+      var key=keyFor(card);
+      if(!key)return;
+      if(seen.has(key))card.remove();
+      else seen.add(key);
+    });
+  }
+  var queued=false;
+  function schedule(){
+    if(queued)return;
+    queued=true;
+    requestAnimationFrame(function(){queued=false;dedupe()});
+  }
+  dedupe();
+  new MutationObserver(schedule).observe(host,{childList:true,subtree:true});
+  document.addEventListener('shopify:section:load',schedule);
+  window.addEventListener('popstate',schedule);
+  window.addEventListener('sq:refine-results-ready',schedule);
+})();
+</script>
 {% schema %}
 {
   "name": "t:names.collection_container",
