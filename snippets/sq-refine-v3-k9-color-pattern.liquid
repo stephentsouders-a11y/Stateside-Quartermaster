@@ -92,7 +92,10 @@ K9 color and pattern refinement from current collection product options. Preserv
     group.querySelector('[data-sq-k9-clear]').hidden=!wanted.length;
     side.querySelectorAll('input[data-kind="structural"][data-target]').forEach(i=>{try{const u=new URL(i.dataset.target,location.origin);u.searchParams.delete(PARAM);wanted.forEach(v=>u.searchParams.append(PARAM,v));const preview=initial.searchParams.get('preview_theme_id');if(preview)u.searchParams.set('preview_theme_id',preview);i.dataset.target=u.pathname+u.search;}catch(_){}});
   }
-  function matchedVariant(p,wanted){const opts=optionsFor(p);return(p.variants||[]).find(v=>opts.some(o=>wanted.includes(key(color(v['option'+o.position])))));}
+  function matchedVariant(p,wanted){
+    const opts=optionsFor(p),variants=(p.variants||[]).filter(v=>opts.some(o=>wanted.includes(key(color(v['option'+o.position]))))),availability=new URL(location.href).searchParams.getAll('filter.v.availability');
+    return variants.find(v=>availability.length===1?Boolean(v.available)===(availability[0]==='1'):v.available)||variants[0];
+  }
   function updateCard(card,p,wanted){
     const v=wanted.length&&matchedVariant(p,wanted);if(!v)return;
     card.querySelectorAll('a[href*="/products/"]').forEach(a=>{const u=new URL(a.href,location.origin);u.searchParams.set('variant',String(v.id));a.href=u.pathname+u.search});
