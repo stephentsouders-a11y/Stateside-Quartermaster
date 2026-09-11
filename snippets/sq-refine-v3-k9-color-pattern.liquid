@@ -2,6 +2,16 @@
 K9 color and pattern refinement from current collection product options. Preserves native theme cards, applies before pagination, and never activates legacy color-grid controllers.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle contains 'k9' %}
+{% paginate collection.products by 250 %}
+{% capture sq_k9_catalog_json %}
+{"handle":{{ collection.handle | json }},"total":{{ paginate.items | json }},"page":{{ paginate.current_page | json }},"pages":{{ paginate.pages | json }},"products":[
+{% for p in collection.products %}
+{"id":{{ p.id | json }},"handle":{{ p.handle | json }},"vendor":{{ p.vendor | json }},"product_type":{{ p.type | json }},"tags":{{ p.tags | json }},"variant_count":{{ p.variants_count | json }},"options":[{% for option in p.options_with_values %}{"name":{{ option.name | json }},"position":{{ forloop.index }},"values":[{% for value in option.values %}{{ value.name | default: value | json }}{% unless forloop.last %},{% endunless %}{% endfor %}]}{% unless forloop.last %},{% endunless %}{% endfor %}],"variants":{{ p.variants | json }}}{% unless forloop.last %},{% endunless %}
+{% endfor %}
+]}
+{% endcapture %}
+<script type="application/json" data-sq-k9-catalog>{{ sq_k9_catalog_json | replace: '<', '\u003c' }}</script>
+{% endpaginate %}
 <script data-sq-k9-color-pattern data-current-handle="{{ collection.handle | escape }}">
 (function(){
   'use strict';
@@ -10,6 +20,7 @@ K9 color and pattern refinement from current collection product options. Preserv
   const PARAM='sq_k9_color', main=document.getElementById('MainContent');
   if(!main)return;
   window.__sqK9ColorPattern=true;
+  main.dataset.sqK9ColorVersion='20260911-inline1';
   const clean=v=>String(v==null?'':v).replace(/\s+/g,' ').trim();
   const key=v=>clean(v).toLowerCase().replace(/\bgray\b/g,'grey');
   const selected=()=>Array.from(new Set(new URL(location.href).searchParams.getAll(PARAM).map(key)));
@@ -75,6 +86,17 @@ K9 color and pattern refinement from current collection product options. Preserv
     throw last||new Error('Collection request failed');
   }
   async function catalog(){
+    try{
+      const node=document.querySelector('[data-sq-k9-catalog]'),seed=node&&JSON.parse(node.textContent);
+      if(seed&&seed.handle===current&&seed.page===1&&seed.pages<=1&&Array.isArray(seed.products)&&seed.products.length===seed.total){
+        const complete=seed.products.every(p=>Array.isArray(p.options)&&p.options.every(o=>Array.isArray(o.values)&&o.values.every(v=>typeof v==='string'))&&Array.isArray(p.variants)&&(!p.variant_count||p.variant_count===p.variants.length)&&p.variants.every(v=>typeof v.available==='boolean'));
+        if(complete){
+          seed.products.forEach(p=>p.variants.forEach(v=>{for(let n=1;n<=3;n++)if(v['option'+n]===undefined)v['option'+n]=(v.options||[])[n-1]||null;}));
+          main.dataset.sqK9CatalogSource='inline';return seed.products;
+        }
+      }
+    }catch(_){}
+    main.dataset.sqK9CatalogSource='json';
     const out=[],seen=new Set();
     for(let page=1;page<=100;page++){
       const u=new URL('/collections/'+encodeURIComponent(current)+'/products.json',location.origin);u.searchParams.set('limit','250');u.searchParams.set('page',String(page));
