@@ -1,6 +1,6 @@
 name: Armed Forces Gear Refine every-choice Chromium audit
 
-# certification revision: 20260911-afg-v4
+# certification revision: 20260911-afg-v5
 on:
   push:
     paths:
@@ -46,23 +46,44 @@ jobs:
           async function ready(){
             await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:20000});
             await page.waitForFunction(()=>!location.search.includes('sq_type_family'),null,{timeout:10000}).catch(()=>{});
-            await page.waitForTimeout(500);
+          }
+          async function settle(){
+            for(let attempt=0;attempt<5;attempt++){
+              await page.waitForLoadState('domcontentloaded',{timeout:10000}).catch(()=>{});
+              await ready().catch(()=>{});
+              const href=page.url();
+              await page.waitForTimeout(650);
+              if(page.url()===href)return;
+            }
+            await ready();
           }
           async function openBase(){
             await page.waitForLoadState('domcontentloaded',{timeout:5000}).catch(()=>{});
             const r=await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000});
             if(!r||r.status()!==200)throw new Error(`Base HTTP ${r?.status()}`);
-            await ready();
+            await settle();
           }
-          async function state(){return page.evaluate(()=>{
-            const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-refine-v3-sidebar');
-            const clean=s=>(s||'').replace(/\s+/g,' ').trim();
-            const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};
-            const groups=[...(side?.querySelectorAll(':scope > details.sq-refine-v3-group')||[])].map(d=>clean(d.querySelector(':scope > summary')?.textContent));
-            const grids=[...main.querySelectorAll('.product-grid')].filter(vis).length;
-            const cards=[...main.querySelectorAll('.sq-refine-v3-results .product-grid > *')].filter(vis).length;
-            return {groups,grids,cards,typePersistence:main?.dataset.sqAfgTypePersistence||null,lock:side?.dataset.sqAfgThreeFilterLock||null};
-          })}
+          async function state(){
+            let last;
+            for(let attempt=0;attempt<6;attempt++){
+              try{
+                return await page.evaluate(()=>{
+                  const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-refine-v3-sidebar');
+                  const clean=s=>(s||'').replace(/\s+/g,' ').trim();
+                  const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};
+                  const groups=[...(side?.querySelectorAll(':scope > details.sq-refine-v3-group')||[])].map(d=>clean(d.querySelector(':scope > summary')?.textContent));
+                  const grids=[...main.querySelectorAll('.product-grid')].filter(vis).length;
+                  const cards=[...main.querySelectorAll('.sq-refine-v3-results .product-grid > *')].filter(vis).length;
+                  return {groups,grids,cards,typePersistence:main?.dataset.sqAfgTypePersistence||null,lock:side?.dataset.sqAfgThreeFilterLock||null};
+                });
+              }catch(e){
+                last=e;
+                if(!/Execution context was destroyed|navigation/i.test(String(e)))throw e;
+                await settle().catch(()=>{});
+              }
+            }
+            throw last;
+          }
           await openBase();
           const initial=await state();
           for(const g of required)if(!initial.groups.includes(g))report.failures.push(`initial missing ${g}`);
@@ -77,7 +98,11 @@ jobs:
             const meta=inventory[n]; await openBase();
             const d=page.locator('#MainContent details.sq-refine-v3-group').nth(meta.gi); if(!(await d.getAttribute('open')))await d.locator(':scope > summary').click();
             const input=d.locator('input[type="checkbox"]').nth(meta.ii); const before=page.url(); let clickError=null;
-            try{await input.click({force:true});await page.waitForFunction(old=>location.href!==old,before,{timeout:7000}).catch(()=>{});await ready()}catch(e){clickError=String(e)}
+            try{
+              await input.click({force:true});
+              await page.waitForFunction(old=>location.href!==old,before,{timeout:7000}).catch(()=>{});
+              await settle();
+            }catch(e){clickError=String(e)}
             const s=await state(); const u=new URL(page.url()); const errors=[];
             if(clickError)errors.push(clickError); if(u.href===before)errors.push('URL did not change'); if(s.grids!==1)errors.push(`visible grids ${s.grids}`);
             for(const g of required)if(!s.groups.includes(g))errors.push(`missing ${g}`); if(s.groups.length!==3)errors.push(`expected 3 groups, got ${s.groups.join(' | ')}`);
