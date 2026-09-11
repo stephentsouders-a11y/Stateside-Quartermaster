@@ -1,7 +1,7 @@
 {% doc %}
-Adds the Morale Patches collection's existing color/pattern product tags to Refine Products.
+Adds tag-based color/pattern refinement to Morale Patches and Patriotic & American Heritage collections.
 {% enddoc %}
-{% if request.page_type == 'collection' and collection.handle == 'morale-patches-tactical-id' %}
+{% if request.page_type == 'collection' and collection.handle == 'morale-patches-tactical-id' or request.page_type == 'collection' and collection.handle == 'patriotic-american-heritage' %}
 <script type="application/json" data-sq-morale-color-tags>{{ collection.all_tags | json }}</script>
 <script type="application/json" data-sq-morale-color-fallback>["SQ Color/Pattern: Black","SQ Color/Pattern: Blue","SQ Color/Pattern: Brown / Tan","SQ Color/Pattern: Camouflage","SQ Color/Pattern: Gray","SQ Color/Pattern: Green","SQ Color/Pattern: Orange","SQ Color/Pattern: Pink","SQ Color/Pattern: Red","SQ Color/Pattern: White"]</script>
 <script data-sq-morale-color-controller>
