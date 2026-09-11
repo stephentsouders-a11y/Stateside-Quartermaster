@@ -1,0 +1,69 @@
+name: Patch Refine V3 page-specific filter policies
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/patch-refine-page-policies.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+      - name: Enforce Armed Forces Gear and Apparel filter policies
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          function patchPrimary(){
+            const f='snippets/sq-refine-v3-sidebar-polish.liquid';
+            let s=fs.readFileSync(f,'utf8');
+            const old="function ensureCoreGroups(side){if(!findGroup('Shop by Type')){var g=makeGroup('Shop by Type',meta.types||[],'filter.p.product_type');if(g)side.appendChild(g)}if(!findGroup('Shop by Manufacturers')){var g2=makeGroup('Shop by Manufacturers',meta.vendors||[],'filter.p.vendor');if(g2)side.appendChild(g2)}}";
+            const neu="function ensureCoreGroups(side){if(!findGroup('Shop by Type')){var g=makeGroup('Shop by Type',meta.types||[],'filter.p.product_type');if(g)side.appendChild(g)}if(root!=='armed-forces-gear'&&!findGroup('Shop by Manufacturers')){var g2=makeGroup('Shop by Manufacturers',meta.vendors||[],'filter.p.vendor');if(g2)side.appendChild(g2)}}\n  function enforcePagePolicy(side){\n    if(root==='armed-forces-gear'){var branch=findGroup('Shop by Branch'),cat=findGroup('Shop by Category');if(!branch&&cat){var cs=cat.querySelector(':scope > summary');if(cs)cs.textContent='Shop by Branch';branch=cat}var allow=new Set(['shop by branch','shop by type','availability']);details().forEach(function(d){var sm=d.querySelector(':scope > summary'),k=norm(canonical(sm&&sm.textContent));if(!allow.has(k))d.remove()});side.dataset.sqRefineV3Policy='armed-forces-gear'}\n    if(root==='apparel'){var m=findGroup('Shop by Manufacturers');if(m){var ms=m.querySelector(':scope > summary');if(ms)ms.textContent='Shop by Manufacturer / Artist'}var allowApparel=new Set(['shop by category','shop by type','shop by manufacturer artist','availability']);details().forEach(function(d){var sm=d.querySelector(':scope > summary'),k=norm(canonical(sm&&sm.textContent));if(k==='shop by manufacturers')k='shop by manufacturer artist';if(!allowApparel.has(k))d.remove()});side.dataset.sqRefineV3Policy='apparel'}\n  }";
+            if(!s.includes(old)) throw new Error('primary ensureCoreGroups signature changed; refusing stale patch');
+            s=s.replace(old,neu);
+            const call="renameGroups();mergeColorPattern(side);ensureCoreGroups(side);bookTagGroups(side);firearmGroups(side);renameGroups();mergeColorPattern(side);orderGroups(side);";
+            const call2="renameGroups();mergeColorPattern(side);ensureCoreGroups(side);bookTagGroups(side);firearmGroups(side);renameGroups();mergeColorPattern(side);enforcePagePolicy(side);orderGroups(side);";
+            if(!s.includes(call)) throw new Error('primary apply sequence changed');
+            s=s.replace(call,call2);
+            fs.writeFileSync(f,s);
+          }
+          function patchRescue(){
+            const f='snippets/sq-refine-v3-sidebar-polish-rescue.liquid';
+            let s=fs.readFileSync(f,'utf8');
+            const old="if(!find(side,'Shop by Type')){var gt=make('Shop by Type',meta.types,'filter.p.product_type');if(gt)side.appendChild(gt)}if(!find(side,'Shop by Manufacturers')){var gv=make('Shop by Manufacturers',meta.vendors,'filter.p.vendor');if(gv)side.appendChild(gv)}";
+            const neu="if(!find(side,'Shop by Type')){var gt=make('Shop by Type',meta.types,'filter.p.product_type');if(gt)side.appendChild(gt)}if(root!=='armed-forces-gear'&&!find(side,'Shop by Manufacturers')){var gv=make('Shop by Manufacturers',meta.vendors,'filter.p.vendor');if(gv)side.appendChild(gv)}if(root==='armed-forces-gear'){var br=find(side,'Shop by Branch'),ca=find(side,'Shop by Category');if(!br&&ca){var csm=ca.querySelector(':scope > summary');if(csm)csm.textContent='Shop by Branch'}var afAllow=new Set(['shop by branch','shop by type','availability']);groups(side).forEach(function(d){var sm=d.querySelector(':scope > summary'),k=norm(canonical(sm&&sm.textContent));if(!afAllow.has(k))d.remove()});side.dataset.sqRefineV3Policy='armed-forces-gear'}if(root==='apparel'){var am=find(side,'Shop by Manufacturers');if(am){var asm=am.querySelector(':scope > summary');if(asm)asm.textContent='Shop by Manufacturer / Artist'}var apAllow=new Set(['shop by category','shop by type','shop by manufacturer artist','availability']);groups(side).forEach(function(d){var sm=d.querySelector(':scope > summary'),k=norm(canonical(sm&&sm.textContent));if(k==='shop by manufacturers')k='shop by manufacturer artist';if(!apAllow.has(k))d.remove()});side.dataset.sqRefineV3Policy='apparel'}";
+            if(!s.includes(old)) throw new Error('rescue signature changed; refusing stale patch');
+            s=s.replace(old,neu);
+            fs.writeFileSync(f,s);
+          }
+          function patchHarness(){
+            const f='.github/scripts/refine-v3-other40-exhaustive-cert.mjs';
+            let s=fs.readFileSync(f,'utf8');
+            const old="if(!labels.some(x=>/Shop by Type/i.test(x)))errors.push('missing Shop by Type');if(!labels.some(x=>/Shop by Manufacturer/i.test(x)))errors.push('missing Shop by Manufacturer');if(route==='/collections/literature')";
+            const neu="const nk=x=>String(x||'').toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim();const labelSet=new Set(labels.map(nk));if(route==='/collections/armed-forces-gear'){const expected=['shop by branch','availability','shop by type'];const extras=[...labelSet].filter(x=>!expected.includes(x)),missing=expected.filter(x=>!labelSet.has(x));if(extras.length||missing.length)errors.push('Armed Forces Gear filter policy extras='+extras.join('|')+' missing='+missing.join('|'))}if(route==='/collections/apparel'){const expected=['shop by category','shop by manufacturer artist','availability','shop by type'];const extras=[...labelSet].filter(x=>!expected.includes(x)),missing=expected.filter(x=>!labelSet.has(x));if(extras.length||missing.length)errors.push('Apparel filter policy extras='+extras.join('|')+' missing='+missing.join('|'))}if(route==='/collections/literature')";
+            if(!s.includes(old)) throw new Error('harness universal-group signature changed');
+            s=s.replace(old,neu);
+            fs.writeFileSync(f,s);
+          }
+          patchPrimary();patchRescue();patchHarness();
+          NODE
+          grep -q "root!=='armed-forces-gear'" snippets/sq-refine-v3-sidebar-polish.liquid
+          grep -q "Shop by Manufacturer / Artist" snippets/sq-refine-v3-sidebar-polish.liquid
+          grep -q "Armed Forces Gear filter policy" .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: Commit policy and harness corrections
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-refine-v3-sidebar-polish.liquid snippets/sq-refine-v3-sidebar-polish-rescue.liquid .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+          git commit -m 'enforce page-specific Refine filter policies'
+          git push origin HEAD:refine-restart-v3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: refine-page-policy-patch
+          path: |
+            snippets/sq-refine-v3-sidebar-polish.liquid
+            snippets/sq-refine-v3-sidebar-polish-rescue.liquid
+            .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+          retention-days: 2
