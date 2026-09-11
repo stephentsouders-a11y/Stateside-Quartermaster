@@ -90,7 +90,7 @@
     if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
     var s=side();if(!s)return false;
     var nested=parentForPath(currentPath()),cat=categoryGroup();
-    if(!nested){if(cat)syncActive(cat);main.dataset.sqChildSafetyTaxonomy='root';return true}
+    if(!nested){cat=renderParents(cat,s);syncActive(cat);main.dataset.sqChildSafetyTaxonomy='root';return true}
     promoteNestedChoices(cat,s);
     cat=renderParents(cat,s);
     syncActive(cat);syncActive(typeGroup());
