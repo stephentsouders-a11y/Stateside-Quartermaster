@@ -36,7 +36,7 @@ jobs:
           page.on('pageerror',e=>pageErrors.push(String(e)));
           const links=async()=>page.evaluate(()=>[...new Set([...document.querySelectorAll('#MainContent .sq-refine-v3-results .product-grid a[href*="/products/"]')].filter(a=>{const r=a.getBoundingClientRect();return r.width>0&&r.height>0}).map(a=>a.href.split('?')[0]))]);
           async function ready(){
-            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',{timeout:110000});
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',undefined,{timeout:110000});
             await page.waitForTimeout(1400);
           }
           async function open(size,n){
