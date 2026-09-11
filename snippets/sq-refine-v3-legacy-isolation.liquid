@@ -91,6 +91,52 @@ if(location.pathname==='/collections/thin-line'){
     return nativeFetch(input,init);
   };
 })();
+/* Preserve the native product area's exact DOM position before V3 moves the
+   collection component into its combined Refine + Results layout. The V3 base
+   runtime appends its layout to MainContent; this marker relocates that layout
+   back to the product area's original slot so the sidebar never starts halfway
+   down a collection page. */
+(function(){
+  if(window.__sqRefineV3OriginPlacementFix)return;
+  window.__sqRefineV3OriginPlacementFix=true;
+  var marker=null,done=false;
+  function findNativeHost(main){
+    var hosts=[].slice.call(main.querySelectorAll('collection-component'));
+    for(var i=0;i<hosts.length;i++){
+      if(hosts[i].closest('.sq-refine-v3-layout'))continue;
+      if(hosts[i].querySelector('.product-grid'))return hosts[i];
+    }
+    return null;
+  }
+  function reconcile(){
+    if(done)return true;
+    var main=document.getElementById('MainContent');if(!main)return false;
+    if(!marker){
+      var host=findNativeHost(main);
+      if(host&&host.parentNode){
+        marker=document.createElement('span');
+        marker.hidden=true;
+        marker.setAttribute('aria-hidden','true');
+        marker.setAttribute('data-sq-refine-v3-origin-marker','true');
+        host.parentNode.insertBefore(marker,host);
+      }
+    }
+    var layout=main.querySelector('.sq-refine-v3-layout');
+    if(marker&&marker.isConnected&&layout&&layout!==marker.parentNode){
+      marker.parentNode.insertBefore(layout,marker);
+      marker.remove();
+      done=true;
+      main.dataset.sqRefineV3Placement='original-product-position';
+      return true;
+    }
+    return false;
+  }
+  var root=document.body||document.documentElement;
+  var observer=new MutationObserver(function(){if(reconcile()){observer.disconnect()}});
+  observer.observe(root,{childList:true,subtree:true});
+  queueMicrotask(reconcile);
+  document.addEventListener('DOMContentLoaded',function(){reconcile();setTimeout(reconcile,0);setTimeout(reconcile,500)},{once:true});
+})();
 </script>
 {% if collection.handle == 'law-enforcement-corrections' or collection.handle == 'firefighting-ems-search-rescue' %}
 <style data-sq-refine-v3-public-safety-product-visibility>
