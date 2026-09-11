@@ -1,0 +1,245 @@
+{% doc %}
+Adds collection-scoped, exact product-option color and pattern checkboxes to Tactical Gear's V3 sidebar. The paginated data view avoids unsupported native color parameters and uses a single filtered product surface. Existing category, manufacturer, type, availability, and page-size selections are retained.
+{% enddoc %}
+{% if request.page_type == 'collection' %}
+<script data-sq-tactical-color-pattern data-current-handle="{{ collection.handle | escape }}" data-currency="{{ cart.currency.iso_code | escape }}">
+(function () {
+  var boot = document.currentScript;
+  var query = new URLSearchParams(location.search);
+  var current = boot.dataset.currentHandle;
+  var root = query.get('sq_root') || current;
+  if (root !== 'tactical-gear' || window.__sqTacticalColorV1) return;
+  window.__sqTacticalColorV1 = true;
+  var PARAM = 'sq_tactical_color';
+  var selected = query.getAll(PARAM);
+  var html = document.documentElement;
+  html.dataset.sqTacticalColorActive = selected.length ? 'true' : 'false';
+  var main, side, results, group, surface, catalog, loading;
+  var currency = boot.dataset.currency || 'USD';
+  var money = new Intl.NumberFormat(document.documentElement.lang || 'en-US', { style: 'currency', currency: currency });
+  function clean(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
+  function norm(v) { return clean(v).toLowerCase(); }
+  function esc(v) { return clean(v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function color(v) {
+    v = clean(v).replace(/^\(\d+\)\s*/, '').replace(/^\d{2,5}\s*[-:]\s*/, '');
+    if (!v || v.length > 72 || /%|\b(?:polyester|nylon|cotton|spandex|denier|size|small|medium|large|xxl|3xl|4xl)\b/i.test(v) || /^(?:default title|standard|none|other|assorted|various|n\/a)$/i.test(v)) return '';
+    return v.toLowerCase().replace(/\bgrey\b/g, 'gray').replace(/\bmulti[ -]?cam\b/g, 'multicam').replace(/(^|[\s/(-])([a-z])/g, function (_, lead, letter) { return lead + letter.toUpperCase(); }).replace(/\b(?:Ocp|Acu|Ucp|Nwu|Od|Us|M81|Dcu|Abu|Marpat|Atacs)\b/g, function (s) { return s.toUpperCase(); });
+  }
+  function prepare(p) {
+    var indexes = [];
+    (p.options || []).forEach(function (name, i) { if (/colou?r|pattern|camo/i.test(name)) indexes.push(i); });
+    var fallback = [];
+    if (!indexes.length) (p.tags || []).forEach(function (tag) {
+      var match = clean(tag).match(/^(?:SQ\s+)?(?:colou?r\s*\/\s*pattern|colou?r|pattern|camouflage)\s*:\s*(.+)$/i);
+      if (match) { var value = color(match[1]); if (value) fallback.push(value); }
+    });
+    p.variants = (p.variants || []).map(function (v) {
+      v.colors = Array.from(new Set(indexes.length ? indexes.map(function (i) { return color((v.options || [])[i]); }).filter(Boolean) : fallback));
+      return v;
+    });
+    p.colors = Array.from(new Set(p.variants.flatMap(function (v) { return v.colors; })));
+    return p;
+  }
+  function values(name) { return query.getAll(name).map(norm); }
+  function matchesProduct(p) {
+    var vendors = values('filter.p.vendor');
+    var types = values('filter.p.product_type');
+    var tags = values('filter.p.tag');
+    if (vendors.length && vendors.indexOf(norm(p.vendor)) < 0) return false;
+    if (types.length && types.indexOf(norm(p.type)) < 0) return false;
+    if (tags.length && !tags.some(function (tag) { return (p.tags || []).map(norm).indexOf(tag) >= 0; })) return false;
+    return true;
+  }
+  function matchingVariants(p, colors) {
+    var availability = query.getAll('filter.v.availability').flatMap(function (v) { return v.split(','); });
+    var minimum = query.get('filter.v.price.gte'), maximum = query.get('filter.v.price.lte');
+    return p.variants.filter(function (v) {
+      if (colors.length && !colors.some(function (value) { return v.colors.indexOf(value) >= 0; })) return false;
+      if (availability.length && availability.indexOf(v.available ? '1' : '0') < 0) return false;
+      if (minimum !== null && minimum !== '' && v.price < Number(minimum) * 100) return false;
+      if (maximum !== null && maximum !== '' && v.price > Number(maximum) * 100) return false;
+      var ok = true;
+      query.forEach(function (value, key) {
+        if (key.indexOf('filter.v.option.') !== 0) return;
+        var name = key.slice(16), index = (p.options || []).findIndex(function (n) { return norm(n) === name; });
+        if (index >= 0 && query.getAll(key).map(norm).indexOf(norm(v.options[index])) < 0) ok = false;
+      });
+      return ok;
+    });
+  }
+  function selectedUrl(changes) {
+    var u = new URL(location.href);
+    u.searchParams.delete('page');
+    u.searchParams.delete('sq_view_page');
+    Object.keys(changes).forEach(function (key) {
+      u.searchParams.delete(key);
+      changes[key].forEach(function (value) { u.searchParams.append(key, value); });
+    });
+    return u.pathname + u.search;
+  }
+  function clearUrl() { var changes = {}; changes[PARAM] = []; return selectedUrl(changes); }
+  async function getPage(page) {
+    var u = new URL(location.pathname, location.origin);
+    u.searchParams.set('view', 'sq-tactical-color-data');
+    u.searchParams.set('page', String(page));
+    if (query.get('sort_by')) u.searchParams.set('sort_by', query.get('sort_by'));
+    var preview = query.get('preview_theme_id');
+    if (preview) u.searchParams.set('preview_theme_id', preview);
+    var last;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      var controller = new AbortController(), timeout = setTimeout(function () { controller.abort(); }, 20000);
+      try {
+        var response = await fetch(u.pathname + u.search, { credentials: 'same-origin', signal: controller.signal });
+        if (!response.ok) throw new Error('Color data HTTP ' + response.status);
+        var data = await response.json();
+        if (data.schema !== 'sq-tactical-colors-1' || data.handle !== current || data.page !== page || !Array.isArray(data.products)) throw new Error('Invalid color data');
+        return data;
+      } catch (error) { last = error; }
+      finally { clearTimeout(timeout); }
+      await new Promise(function (resolve) { setTimeout(resolve, 400 * (attempt + 1)); });
+    }
+    throw last;
+  }
+  async function loadCatalog() {
+    var cacheKey = 'sq-tactical-color-v1:' + ((window.Shopify && Shopify.theme && Shopify.theme.id) || '') + ':' + location.pathname + ':' + (query.get('sort_by') || '') + ':' + currency;
+    try {
+      var saved = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
+      if (saved && Date.now() - saved.time < 300000 && Array.isArray(saved.products)) return saved.products.map(prepare);
+    } catch (_) {}
+    var first = await getPage(1), pages = [first], next = 2;
+    if (first.pages > 100) throw new Error('Color catalog exceeds the supported page limit');
+    async function worker() {
+      while (next <= first.pages) {
+        var page = next++;
+        pages[page - 1] = await getPage(page);
+      }
+    }
+    await Promise.all([worker(), worker()]);
+    var products = pages.flatMap(function (p) { return p.products; });
+    if (products.length !== first.total || new Set(products.map(function (p) { return p.id; })).size !== products.length) throw new Error('Color catalog changed while loading; please retry');
+    products = products.filter(function (p) { return norm(p.type) !== 'options_hidden_product' && norm(p.type) !== 'options hidden product'; });
+    try { sessionStorage.setItem(cacheKey, JSON.stringify({ time: Date.now(), products: products })); } catch (_) {}
+    return products.map(prepare);
+  }
+  function updateChoices() {
+    var counts = new Map();
+    catalog.filter(matchesProduct).forEach(function (p) {
+      var keys = new Set(matchingVariants(p, []).flatMap(function (v) { return v.colors; }));
+      keys.forEach(function (key) { counts.set(key, (counts.get(key) || 0) + 1); });
+    });
+    selected.forEach(function (value) { if (!counts.has(value)) counts.set(value, 0); });
+    var list = group.querySelector('.sq-refine-v3-choices');
+    list.replaceChildren();
+    var keys = Array.from(counts.keys()).sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }); });
+    keys.forEach(function (value) {
+      var row = document.createElement('label'); row.className = 'sq-refine-v3-choice'; row.dataset.sqTacticalColorLabel = value;
+      var input = document.createElement('input'); input.type = 'checkbox'; input.name = PARAM; input.value = value; input.checked = selected.indexOf(value) >= 0;
+      var label = document.createElement('span'); label.textContent = value;
+      var count = document.createElement('small'); count.textContent = String(counts.get(value)); count.setAttribute('aria-label', counts.get(value) + ' products');
+      row.append(input, label, count); list.appendChild(row);
+      input.addEventListener('change', function () {
+        var active = selected.filter(function (x) { return x !== value; }); if (input.checked) active.push(value);
+        var changes = {}; changes[PARAM] = active;
+        location.assign(selectedUrl(changes));
+      });
+    });
+    if (!keys.length) { var empty = document.createElement('p'); empty.textContent = 'No color / pattern options match the current filters.'; list.appendChild(empty); }
+    group.querySelector('[data-sq-tactical-color-status]').textContent = '';
+    group.dataset.sqTacticalColorReady = 'true';
+    group.dataset.optionCount = String(keys.length);
+    group.querySelector('input[type="search"]').disabled = false;
+  }
+  function renderProducts() {
+    if (!selected.length) return;
+    var matches = catalog.filter(matchesProduct).map(function (p) { return { product: p, variants: matchingVariants(p, selected) }; }).filter(function (x) { return x.variants.length; });
+    var size = Number(query.get('sq_per_page') || 50); if ([50, 100, 250].indexOf(size) < 0) size = 50;
+    var page = Math.max(1, Number(query.get('sq_view_page') || 1) || 1), pages = Math.max(1, Math.ceil(matches.length / size)); page = Math.min(page, pages);
+    var items = matches.slice((page - 1) * size, page * size);
+    var output = '<div class="sq-tactical-color-results__head"><p role="status">' + matches.length + ' matching products</p><a href="' + esc(clearUrl()) + '">Clear color / pattern</a></div>';
+    output += '<ul class="sq-tactical-color-grid" role="list">';
+    items.forEach(function (entry) {
+      var p = entry.product, v = entry.variants.find(function (x) { return x.available; }) || entry.variants[0];
+      var prices = entry.variants.map(function (x) { return x.price; }), price = Math.min.apply(null, prices), sold = !entry.variants.some(function (x) { return x.available; });
+      var image = v.image || p.image;
+      output += '<li data-product-id="' + p.id + '" data-product-handle="' + esc(p.handle) + '"><a class="sq-tactical-color-card" href="/products/' + encodeURIComponent(p.handle) + '?variant=' + v.id + '"><span class="sq-tactical-color-card__media">' + (image ? '<img src="' + esc(image) + '" alt="' + esc(p.title) + '" width="720" height="720" loading="lazy" decoding="async">' : '') + (sold ? '<span class="sq-tactical-color-card__badge">Sold out</span>' : '') + '</span><span class="sq-tactical-color-card__title">' + esc(p.title) + '</span><span class="sq-tactical-color-card__price">' + (price !== Math.max.apply(null, prices) ? 'From ' : '') + esc(money.format(price / 100)) + '</span></a></li>';
+    });
+    output += '</ul>';
+    if (!matches.length) output += '<p>No products match the selected color / pattern and other filters.</p>';
+    function pageUrl(n) { var u = new URL(location.href); u.searchParams.delete('page'); u.searchParams.set('sq_view_page', String(n)); return u.pathname + u.search; }
+    if (pages > 1) output += '<nav class="sq-refine-v3-pager" aria-label="Filtered product pages">' + (page > 1 ? '<a href="' + esc(pageUrl(page - 1)) + '">Previous</a>' : '') + '<span>Page ' + page + ' of ' + pages + '</span>' + (page < pages ? '<a href="' + esc(pageUrl(page + 1)) + '">Next</a>' : '') + '</nav>';
+    surface.innerHTML = output;
+    surface.dataset.sqTacticalColorTotal = String(matches.length);
+    surface.dataset.sqTacticalColorReady = 'true';
+    surface.setAttribute('aria-busy', 'false');
+  }
+  function startLoad() {
+    if (loading) return loading;
+    group.querySelector('[data-sq-tactical-color-status]').textContent = 'Loading color / pattern options...';
+    loading = loadCatalog().then(function (products) {
+      catalog = products; updateChoices(); renderProducts();
+      main.dataset.sqTacticalColorCatalogCount = String(products.length);
+    }).catch(function (error) {
+      main.dataset.sqTacticalColorError = clean(error.message);
+      group.querySelector('[data-sq-tactical-color-status]').innerHTML = 'Unable to load colors. <button type="button" data-sq-tactical-retry>Retry</button>';
+      group.querySelector('[data-sq-tactical-retry]').addEventListener('click', function () { loading = null; delete main.dataset.sqTacticalColorError; startLoad(); });
+      if (surface) { surface.innerHTML = '<p>Unable to load matching products. Use Retry in the color filter or <a href="' + esc(clearUrl()) + '">clear color / pattern</a>.</p>'; surface.setAttribute('aria-busy', 'false'); }
+    });
+    return loading;
+  }
+  function launch() {
+    main = document.getElementById('MainContent');
+    if (!main || main.dataset.sqRefineV3Ready !== 'true') return false;
+    side = main.querySelector('.sq-refine-v3-sidebar'); results = main.querySelector('.sq-refine-v3-results');
+    if (!side || !results) return false;
+    if (side.querySelector('[data-sq-tactical-colors]')) return true;
+    group = document.createElement('details'); group.className = 'sq-refine-v3-group'; group.dataset.sqTacticalColors = 'true'; group.open = selected.length > 0;
+    group.innerHTML = '<summary>Shop by Color / Pattern</summary><div class="sq-tactical-color-tools"><input type="search" placeholder="Search colors / patterns" aria-label="Search colors / patterns" disabled><p data-sq-tactical-color-status role="status"></p></div><div class="sq-refine-v3-choices"></div>';
+    var anchor = Array.from(side.querySelectorAll(':scope > details')).find(function (d) { return /manufacturer|availability/i.test(d.querySelector('summary').textContent); });
+    side.insertBefore(group, anchor || null);
+    group.addEventListener('toggle', function () { group.querySelector('summary').setAttribute('aria-expanded', group.open ? 'true' : 'false'); if (group.open) startLoad(); });
+    group.querySelector('summary').setAttribute('aria-expanded', group.open ? 'true' : 'false');
+    group.querySelector('input[type="search"]').addEventListener('input', function (event) { var value = norm(event.target.value); group.querySelectorAll('[data-sq-tactical-color-label]').forEach(function (row) { row.hidden = norm(row.dataset.sqTacticalColorLabel).indexOf(value) < 0; }); });
+    if (selected.length) {
+      var native = document.createElement('div'); native.className = 'sq-tactical-native-results';
+      Array.from(results.children).filter(function (node) { return !node.matches('.sq-refine-v3-page-size,style,script'); }).forEach(function (node) { native.appendChild(node); });
+      results.appendChild(native);
+      surface = document.createElement('section'); surface.dataset.sqTacticalColorResults = 'true'; surface.setAttribute('aria-label', 'Color / pattern filtered products'); surface.setAttribute('aria-busy', 'true'); surface.innerHTML = '<p role="status">Loading matching products...</p>'; results.appendChild(surface);
+      document.addEventListener('change', function (event) {
+        var input = event.target;
+        if (!input.matches || !input.matches('input[data-kind="structural"][data-target]') || !side.contains(input)) return;
+        event.stopImmediatePropagation();
+        var u = new URL(input.checked ? input.dataset.target : '/collections/tactical-gear', location.origin);
+        var keep = new Set([PARAM, 'sort_by', 'preview_theme_id', 'sq_per_page']);
+        query.forEach(function (value, key) { if (key.indexOf('filter.') === 0) keep.add(key); });
+        keep.forEach(function (key) { u.searchParams.delete(key); query.getAll(key).forEach(function (value) { u.searchParams.append(key, value); }); });
+        u.searchParams.delete('page'); u.searchParams.delete('sq_view_page');
+        location.assign(u.pathname + u.search);
+      }, true);
+      startLoad();
+    }
+    main.dataset.sqTacticalColorInstalled = 'true';
+    return true;
+  }
+  if (!launch()) { var attempts = 0, timer = setInterval(function () { if (launch() || ++attempts > 600) clearInterval(timer); }, 100); }
+})();
+</script>
+<style>
+html[data-sq-tactical-color-active="true"] #MainContent .sq-refine-v3-results > collection-component,
+html[data-sq-tactical-color-active="true"] #MainContent .sq-tactical-native-results{display:none!important}
+#MainContent [data-sq-tactical-colors] .sq-tactical-color-tools{padding:0 0 8px}
+#MainContent [data-sq-tactical-colors] input[type="search"]{width:100%;min-height:38px;padding:8px;border:1px solid #cfd9df;border-radius:6px;font:inherit;font-size:12px}
+#MainContent [data-sq-tactical-colors] [role="status"]{font-size:12px;margin:8px 0}
+#MainContent [data-sq-tactical-colors] .sq-refine-v3-choice[hidden]{display:none!important}
+#MainContent [data-sq-tactical-colors] small{font-size:11px;white-space:nowrap}
+#MainContent .sq-tactical-color-results__head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:0 0 18px;font-size:13px}
+#MainContent .sq-tactical-color-results__head p{margin:0}
+#MainContent .sq-tactical-color-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:30px 24px;list-style:none;margin:0;padding:0}
+#MainContent .sq-tactical-color-grid>li{min-width:0;margin:0;padding:0}
+#MainContent .sq-tactical-color-card{display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;font-size:14px;line-height:1.5}
+#MainContent .sq-tactical-color-card__media{display:flex;position:relative;aspect-ratio:1;align-items:center;justify-content:center;background:#fff}
+#MainContent .sq-tactical-color-card img{width:100%;height:100%;object-fit:contain}
+#MainContent .sq-tactical-color-card__badge{position:absolute;right:8px;top:8px;padding:5px 10px;border-radius:20px;background:#edf0e9;font-size:12px}
+#MainContent .sq-tactical-color-card__price{font-size:13px}
+@media(max-width:900px){#MainContent .sq-tactical-color-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 14px}#MainContent .sq-tactical-color-card{font-size:12px}}
+</style>
+{% endif %}
