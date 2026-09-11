@@ -53,25 +53,36 @@ jobs:
                 if(x>=0&&x<png.width&&y>=0&&y<png.height){const i=(y*png.width+x)*4;s.bodyPixel=Array.from(png.data.subarray(i,i+3))}
                 r.states.push(s);
               }
+              async function moveToRatio(f){
+                if(size.width>900){await side.evaluate((e,f)=>e.scrollTop=(e.scrollHeight-e.clientHeight)*f,f)}
+                else {await side.evaluate((e,f)=>{const r=e.getBoundingClientRect();window.scrollBy({top:r.top-18+Math.max(0,r.height-innerHeight+36)*f,behavior:'instant'})},f)}
+                await p.waitForTimeout(350);
+              }
               await snap('initial');
               const details=side.locator(':scope > details');
               r.groups=await details.locator(':scope > summary').allTextContents();
               for(let i=0;i<await details.count();i++){const d=details.nth(i);if(!await d.evaluate(e=>e.open))await d.locator(':scope > summary').click()}
-              await side.scrollIntoViewIfNeeded();await side.evaluate(e=>e.scrollTop=0);await snap('expanded-top');
-              for(const [label,ratio] of [['middle',0.5],['bottom',1],['return',0]]){await side.evaluate((e,f)=>e.scrollTop=(e.scrollHeight-e.clientHeight)*f,ratio);await p.waitForTimeout(350);await snap(label)}
+              await side.scrollIntoViewIfNeeded();await moveToRatio(0);await snap('expanded-top');
+              for(const [label,ratio] of [['middle',0.5],['bottom',1],['return',0]]){await moveToRatio(ratio);await snap(label)}
               if(size.width>900){const box=await side.boundingBox();await p.mouse.move(box.x+box.width/2,Math.min(size.height-40,Math.max(40,box.y+160)));await p.mouse.wheel(0,600);await p.waitForTimeout(400);await snap('wheel-down');await p.mouse.wheel(0,-600);await p.waitForTimeout(400);await snap('wheel-up')}
-              await p.evaluate(()=>window.scrollBy(0,500));await p.waitForTimeout(300);await snap('page-scroll');
+              await p.evaluate(()=>window.scrollBy(0,500));await p.waitForTimeout(350);await snap('page-scroll');
               r.whiteBody=r.states.every(s=>s.background==='rgb(255, 255, 255)');
+              r.whiteBodyPixels=r.states.every(s=>s.bodyPixel?.every(v=>v===255));
+              r.overlayRemoved=r.states.every(s=>s.before.content==='none');
               r.headerNavy=r.states.every(s=>s.title?.background==='rgb(8, 40, 63)');
               r.headerFullWidth=r.states.every(s=>Math.abs(s.title.width-(s.rect.width-2))<=3);
-              r.scrollExercised=r.states.some(s=>s.scrollTop>100);
-            }catch(e){r.failure=String(e);await p.screenshot({path:`out/${tag}-error.png`}).catch(()=>{})}
+              r.scrollExercised=size.width>900?r.states.some(s=>s.scrollTop>100):(Math.max(...r.states.map(s=>s.windowY))-Math.min(...r.states.map(s=>s.windowY))>100);
+              r.passed=r.status===200&&r.whiteBody&&r.whiteBodyPixels&&r.overlayRemoved&&r.headerNavy&&r.headerFullWidth&&r.scrollExercised&&r.errors.length===0;
+              if(!r.passed)r.failure='Sidebar regression assertion failed; see report.json';
+            }catch(e){r.failure=String(e);r.passed=false;await p.screenshot({path:`out/${tag}-error.png`}).catch(()=>{})}
             await ctx.close();
           }
           await browser.close();
           fs.writeFileSync('out/report.json',JSON.stringify(results,null,2));
-          console.log('FLAGS_SIDEBAR_REPORT',JSON.stringify(results,null,2));
-          if(results.some(r=>r.failure))process.exitCode=1;
+          const summary=results.map(({viewport,whiteBody,whiteBodyPixels,overlayRemoved,headerNavy,headerFullWidth,scrollExercised,errors,passed,failure})=>({viewport,whiteBody,whiteBodyPixels,overlayRemoved,headerNavy,headerFullWidth,scrollExercised,errors,passed,failure}));
+          console.log('FLAGS_SIDEBAR_SUMMARY',JSON.stringify(summary));
+          if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'## Flags sidebar scroll regression\n\n```json\n'+JSON.stringify(summary,null,2)+'\n```\n');
+          if(results.some(r=>!r.passed))process.exitCode=1;
           EOF
           node audit.mjs
       - uses: actions/upload-artifact@v4
