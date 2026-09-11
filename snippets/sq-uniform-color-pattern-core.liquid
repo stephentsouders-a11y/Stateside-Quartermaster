@@ -18,12 +18,12 @@ html.sq-ucp-filtered #MainContent.sq-refine-v3-active .sq-refine-v3-results>:not
 (function(){
   'use strict';
   var configNode=document.querySelector('[data-sq-ucp-config]'),config=JSON.parse(configNode.textContent),query=new URLSearchParams(location.search);
-  var activeRoot=query.get('sq_root')||config.handle;if(['uniforms','safety-rescue-climbing'].indexOf(activeRoot)===-1||window.__sqUniformColor)return;
+  var activeRoot=query.get('sq_root')||config.handle;if(['uniforms','body-armor-ballistic-protection','safety-rescue-climbing'].indexOf(activeRoot)===-1||window.__sqUniformColor)return;
   var PARAM='sq_ucp',selected=query.getAll(PARAM),main=document.getElementById('MainContent'),group,catalog,counts;
-  var api=window.__sqUniformColor={version:'2026-09-11.1',ready:false,total:0,choices:[],resultIds:[]};
+  var api=window.__sqUniformColor={version:'2026-09-11.2',ready:false,total:0,choices:[],resultIds:[]};
   if(selected.length)document.documentElement.classList.add('sq-ucp-pending');
   function norm(v){return String(v||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
-  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]})}
   function key(v){return norm(v).replace(/ /g,'-')}
   function appearance(raw,titleMode){
     var n=norm(String(raw||'').replace(/^\d+[a-z]?\.\s*/i,'').replace(/\([^)]*\)/g,'').replace(/,.*$/,'').replace(/\b\d+\s*-?\s*pack\b/gi,''));
@@ -155,7 +155,7 @@ html.sq-ucp-filtered #MainContent.sq-refine-v3-active .sq-refine-v3-results>:not
     try{catalog=await loadCatalog();renderChoices();renderResults();api.total=catalog.length;api.ready=true;main.dataset.sqUniformColorReady='true'}catch(e){api.error=String(e.message||e);group.innerHTML='<summary>Shop by Color / Pattern</summary><p class="sq-ucp-status" role="alert">Colors could not load. <button type="button" data-sq-ucp-retry>Retry</button></p>';group.open=true;group.querySelector('button').addEventListener('click',function(){location.reload()});if(selected.length){var surface=document.createElement('section');surface.dataset.sqUcpResults='error';surface.innerHTML='<p role="alert">Color-filtered products could not load. Retry or <a href="'+esc((function(){var u=new URL(location.href);u.searchParams.delete(PARAM);return u.pathname+u.search})())+'">clear the color filter</a>.</p>';main.querySelector('.sq-refine-v3-results').appendChild(surface);document.documentElement.classList.add('sq-ucp-filtered');document.documentElement.classList.remove('sq-ucp-pending')}}
     return true;
   }
-  document.addEventListener('change',function(e){var input=e.target;if(!selected.length||!input.matches('.sq-refine-v3-sidebar input[data-kind="structural"]'))return;e.stopImmediatePropagation();var u=new URL(input.checked?input.dataset.target:'/collections/uniforms',location.origin);selected.forEach(function(v){u.searchParams.append(PARAM,v)});['filter.p.vendor','filter.p.product_type','filter.v.availability','sq_per_page','preview_theme_id'].forEach(function(k){if(!u.searchParams.has(k))query.getAll(k).forEach(function(v){u.searchParams.append(k,v)})});u.searchParams.delete('page');u.searchParams.delete('sq_view_page');location.assign(u.pathname+u.search)},true);
+  document.addEventListener('change',function(e){var input=e.target;if(!selected.length||!input.matches('.sq-refine-v3-sidebar input[data-kind="structural"]'))return;e.stopImmediatePropagation();var u=new URL(input.checked?input.dataset.target:'/collections/'+encodeURIComponent(activeRoot),location.origin);selected.forEach(function(v){u.searchParams.append(PARAM,v)});['filter.p.vendor','filter.p.product_type','filter.v.availability','sq_per_page','preview_theme_id'].forEach(function(k){if(!u.searchParams.has(k))query.getAll(k).forEach(function(v){u.searchParams.append(k,v)})});u.searchParams.delete('page');u.searchParams.delete('sq_view_page');location.assign(u.pathname+u.search)},true);
   var observer=new MutationObserver(function(){if(main&&main.dataset.sqRefineV3Ready==='true'){observer.disconnect();launch()}});if(main)observer.observe(main,{attributes:true,attributeFilter:['data-sq-refine-v3-ready']});launch();
   api.appearance=appearance;api.unpack=unpack;api.otherVariants=otherVariants;
 })();
