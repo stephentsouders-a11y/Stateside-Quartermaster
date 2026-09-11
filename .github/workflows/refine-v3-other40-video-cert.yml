@@ -1,4 +1,5 @@
 name: Refine V3 remaining 40 Chromium video cert
+# Full rerun after shared first-paint legacy isolation repair.
 on:
   push:
     branches: [refine-restart-v3]
