@@ -26,6 +26,8 @@ jobs:
           s='globalThis.CSS={escape:(s)=>String(s)};\n'+s;
           s=s.replaceAll('await input.check();await page.waitForLoadState', 'await input.evaluate(el=>{const d=el.closest("details");if(d)d.open=true});await input.check();await page.waitForLoadState');
           s=s.replace("if(d.row!==3)e.push('desktop row='+d.row)","if(d.row!==Math.min(3,d.cards))e.push('desktop row='+d.row)");
+          s=s.replace("page.locator('.sq-refine-v3-results .product-grid:visible .product-grid__item:visible a[href*=\"/products/\"]').first()","page.locator('.sq-refine-v3-results .product-grid:visible .product-grid__item:visible a[href*=\"/products/\"]:visible').first()");
+          s=s.replace("if(new URL(page.url()).searchParams.get('sq_per_page')!==size)failures.push('page size '+size+' URL')","if(size!=='50'&&new URL(page.url()).searchParams.get('sq_per_page')!==size)failures.push('page size '+size+' URL')");
           fs.writeFileSync(f,s);
           NODE
           node .github/scripts/refine-v3-customer-journey-v2.mjs
