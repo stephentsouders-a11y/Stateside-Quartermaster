@@ -1,5 +1,5 @@
 {% doc %}
-Keeps exactly one customer-visible Refine V3 product grid authoritative. Legacy-heavy roots can expose a second native product surface after V3 is ready, while some PBTL roots can hide the V3 surface on desktop after the initial rescue. This guard copies cards only when needed, keeps the V3 results surface visible, and hides overlapping product-bearing surfaces outside Refine V3. State Guard remains untouched.
+Keeps exactly one customer-visible Refine V3 product grid authoritative. Legacy-heavy roots can expose additional product surfaces after V3 is ready, including secondary grids inside the V3 results container. Some PBTL roots also retain hidden product-card state even after the authoritative grid itself is exposed. This guard copies cards only when needed, makes the authoritative V3 cards visible, and hides every other product-bearing grid. State Guard remains untouched.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 <script data-sq-refine-v3-visible-grid-rescue>
@@ -30,16 +30,25 @@ Keeps exactly one customer-visible Refine V3 product grid authoritative. Legacy-
       if(el.classList&&el.classList.contains('product-grid'))el.style.setProperty('display','grid','important');
       else el.style.setProperty('display','block','important');
       el.style.setProperty('visibility','visible','important');
-      el.style.removeProperty('opacity');
+      el.style.setProperty('opacity','1','important');
     }
   }
-  function hideDuplicate(grid,authoritative,keep){
+  function exposeCards(grid){
+    cards(grid).forEach(function(card){
+      card.hidden=false;
+      card.removeAttribute('aria-hidden');
+      card.style.setProperty('display','block','important');
+      card.style.setProperty('visibility','visible','important');
+      card.style.setProperty('opacity','1','important');
+    });
+  }
+  function hideGrid(grid,authoritative){
     if(!grid||grid===authoritative||authoritative.contains(grid)||grid.contains(authoritative))return;
-    const paths=productPaths(grid);
-    if(!paths.size||![...paths].some(function(path){return keep.has(path)}))return;
+    if(!cards(grid).length)return;
     const host=grid.closest('collection-component');
-    const target=host&&main.contains(host)&&!host.contains(authoritative)?host:grid;
-    if(target.closest('.sq-refine-v3-results'))return;
+    const authoritativeHost=authoritative.closest('collection-component');
+    let target=grid;
+    if(host&&main.contains(host)&&host!==authoritativeHost&&!host.contains(authoritative))target=host;
     target.hidden=true;
     target.setAttribute('aria-hidden','true');
     target.setAttribute('data-sq-refine-v3-duplicate-surface','true');
@@ -71,8 +80,8 @@ Keeps exactly one customer-visible Refine V3 product grid authoritative. Legacy-
     }
     authoritative.classList.add('product-grid','sq-v3-authoritative-grid');
     expose(authoritative,results);
-    const keep=productPaths(authoritative);
-    [...main.querySelectorAll('.product-grid')].forEach(function(grid){hideDuplicate(grid,authoritative,keep)});
+    exposeCards(authoritative);
+    [...main.querySelectorAll('.product-grid')].forEach(function(grid){hideGrid(grid,authoritative)});
     main.dataset.sqRefineV3VisibleGridRescued='true';
     main.dataset.sqRefineV3SingleProductSurface='true';
     return visible(authoritative)&&cards(authoritative).some(visible);
@@ -81,7 +90,11 @@ Keeps exactly one customer-visible Refine V3 product grid authoritative. Legacy-
   const observer=new MutationObserver(function(records){
     for(const record of records){
       if(record.type==='childList'&&record.addedNodes&&record.addedNodes.length){schedule();return}
-      if(record.type==='attributes'){schedule();return}
+      if(record.type==='attributes'){
+        const target=record.target;
+        if(target&&target.nodeType===1&&target.closest&&target.closest('.sq-refine-v3-results,.product-grid,collection-component')){schedule();return}
+        if(record.attributeName==='data-sq-refine-v3-ready'){schedule();return}
+      }
     }
   });
   observer.observe(main,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','data-sq-refine-v3-ready']});
