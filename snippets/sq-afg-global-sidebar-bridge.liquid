@@ -1,0 +1,28 @@
+{% doc %}
+Moves the Armed Forces Gear vendor-only branch directory into the same global four-column collection layout used elsewhere: Refine Products in column one and three branch cards across columns two through four. This preserves the vendor-only branch universe and removes any duplicate/horizontal facet presentation.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle == 'armed-forces-gear' %}
+<style data-sq-afg-global-sidebar-bridge-v1>
+#MainContent .sq-global-refine-main .sq-afg-branch-section{margin:0!important;width:100%!important;max-width:none!important}
+#MainContent .sq-global-refine-main .sq-afg-branch-section [class*="grid"]{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+@media(max-width:900px){#MainContent .sq-global-refine-main .sq-afg-branch-section [class*="grid"]{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media(max-width:600px){#MainContent .sq-global-refine-main .sq-afg-branch-section [class*="grid"]{grid-template-columns:1fr!important}}
+</style>
+<script data-sq-afg-global-sidebar-bridge-v1>
+(function(){
+  if(window.__sqAfgGlobalSidebarBridgeV1)return;window.__sqAfgGlobalSidebarBridgeV1=true;
+  var main=document.getElementById('MainContent');if(!main)return;var busy=false;
+  function run(){if(busy)return;busy=true;try{
+    var target=main.querySelector('.sq-afg-branch-section');if(!target)return;
+    var layout=main.querySelector('.sq-global-refine-layout'),side,body;
+    if(!layout){layout=document.createElement('div');layout.className='sq-global-refine-layout';side=document.createElement('aside');side.className='sq-global-refine-sidebar';side.setAttribute('aria-label','Refine products');side.dataset.mobileCollapsed=matchMedia('(max-width:900px)').matches?'true':'false';body=document.createElement('div');body.className='sq-global-refine-main';target.parentNode.insertBefore(layout,target);layout.appendChild(side);layout.appendChild(body)}else{side=layout.querySelector(':scope>.sq-global-refine-sidebar');body=layout.querySelector(':scope>.sq-global-refine-main')}
+    if(layout.compareDocumentPosition(target)&Node.DOCUMENT_POSITION_PRECEDING)target.parentNode.insertBefore(layout,target);
+    if(body&&target.parentNode!==body)body.appendChild(target);
+    main.querySelectorAll('.sq-facet-browser,.sq-maker-browser,[data-sq-facet-browser],.sqsg-facet').forEach(function(x){x.style.setProperty('display','none','important')});
+  }finally{busy=false}}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();
+  [100,350,800,1500,3000,5500,9000].forEach(function(ms){setTimeout(run,ms)});
+  new MutationObserver(function(){setTimeout(run,30)}).observe(main,{childList:true,subtree:true});
+})();
+</script>
+{% endif %}
