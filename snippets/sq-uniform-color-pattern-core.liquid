@@ -23,7 +23,7 @@ html.sq-ucp-filtered #MainContent.sq-refine-v3-active .sq-refine-v3-results>:not
   var api=window.__sqUniformColor={version:'2026-09-11.2',ready:false,total:0,choices:[],resultIds:[]};
   if(selected.length)document.documentElement.classList.add('sq-ucp-pending');
   function norm(v){return String(v||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
-  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]})}
+  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function key(v){return norm(v).replace(/ /g,'-')}
   function appearance(raw,titleMode){
     var n=norm(String(raw||'').replace(/^\d+[a-z]?\.\s*/i,'').replace(/\([^)]*\)/g,'').replace(/,.*$/,'').replace(/\b\d+\s*-?\s*pack\b/gi,''));
