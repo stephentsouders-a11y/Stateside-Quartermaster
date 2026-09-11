@@ -24,7 +24,7 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Build v6 customer-click harness
+      - name: Build v7 customer-click harness
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -34,15 +34,15 @@ jobs:
           if old not in src:
               raise SystemExit('filter click pattern not found')
           src=src.replace(old,new,1)
-          Path('.github/scripts/refine-v3-button01-final-cert-v6-runtime.mjs').write_text(src)
+          Path('.github/scripts/refine-v3-button01-final-cert-v7-runtime.mjs').write_text(src)
           PY
-      - name: Run final button 01 Chromium certification v6
-        run: node .github/scripts/refine-v3-button01-final-cert-v6-runtime.mjs
+      - name: Run final button 01 Chromium certification v7
+        run: node .github/scripts/refine-v3-button01-final-cert-v7-runtime.mjs
       - name: Upload final visual evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: button-01-final-v6
+          name: button-01-final-v7
           path: audit-evidence/button-01/final-v5
           if-no-files-found: warn
           retention-days: 14
