@@ -1,0 +1,76 @@
+name: Refine V3 outlier cold Chromium retest
+on:
+  push:
+    paths:
+      - '.github/workflows/refine-v3-outlier-cold-retest-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  retest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium Playwright
+        run: |
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Three cold samples per outlier
+        run: |
+          cat > retest.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const BASE='https://www.statesideqm.com', THEME='158561894555';
+          const tests=[
+            ['Books mobile','/collections/literature','mobile',{width:390,height:844},'v3'],
+            ['Armored Vehicles desktop','/pages/armored-vehicles-purchase-inquiry','desktop',{width:1440,height:1000},'legacy'],
+            ['Footwear mobile','/collections/footwear-gloves-eyewear','mobile',{width:390,height:844},'v3'],
+            ['Army National Guard desktop','/collections/army-national-guard-series','desktop',{width:1440,height:1000},'v3'],
+            ['U.S. Coast Guard mobile','/collections/products-built-for-the-line-u-s-coast-guard','mobile',{width:390,height:844},'v3'],
+            ['K9 desktop','/collections/k9-dog-gear','desktop',{width:1440,height:1000},'v3'],
+            ['Air National Guard desktop','/collections/air-national-guard-series','desktop',{width:1440,height:1000},'v3'],
+            ['Apparel desktop','/collections/apparel','desktop',{width:1440,height:1000},'v3'],
+            ['Knives desktop','/collections/knives-axes-cutlery','desktop',{width:1440,height:1000},'v3'],
+            ['Morale Patches desktop','/collections/morale-patches-tactical-id','desktop',{width:1440,height:1000},'v3']
+          ];
+          const browser=await chromium.launch({headless:true}); let fail=0;
+          const all=[];
+          for(const [name,path,device,viewport,type] of tests){
+            const samples=[];
+            for(let i=1;i<=3;i++){
+              const ctx=await browser.newContext({viewport}); const page=await ctx.newPage();
+              const pageErrors=[]; page.on('pageerror',e=>pageErrors.push(String(e)));
+              const u=new URL(path,BASE); u.searchParams.set('preview_theme_id',THEME);
+              const start=Date.now(); let status=null, usable=null;
+              try{
+                const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000}); status=r?.status()??null;
+                const end=Date.now()+12000;
+                while(Date.now()<end){
+                  const ok=await page.evaluate((type)=>{const v=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};const m=document.querySelector('#MainContent');if(!m)return false;if(type==='legacy')return true;const sides=[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(v);const grids=[...m.querySelectorAll('.product-grid')].filter(g=>v(g)&&[...g.querySelectorAll(':scope>.product-grid__item')].some(c=>v(c)&&c.querySelector('a[href*="/products/"]')));return sides.length===1&&grids.length===1},type);
+                  if(ok){usable=Date.now()-start;break} await page.waitForTimeout(100);
+                }
+              }catch{}
+              const state=await page.evaluate((type)=>{const v=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};const m=document.querySelector('#MainContent');const grids=m?[...m.querySelectorAll('.product-grid')].filter(g=>v(g)&&[...g.querySelectorAll(':scope>.product-grid__item')].some(c=>v(c)&&c.querySelector('a[href*="/products/"]'))):[];const sides=m?[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(v):[];const fcp=performance.getEntriesByType('paint').find(x=>x.name==='first-contentful-paint')?.startTime??null;return{grids:grids.length,cards:grids[0]?[...grids[0].querySelectorAll(':scope>.product-grid__item')].filter(v).length:0,sidebars:sides.length,fcp,rescue:!!document.querySelector('[data-sq-refine-v3-visible-grid-rescue]')};},type).catch(()=>({}));
+              samples.push({sample:i,status,usable,fcp:state.fcp??null,grids:state.grids??null,cards:state.cards??null,sidebars:state.sidebars??null,pageErrors:pageErrors.length});
+              console.log(`SAMPLE ${name} #${i} status=${status} usable=${usable} fcp=${state.fcp==null?'n/a':Math.round(state.fcp)} grids=${state.grids} cards=${state.cards} sidebars=${state.sidebars}`);
+              await ctx.close();
+            }
+            const good=samples.filter(x=>x.status===200&&x.pageErrors===0&&(type==='legacy'||(x.grids===1&&x.cards>0&&x.sidebars===1)));
+            const times=good.map(x=>x.usable).filter(Number.isFinite).sort((a,b)=>a-b);
+            const med=times.length?times[Math.floor(times.length/2)]:null;
+            const fcps=good.map(x=>x.fcp).filter(Number.isFinite).sort((a,b)=>a-b);
+            const medFcp=fcps.length?fcps[Math.floor(fcps.length/2)]:null;
+            const ok=good.length>=2&&med!==null&&med<=3500&&(medFcp===null||medFcp<=2500);
+            console.log(`${ok?'PASS':'FAIL'} OUTLIER ${name} good=${good.length}/3 medianUsable=${med} medianFCP=${medFcp}`);
+            all.push({name,good:good.length,medianUsable:med,medianFCP:medFcp,samples}); if(!ok)fail++;
+          }
+          await browser.close();
+          console.log('OUTLIER_SUMMARY '+JSON.stringify({tests:tests.length,failures:fail,all}));
+          if(fail)process.exit(2);
+          EOF
+          node retest.mjs
