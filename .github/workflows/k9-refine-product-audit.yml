@@ -1,0 +1,92 @@
+name: K9 Refine Products Chromium Audit
+on:
+  push:
+    paths:
+      - '.github/workflows/k9-refine-product-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Audit every K9 refine option
+        run: |
+          cat > k9-audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const URL='https://www.statesideqm.com/collections/k9-dog-gear';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1200}});
+          page.setDefaultTimeout(15000);
+          const report={url:URL,base:{},sections:[],errors:[]};
+          page.on('console',m=>{if(m.type()==='error')report.errors.push(m.text())});
+          const goto=async()=>{await page.goto(URL,{waitUntil:'domcontentloaded',timeout:60000});await page.locator('#MainContent').waitFor();await page.waitForTimeout(2500)};
+          const titles=async()=>page.locator('#MainContent a[href*="/products/"]').evaluateAll(as=>{
+            const out=[]; const seen=new Set();
+            for(const a of as){
+              const r=a.getBoundingClientRect(),s=getComputedStyle(a); if(r.width<2||r.height<2||s.display==='none'||s.visibility==='hidden')continue;
+              const href=(a.href||'').split('?')[0]; if(seen.has(href))continue; seen.add(href);
+              const card=a.closest('li,.card-wrapper,.product-card-wrapper,.grid__item,.sq-product-card')||a;
+              const t=(card.querySelector('h3,h2,.card__heading,.product-card__title')?.textContent||a.textContent||'').replace(/\s+/g,' ').trim();
+              if(t)out.push({title:t,href});
+            }
+            return out.slice(0,30);
+          });
+          await goto();
+          const baseProducts=await titles();
+          report.base={title:await page.title(),sidebarVisible:await page.locator('.sq-global-refine-sidebar').isVisible().catch(()=>false),productCountVisible:baseProducts.length,containsCombatSuit:baseProducts.some(p=>/Army Tactical Desert Combat Suits with Knee Pads/i.test(p.title)),sample:baseProducts.slice(0,10)};
+          const details=page.locator('.sq-global-refine-sidebar details');
+          const n=await details.count();
+          for(let i=0;i<n;i++){
+            await goto();
+            const d=page.locator('.sq-global-refine-sidebar details').nth(i);
+            const section=(await d.locator('summary').innerText().catch(()=>`section-${i}`)).replace(/\s+/g,' ').trim();
+            if((await d.getAttribute('open'))===null)await d.locator('summary').click().catch(()=>{});
+            const inputs=d.locator('input[type="checkbox"],input[type="radio"]');
+            const count=await inputs.count();
+            const sec={section,count,options:[]};
+            for(let j=0;j<count;j++){
+              await goto();
+              const current=page.locator('.sq-global-refine-sidebar details').nth(i);
+              if((await current.getAttribute('open'))===null)await current.locator('summary').click().catch(()=>{});
+              const inp=current.locator('input[type="checkbox"],input[type="radio"]').nth(j);
+              const id=await inp.getAttribute('id');
+              const value=await inp.getAttribute('value');
+              let label='';
+              if(id) label=(await page.locator(`label[for="${id}"]`).innerText().catch(()=>''));
+              if(!label) label=(await inp.evaluate(el=>el.closest('label')?.innerText||el.getAttribute('aria-label')||el.value||''));
+              label=label.replace(/\s+/g,' ').trim();
+              let ok=true,err=null;
+              try{
+                await inp.check({force:true});
+                await page.waitForTimeout(1800);
+              }catch(e){ok=false;err=String(e).split('\n')[0]}
+              const selectedUrl=page.url();
+              const products=ok?await titles():[];
+              sec.options.push({label,value,ok,error:err,url:selectedUrl,resultCountSample:products.length,products});
+            }
+            report.sections.push(sec);
+          }
+          fs.writeFileSync('k9-refine-audit.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          await page.screenshot({path:'k9-refine-live.png',fullPage:true}).catch(()=>{});
+          await browser.close();
+          EOF
+          node k9-audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k9-refine-audit
+          path: |
+            k9-refine-audit.json
+            k9-refine-live.png
