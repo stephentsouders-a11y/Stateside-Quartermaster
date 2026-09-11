@@ -1,0 +1,57 @@
+name: Tactical Gear color-pattern Chromium verification
+on:
+  push:
+    paths:
+      - '.github/workflows/tactical-color-pattern-verify.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null
+          npm install playwright@1.55.0 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Inspect real storefront and preview
+        run: |
+          mkdir -p out
+          cat > inspect.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          const browser=await chromium.launch({headless:true});
+          for(const [name,suffix] of [['draft','?preview_theme_id=158561894555'],['live','']]) {
+            const context=await browser.newContext({viewport:{width:1440,height:1000}});
+            const page=await context.newPage();const errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            const response=await page.goto('https://www.statesideqm.com/collections/tactical-gear'+suffix,{waitUntil:'domcontentloaded',timeout:90000});
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:20000}).catch(()=>{});
+            await page.waitForTimeout(2000);
+            const state=await page.evaluate(()=>({theme:window.Shopify?.theme,main:{...document.querySelector('#MainContent')?.dataset},groups:[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar details')].map(d=>({title:d.querySelector('summary')?.textContent,inputs:[...d.querySelectorAll('input')].map(i=>({label:i.closest('label')?.textContent,...i.dataset,name:i.name,value:i.value})).slice(0,12)})),native:[...document.querySelectorAll('#MainContent input[name^="filter."]')].map(i=>({name:i.name,value:i.value})).filter((v,i,a)=>a.findIndex(x=>x.name===v.name&&x.value===v.value)===i),cards:document.querySelectorAll('.sq-refine-v3-results .product-grid>li').length,scriptKeys:[...document.querySelectorAll('script')].flatMap(s=>[...s.attributes].map(a=>a.name)).filter(x=>/refine|color|facet/.test(x))}));
+            const html=await page.content();fs.writeFileSync('out/'+name+'.html',html);
+            fs.writeFileSync('out/'+name+'.json',JSON.stringify({status:response?.status(),errors,state},null,2));
+            console.log('TACTICAL_STATE '+name+' '+JSON.stringify({status:response?.status(),errors,state}));
+            await page.locator('.sq-refine-v3-sidebar').scrollIntoViewIfNeeded().catch(()=>{});
+            await page.screenshot({path:'out/'+name+'.png'});
+            if(name==='draft') {
+              const products=await page.evaluate(async()=>{const r=await fetch('/collections/tactical-gear/products.json?limit=250');const j=await r.json();return (j.products||[]).map(p=>({handle:p.handle,title:p.title,tags:p.tags,options:p.options,variants:p.variants.map(v=>({option1:v.option1,option2:v.option2,option3:v.option3}))}))});
+              fs.writeFileSync('out/product-sample.json',JSON.stringify(products,null,2));
+              console.log('TACTICAL_COLOR_SAMPLE '+JSON.stringify(products.filter(p=>p.options.some(o=>/colou?r|pattern|camo/i.test(o.name))).slice(0,4)));
+            }
+            await context.close();
+          }
+          await browser.close();
+          EOF
+          node inspect.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tactical-color-pattern-inspection
+          path: out
+          retention-days: 7
