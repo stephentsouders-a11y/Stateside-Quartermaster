@@ -17,39 +17,57 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Map malformed AFG script to owning source
+      - name: Capture malformed AFG script and source context
         run: |
           cat > trace.mjs <<'EOF'
+          import fs from 'node:fs';
           import { chromium } from 'playwright';
           const url='https://www.statesideqm.com/collections/armed-forces-gear?preview_theme_id=158561894555';
           const browser=await chromium.launch({headless:true});
-          for(let attempt=1;attempt<=6;attempt++){
+          let completed=false;
+          for(let attempt=1;attempt<=6&&!completed;attempt++){
             const context=await browser.newContext({viewport:{width:1440,height:1000}});
-            const page=await context.newPage(); let detail=null;
-            const cdp=await context.newCDPSession(page); await cdp.send('Runtime.enable');
-            cdp.on('Runtime.exceptionThrown',e=>{const d=e.exceptionDetails||{};const desc=d.exception?.description||'';if(desc.includes('SyntaxError'))detail={description:desc,line:Number(d.lineNumber||0),column:Number(d.columnNumber||0),url:d.url||''};});
+            const page=await context.newPage();
+            const cdp=await context.newCDPSession(page); await cdp.send('Runtime.enable'); await cdp.send('Debugger.enable');
+            let detail=null,scriptSource='';
+            cdp.on('Runtime.exceptionThrown',async e=>{
+              const d=e.exceptionDetails||{},desc=d.exception?.description||'';
+              if(!desc.includes('SyntaxError'))return;
+              detail={description:desc,line:Number(d.lineNumber||0),column:Number(d.columnNumber||0),url:d.url||'',scriptId:d.scriptId||''};
+              try{if(d.scriptId){const x=await cdp.send('Debugger.getScriptSource',{scriptId:d.scriptId});scriptSource=x.scriptSource||'';}}catch(_){}
+            });
             let r=null;try{r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000})}catch(e){console.log('GOTO_ERROR '+String(e))}
-            const status=r?.status()||0;console.log(`ATTEMPT ${attempt} HTTP ${status}`);
+            const status=r?.status()||0; console.log(`ATTEMPT ${attempt} HTTP ${status}`);
             if(status===200){
-              await page.waitForTimeout(2500);
-              const raw=await r.text();
-              const lines=raw.split(/\r?\n/);
+              await page.waitForTimeout(3000);
+              const raw=await r.text(); fs.writeFileSync('raw.html',raw);
+              fs.writeFileSync('detail.json',JSON.stringify(detail,null,2));
+              fs.writeFileSync('offending-script.js',scriptSource||'');
+              const lines=raw.split(/\r?\n/),target=Math.max(0,(detail?.line||30580)-1),a=Math.max(0,target-20),b=Math.min(lines.length,target+21);
+              fs.writeFileSync('raw-context.txt',lines.slice(a,b).map((x,i)=>String(a+i+1).padStart(6)+': '+x).join('\n'));
+              const scripts=[...raw.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].map((m,i)=>({i,attrs:m[1],text:m[2]})).filter(x=>/U\.S\. Air Force|U\.S\. Coast Guard|U\.S\. Space Force|U\.S\. Marine Corps|canonical|branch/i.test(x.text));
+              fs.writeFileSync('matching-scripts.txt',scripts.map(s=>`SCRIPT ${s.i} ATTRS ${s.attrs}\n${s.text}\n\n`).join(''));
               console.log('DETAIL '+JSON.stringify(detail));
-              const target=Math.max(0,(detail?.line||30580)-1);
-              console.log(`RAW_LINES ${lines.length} TARGET ${target+1}`);
-              for(let n=Math.max(0,target-12);n<Math.min(lines.length,target+13);n++)console.log(String(n+1).padStart(6)+': '+lines[n]);
-              const needles=['U.S. Air Force','U.S. Coast Guard','U.S. Space Force','U.S. Marine Corps',',,'];
-              for(const needle of needles){let from=0,hits=0;while((from=raw.indexOf(needle,from))!==-1&&hits<20){const a=Math.max(0,from-450),b=Math.min(raw.length,from+needle.length+700);console.log(`RAW_MATCH ${JSON.stringify(needle)} AT ${from}\n`+raw.slice(a,b));from+=needle.length;hits++;}}
-              const scriptInfo=[]; const re=/<script\b([^>]*)>([\s\S]*?)<\/script>/gi; let m,idx=0;
-              while((m=re.exec(raw))){const text=m[2]||'';if(/U\.S\. Air Force|U\.S\. Coast Guard|armed-forces|branch|refine/i.test(text)){scriptInfo.push({idx,start:m.index,end:re.lastIndex,attrs:m[1].slice(0,500),text:text.slice(0,20000)});}idx++;}
-              console.log('MATCHING_SCRIPT_COUNT '+scriptInfo.length);
-              for(const s of scriptInfo){console.log(`SCRIPT ${s.idx} START ${s.start} END ${s.end} ATTRS ${s.attrs}\n${s.text}`)}
-              const domScripts=await page.evaluate(()=>[...document.scripts].map((s,i)=>({i,id:s.id||'',src:s.src||'',type:s.type||'',parent:s.parentElement?.tagName||'',parentId:s.parentElement?.id||'',parentClass:s.parentElement?.className||'',text:(s.textContent||'').slice(0,20000)})).filter(x=>/U\.S\. Air Force|U\.S\. Coast Guard|armed-forces|branch|refine/i.test(x.text)));
-              console.log('DOM_MATCHING_SCRIPTS '+JSON.stringify(domScripts,null,2));
-              await context.close();await browser.close();process.exit(detail?0:3);
+              console.log(fs.readFileSync('raw-context.txt','utf8'));
+              console.log('OFFENDING_SCRIPT_START\n'+(scriptSource||'').slice(0,12000)+'\nOFFENDING_SCRIPT_END');
+              completed=true;
             }
-            await context.close();await new Promise(r=>setTimeout(r,attempt*3000));
+            await context.close();
+            if(!completed)await new Promise(r=>setTimeout(r,attempt*3000));
           }
-          await browser.close();process.exit(2);
+          await browser.close();
+          if(!completed)process.exit(2);
           EOF
           node trace.mjs
+      - name: Upload AFG diagnostic source
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: afg-malformed-script-source
+          path: |
+            raw.html
+            detail.json
+            offending-script.js
+            raw-context.txt
+            matching-scripts.txt
+          if-no-files-found: warn
