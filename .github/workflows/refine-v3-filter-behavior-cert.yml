@@ -1,0 +1,34 @@
+name: Refine V3 filter behavior certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-filter-behavior-cert.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  filters:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Click native and synthetic filters
+        run: |
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const B='https://www.statesideqm.com',T='158561894555',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const url=(path)=>{const u=new URL(path,B);u.searchParams.set('preview_theme_id',T);return u.toString()};
+          const browser=await chromium.launch({headless:true}),c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage();
+          async function ready(){let r;for(let a=0;a<4;a++){r=await p.goto(url('/collections/apparel'),{waitUntil:'domcontentloaded',timeout:70000}).catch(()=>null);if(r?.status()===200)break;await sleep(2500*(a+1))}if(r?.status()!==200)throw new Error('HTTP '+r?.status());await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});await sleep(1800)}
+          await ready();
+          const native=p.locator('.sq-refine-v3-sidebar input[data-kind=native][data-filter-name="filter.v.availability"][data-filter-value="1"]').first();if(!await native.count())throw new Error('native availability missing');let g=native.locator('xpath=ancestor::details[1]');if(await g.getAttribute('open')===null)await g.locator(':scope > summary').evaluate(e=>e.click());let before=p.url();await native.evaluate(e=>e.click());await p.waitForFunction(b=>location.href!==b,before,{timeout:30000});await p.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});let q=new URL(p.url());if(!q.searchParams.getAll('filter.v.availability').includes('1'))throw new Error('native URL failed '+p.url());if(!await p.locator('.sq-refine-v3-sidebar input[data-kind=native][data-filter-name="filter.v.availability"][data-filter-value="1"]').first().isChecked())throw new Error('native persistence failed');console.log('NATIVE AVAILABILITY PASS',p.url());
+          await ready();
+          const group=p.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group').filter({has:p.locator(':scope > summary',{hasText:/^Shop by Type$/})}).first();if(!await group.count())throw new Error('type group missing');if(await group.getAttribute('open')===null)await group.locator(':scope > summary').evaluate(e=>e.click());const synthetic=group.locator('input[data-sq-polish-param][data-sq-polish-value]').first();if(!await synthetic.count())throw new Error('synthetic type filter missing');const d=await synthetic.evaluate(i=>({name:i.dataset.sqPolishParam,value:i.dataset.sqPolishValue,text:(i.closest('label')?.textContent||'').trim()}));before=p.url();await synthetic.evaluate(e=>e.click());await p.waitForFunction(b=>location.href!==b,before,{timeout:30000});await p.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});q=new URL(p.url());if(!q.searchParams.getAll(d.name).includes(d.value))throw new Error('synthetic URL failed '+JSON.stringify(d)+' '+p.url());const persisted=await p.locator(`.sq-refine-v3-sidebar input[data-sq-polish-param="${d.name}"][data-sq-polish-value="${d.value.replace(/"/g,'\\"')}"]`).first().isChecked().catch(()=>false);if(!persisted)throw new Error('synthetic persistence failed '+JSON.stringify(d));console.log('SYNTHETIC TYPE PASS',JSON.stringify(d),p.url());
+          await c.close();await browser.close();
+          EOF
+          node cert.mjs
