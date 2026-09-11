@@ -8,8 +8,27 @@ Refine V3 root and child route and leaves State Guard Series untouched.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 <style data-sq-refine-v3-pagination-button-style>
+#MainContent .sq-refine-v3-pager{
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+  width:100%!important;
+  min-height:42px!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:12px!important;
+  margin:22px 0 8px!important;
+  position:relative!important;
+  z-index:2!important;
+}
 #MainContent .sq-refine-v3-pager a,
 #MainContent .sq-refine-v3-pager span{
+  display:inline-flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+  align-items:center!important;
+  justify-content:center!important;
+  min-height:38px!important;
   background:#0b3a63!important;
   color:#fff!important;
   border-color:#0b3a63!important;
@@ -21,7 +40,7 @@ Refine V3 root and child route and leaves State Guard Series untouched.
   color:#fff!important;
 }
 </style>
-<script data-sq-refine-v3-pagination-repair data-revision="direct-next-probe-20260911">
+<script data-sq-refine-v3-pagination-repair data-revision="retry-visible-pager-20260911-v3">
 (function(){
   if(window.__sqRefineV3PaginationRepair)return;
   window.__sqRefineV3PaginationRepair=true;
@@ -34,6 +53,7 @@ Refine V3 root and child route and leaves State Guard Series untouched.
   var main=document.getElementById('MainContent');
   if(!main)return;
 
+  function wait(ms){return new Promise(function(resolve){setTimeout(resolve,ms)})}
   function perPage(){
     var n=parseInt(q.get('sq_per_page')||'50',10);
     return [50,100,250].indexOf(n)>-1?n:50;
@@ -71,10 +91,25 @@ Refine V3 root and child route and leaves State Guard Series untouched.
     return Array.from(new Set(Array.from(grid.querySelectorAll('a[href*="/products/"]')).map(function(a){return a.getAttribute('href')||a.href}).filter(Boolean)));
   }
   async function nativePageHasProducts(page){
-    var r=await fetch(alternateUrl(page),{credentials:'same-origin',cache:'no-store'});
-    if(!r.ok)throw new Error('HTTP '+r.status+' for source page '+page);
-    var doc=new DOMParser().parseFromString(await r.text(),'text/html');
-    return productLinks(doc).length>0;
+    var lastStatus=0;
+    var lastError=null;
+    for(var attempt=0;attempt<5;attempt++){
+      try{
+        var r=await fetch(alternateUrl(page),{credentials:'same-origin',cache:'no-store'});
+        lastStatus=r.status;
+        if(r.ok){
+          var doc=new DOMParser().parseFromString(await r.text(),'text/html');
+          return productLinks(doc).length>0;
+        }
+        if(r.status!==429&&r.status<500)throw new Error('HTTP '+r.status+' for source page '+page);
+        lastError=new Error('HTTP '+r.status+' for source page '+page);
+      }catch(e){
+        lastError=e;
+        if(!/HTTP 429|HTTP 5\d\d|Failed to fetch|NetworkError/i.test(String(e&&e.message||e)))throw e;
+      }
+      if(attempt<4)await wait(Math.min(5000,500*Math.pow(2,attempt)));
+    }
+    throw lastError||new Error('HTTP '+lastStatus+' for source page '+page);
   }
   function pagerHost(){
     var grid=main.querySelector('.sq-refine-v3-results .product-grid');
@@ -130,28 +165,30 @@ Refine V3 root and child route and leaves State Guard Series untouched.
     try{
       var hasNext=await nativePageHasProducts(sourcePage);
       renderPager(pager,view,hasNext);
+      delete main.dataset.sqRefineV3PaginationRepairError;
       main.dataset.sqRefineV3PaginationRepaired='true';
       main.dataset.sqRefineV3PaginationCertified=(hasNext?'next-source-page-':'last-source-page-')+sourcePage;
       main.dataset.sqRefineV3PaginationPageSize=String(size);
+      main.dataset.sqRefineV3PaginationAttempts='retry-capable';
     }catch(e){
       main.dataset.sqRefineV3PaginationRepairError=String(e&&e.message||e);
       console.error('[SQ V3 pagination repair]',e);
     }
   }
-  function schedule(){
+  function schedule(delay){
     clearTimeout(window.__sqRefineV3PaginationTimer);
-    window.__sqRefineV3PaginationTimer=setTimeout(repair,60);
+    window.__sqRefineV3PaginationTimer=setTimeout(repair,typeof delay==='number'?delay:60);
   }
   function whenReady(){
-    if(main.dataset.sqRefineV3Ready==='true')schedule();
+    if(main.dataset.sqRefineV3Ready==='true')schedule(60);
     var obs=new MutationObserver(function(){
-      if(main.dataset.sqRefineV3Ready==='true')schedule();
+      if(main.dataset.sqRefineV3Ready==='true')schedule(80);
     });
     obs.observe(main,{childList:true,subtree:true,attributes:true,attributeFilter:['data-sq-refine-v3-ready']});
-    [250,900,1800].forEach(function(ms){setTimeout(function(){if(main.dataset.sqRefineV3Ready==='true')schedule()},ms)});
-    setTimeout(function(){obs.disconnect();if(main.dataset.sqRefineV3Ready==='true')schedule()},12000);
-    window.addEventListener('pageshow',schedule);
-    window.addEventListener('popstate',schedule);
+    [250,900,1800,4500,9000].forEach(function(ms){setTimeout(function(){if(main.dataset.sqRefineV3Ready==='true')schedule(30)},ms)});
+    setTimeout(function(){obs.disconnect();if(main.dataset.sqRefineV3Ready==='true')schedule(30)},14000);
+    window.addEventListener('pageshow',function(){schedule(40)});
+    window.addEventListener('popstate',function(){schedule(40)});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',whenReady,{once:true});
   else whenReady();
