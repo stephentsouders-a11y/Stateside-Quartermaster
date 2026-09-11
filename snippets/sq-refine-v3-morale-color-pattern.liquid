@@ -3,6 +3,7 @@ Adds the Morale Patches collection's existing color/pattern product tags to Refi
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle == 'morale-patches-tactical-id' %}
 <script type="application/json" data-sq-morale-color-tags>{{ collection.all_tags | json }}</script>
+<script type="application/json" data-sq-morale-color-fallback>["SQ Color/Pattern: Black","SQ Color/Pattern: Blue","SQ Color/Pattern: Brown / Tan","SQ Color/Pattern: Camouflage","SQ Color/Pattern: Gray","SQ Color/Pattern: Green","SQ Color/Pattern: Orange","SQ Color/Pattern: Pink","SQ Color/Pattern: Red","SQ Color/Pattern: White"]</script>
 <script data-sq-morale-color-controller>
 (function () {
   'use strict';
@@ -11,17 +12,31 @@ Adds the Morale Patches collection's existing color/pattern product tags to Refi
   var main = document.getElementById('MainContent');
   if (!main) return;
   var prefix = /^SQ Color\/Pattern:\s*/i;
-  var tags = [];
-  try { tags = JSON.parse(document.querySelector('[data-sq-morale-color-tags]').textContent); } catch (_) { return; }
-  tags = Array.from(new Set(tags.filter(function (tag) { return prefix.test(tag) && tag.replace(prefix, '').trim(); })));
-  tags.sort(function (a, b) { return a.replace(prefix, '').localeCompare(b.replace(prefix, ''), undefined, { sensitivity: 'base' }); });
+  function readJson(selector) {
+    var node = document.querySelector(selector);
+    if (!node) return [];
+    try { return JSON.parse(node.textContent) || []; } catch (_) { return []; }
+  }
+  var tags = readJson('[data-sq-morale-color-tags]').filter(function (tag) {
+    return prefix.test(tag) && tag.replace(prefix, '').trim();
+  });
+  if (!tags.length) tags = readJson('[data-sq-morale-color-fallback]');
+  tags = Array.from(new Set(tags.filter(function (tag) {
+    return prefix.test(tag) && tag.replace(prefix, '').trim();
+  })));
+  tags.sort(function (a, b) {
+    return a.replace(prefix, '').localeCompare(b.replace(prefix, ''), undefined, { sensitivity: 'base' });
+  });
   if (!tags.length) return;
   function install() {
     var side = main.querySelector('.sq-refine-v3-sidebar');
     if (!side || main.dataset.sqRefineV3Ready !== 'true') return false;
     if (side.querySelector('[data-sq-morale-color-pattern]')) return true;
     var groups = Array.from(side.querySelectorAll(':scope > details'));
-    var existing = groups.find(function (d) { return /color|colour|pattern/i.test((d.querySelector(':scope > summary') || {}).textContent || ''); });
+    var existing = groups.find(function (details) {
+      var summary = details.querySelector(':scope > summary');
+      return /color|colour|pattern/i.test(summary ? summary.textContent : '');
+    });
     if (existing && existing.querySelector('input')) {
       existing.querySelector(':scope > summary').textContent = 'Shop by Color / Pattern';
       existing.dataset.sqMoraleColorPattern = 'existing';
@@ -29,12 +44,14 @@ Adds the Morale Patches collection's existing color/pattern product tags to Refi
     }
     var group = existing || document.createElement('details');
     group.className = 'sq-refine-v3-group';
-    group.dataset.sqMoraleColorPattern = 'tags-v1';
+    group.dataset.sqMoraleColorPattern = 'tags-v2';
     var summary = document.createElement('summary');
     summary.textContent = 'Shop by Color / Pattern';
     var choices = document.createElement('div');
     choices.className = 'sq-refine-v3-choices';
-    var selected = new URLSearchParams(location.search).getAll('filter.p.tag').flatMap(function (v) { return v.split(','); });
+    var selected = new URLSearchParams(location.search).getAll('filter.p.tag').flatMap(function (value) {
+      return value.split(',');
+    });
     tags.forEach(function (tag) {
       var row = document.createElement('label');
       row.className = 'sq-refine-v3-choice';
@@ -46,10 +63,16 @@ Adds the Morale Patches collection's existing color/pattern product tags to Refi
       text.textContent = tag.replace(prefix, '').trim();
       input.addEventListener('change', function () {
         var url = new URL(location.href);
-        var values = url.searchParams.getAll('filter.p.tag').flatMap(function (v) { return v.split(','); }).filter(function (v) { return v !== tag; });
+        var values = url.searchParams.getAll('filter.p.tag').flatMap(function (value) {
+          return value.split(',');
+        }).filter(function (value) {
+          return value !== tag;
+        });
         if (input.checked) values.push(tag);
         url.searchParams.delete('filter.p.tag');
-        Array.from(new Set(values)).forEach(function (v) { url.searchParams.append('filter.p.tag', v); });
+        Array.from(new Set(values)).forEach(function (value) {
+          url.searchParams.append('filter.p.tag', value);
+        });
         url.searchParams.delete('page');
         url.searchParams.delete('sq_view_page');
         location.assign(url.pathname + '?' + url.searchParams.toString());
@@ -60,12 +83,20 @@ Adds the Morale Patches collection's existing color/pattern product tags to Refi
     group.replaceChildren(summary, choices);
     group.open = !!choices.querySelector('input:checked');
     group.dataset.active = group.open ? 'true' : 'false';
-    var after = groups.find(function (d) { return /manufacturer|vendor|availability|price/i.test((d.querySelector(':scope > summary') || {}).textContent || ''); });
+    var after = groups.find(function (details) {
+      var summaryNode = details.querySelector(':scope > summary');
+      return /manufacturer|vendor|availability|price/i.test(summaryNode ? summaryNode.textContent : '');
+    });
     side.insertBefore(group, after || null);
     return true;
   }
   if (install()) return;
-  var observer = new MutationObserver(function () { if (install()) { observer.disconnect(); clearTimeout(deadline); } });
+  var observer = new MutationObserver(function () {
+    if (install()) {
+      observer.disconnect();
+      clearTimeout(deadline);
+    }
+  });
   observer.observe(main, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-sq-refine-v3-ready'] });
   var deadline = setTimeout(function () { observer.disconnect(); }, 60000);
 })();
