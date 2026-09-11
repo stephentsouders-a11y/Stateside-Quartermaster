@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-# Real-user navigation trace: structural checkboxes navigate immediately, so click then assert destination state.
+# Latest capture-v2 certification trigger after Child Safety parent document-capture fix 6cad5bd.
 jobs:
   diagnose:
     runs-on: ubuntu-latest
