@@ -1,0 +1,84 @@
+name: Refine V3 placement certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-placement-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  placement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify V3 starts at original product position
+        run: |
+          cat > placement.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const BASE='https://www.statesideqm.com', THEME='158561894555';
+          const routes=[
+            ['/collections/apparel','Apparel'],
+            ['/collections/accessories-gifts-collectibles','Accessories'],
+            ['/collections/armed-forces-gear','Armed Forces Gear'],
+            ['/collections/literature','Books'],
+            ['/collections/military-schools-academies','Military Schools'],
+            ['/collections/law-enforcement-corrections','Law Enforcement']
+          ];
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          function url(path){const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()}
+          async function go(page,path){let last;for(let i=0;i<5;i++){try{const r=await page.goto(url(path),{waitUntil:'domcontentloaded',timeout:70000});if(r?.status()===200){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});await page.waitForSelector('#MainContent .sq-refine-v3-sidebar',{state:'visible',timeout:15000});await sleep(1000);return}last=new Error('HTTP '+(r?.status()||0))}catch(e){last=e}await sleep([2500,4500,7500,11000,16000][i])}throw last}
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1000}});
+          const page=await context.newPage();
+          const failures=[];
+          for(const [path,name] of routes){
+            try{
+              await go(page,path);
+              const d=await page.evaluate(()=>{
+                const m=document.querySelector('#MainContent');
+                const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};
+                const side=[...m.querySelectorAll('.sq-refine-v3-sidebar')].find(vis);
+                const layout=[...m.querySelectorAll('.sq-refine-v3-layout')].find(vis);
+                const results=[...m.querySelectorAll('.sq-refine-v3-results')].find(vis);
+                const sr=side?.getBoundingClientRect(), lr=layout?.getBoundingClientRect(), rr=results?.getBoundingClientRect();
+                return {
+                  placement:m?.dataset.sqRefineV3Placement||'',
+                  sidebars:[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis).length,
+                  sideTop:sr?Math.round(sr.top+scrollY):null,
+                  layoutTop:lr?Math.round(lr.top+scrollY):null,
+                  resultsTop:rr?Math.round(rr.top+scrollY):null,
+                  sideLayoutDelta:sr&&lr?Math.round(Math.abs(sr.top-lr.top)):999,
+                  sideResultsDelta:sr&&rr?Math.round(Math.abs(sr.top-rr.top)):999,
+                  viewportY:Math.round(scrollY),
+                  layoutParent:layout?.parentElement?.className||layout?.parentElement?.id||'',
+                  marker:!!m.querySelector('[data-sq-refine-v3-origin-marker]')
+                };
+              });
+              console.log(name+' '+JSON.stringify(d));
+              if(d.sidebars!==1)failures.push(name+': sidebars='+d.sidebars);
+              if(d.placement!=='original-product-position')failures.push(name+': placement='+d.placement);
+              if(d.sideLayoutDelta>8)failures.push(name+': sidebar/layout top delta='+d.sideLayoutDelta);
+              if(d.sideResultsDelta>12)failures.push(name+': sidebar/results top delta='+d.sideResultsDelta);
+              if(d.marker)failures.push(name+': origin marker remained');
+              await page.screenshot({path:name.toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.png',fullPage:true});
+            }catch(e){failures.push(name+': '+String(e));console.log('FAIL '+name+' '+e)}
+            await sleep(1800);
+          }
+          await browser.close();
+          console.log('FAILURES='+JSON.stringify(failures));
+          if(failures.length)process.exit(1);
+          console.log('ALL PLACEMENT CHECKS GREEN');
+          EOF
+          node placement.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine-v3-placement-screenshots
+          path: '*.png'
