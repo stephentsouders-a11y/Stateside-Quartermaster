@@ -1,0 +1,76 @@
+name: Literature freeze diagnostic
+on:
+  push:
+    paths: ['.github/workflows/literature-freeze-diagnostic.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Capture source and storefront responses
+        run: |
+          mkdir -p out/source
+          cp -r snippets sections layout templates .github out/source/
+          python3 - <<'PY'
+          import pathlib
+          print('DEPLOY WORKFLOWS', [p.name for p in pathlib.Path('.github/workflows').glob('*') if any(t in p.name for t in ['deploy','literature','publish'])])
+          PY
+          curl -Ls --max-time 40 'https://www.statesideqm.com/collections/literature' -o out/live-server.html
+          curl -Ls --max-time 40 'https://www.statesideqm.com/collections/literature?preview_theme_id=158561894555' -o out/draft-server.html
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null
+          npm install playwright@1.55.0 agent-browser >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Chromium desktop diagnosis
+        run: |
+          cat > diagnose.mjs <<'JS'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          const report=[];
+          for(const [name,query] of [['live',''],['draft','?preview_theme_id=158561894555']]){
+            const browser=await chromium.launch({headless:true});
+            const context=await browser.newContext({viewport:{width:1440,height:1000},recordVideo:{dir:'out/videos'}});
+            const page=await context.newPage(); const errors=[],requests=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('request',r=>{if(/collections|search|sq-/.test(r.url()))requests.push(r.url())});
+            await page.addInitScript(()=>{window.__longTasks=[];new PerformanceObserver(l=>window.__longTasks.push(...l.getEntries().map(e=>({start:e.startTime,duration:e.duration})))).observe({type:'longtask',buffered:true});window.__heartbeat=0;setInterval(()=>window.__heartbeat++,100)});
+            const url='https://www.statesideqm.com/collections/literature'+query;
+            const row={name,url,errors,requests};const start=Date.now();
+            try{
+              const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:40000});row.status=response.status();row.dclMs=Date.now()-start;
+              await page.waitForTimeout(6000);
+              row.state=await Promise.race([page.evaluate(()=>{const m=document.querySelector('#MainContent'),visible=e=>!!(e&&e.getBoundingClientRect().width&&e.getBoundingClientRect().height&&getComputedStyle(e).display!=='none');return {theme:window.Shopify?.theme,ready:{...m?.dataset},heartbeat:window.__heartbeat,longTasks:window.__longTasks,sidebars:[...document.querySelectorAll('.sq-refine-v3-sidebar')].map(s=>({visible:visible(s),text:s.innerText})),grids:[...document.querySelectorAll('.product-grid')].map(g=>({visible:visible(g),cards:g.children.length})),mainText:m?.innerText.slice(0,12000),scripts:[...document.scripts].map(s=>s.src||s.outerHTML.slice(0,180)),overflow:document.documentElement.scrollWidth>innerWidth+2}}),new Promise((_,reject)=>setTimeout(()=>reject(new Error('Main thread unresponsive for 15 seconds')),15000))]);
+              await page.screenshot({path:'out/'+name+'.png',timeout:10000});
+              fs.writeFileSync('out/'+name+'.html',await page.content());
+            }catch(e){row.failure=String(e)}
+            row.elapsedMs=Date.now()-start;report.push(row);
+            console.log(JSON.stringify({name,status:row.status,dclMs:row.dclMs,failure:row.failure,errors,state:row.state?{theme:row.state.theme,ready:row.state.ready,heartbeat:row.state.heartbeat,sidebars:row.state.sidebars,grids:row.state.grids,longTasks:row.state.longTasks}:null}));
+            fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+            await Promise.race([context.close().then(()=>browser.close()),new Promise(r=>setTimeout(r,10000))]);
+          }
+          process.exit(0);
+          JS
+          timeout 180 node diagnose.mjs
+      - name: Agent browser snapshot
+        if: always()
+        continue-on-error: true
+        run: |
+          export AGENT_BROWSER_EXECUTABLE_PATH=$(node -e "console.log(require('playwright').chromium.executablePath())")
+          timeout 35 npx agent-browser --session literature-diagnostic open 'https://www.statesideqm.com/collections/literature?preview_theme_id=158561894555'
+          timeout 15 npx agent-browser --session literature-diagnostic snapshot -i > out/agent-browser.txt
+          timeout 15 npx agent-browser --session literature-diagnostic screenshot out/agent-browser.png
+          timeout 10 npx agent-browser --session literature-diagnostic close
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: literature-freeze-diagnostic
+          path: out
+          retention-days: 7
