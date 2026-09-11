@@ -1,0 +1,26 @@
+name: Art refine every choice Chromium
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/scripts/art-refine-every-choice-cert.mjs'
+      - '.github/workflows/art-refine-every-choice-chromium.yml'
+  workflow_dispatch:
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Run Art every-choice certification
+        run: node .github/scripts/art-refine-every-choice-cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: art-refine-every-choice
+          path: cert-art-every-choice/
+          retention-days: 7
