@@ -21,7 +21,7 @@
       if(falseHandles.has(target)&&target!==route){var row=input.closest('.sq-refine-v3-choice');if(row)row.remove()}
       else if((input.dataset.target||'').includes('filter.v.availability=1')){try{var u=new URL(input.dataset.target,location.origin);u.searchParams.delete('filter.v.availability');input.dataset.target=u.pathname+(u.search?'?'+u.searchParams.toString():'')}catch(_){}}
     });
-    side.querySelectorAll('.sq-refine-v3-group').forEach(function(group){if(!group.querySelector('input[type="checkbox"]'))group.remove()});
+    side.querySelectorAll('.sq-refine-v3-group:not([data-sq-tactical-colors])').forEach(function(group){if(!group.querySelector('input[type="checkbox"]'))group.remove()});
     if(!hasProducts(results)){
       var candidates=[].slice.call(main.querySelectorAll('collection-component')).filter(function(node){
         return !node.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results')&&hasProducts(node);
