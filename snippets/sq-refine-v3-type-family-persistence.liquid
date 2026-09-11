@@ -34,7 +34,7 @@ Canonicalizes legacy broad V3 Shop by Type family selections to Shopify's author
       var value=clean(i.dataset.sqPolishValue||i.dataset.filterValue||i.value);
       if(selected.some(function(v){return clean(v)===value})){i.checked=true;type.open=true;type.dataset.active='true';found=true}
     });
-    return found||true;
+    return found;
   }
   if(sync())return;var tries=0,t=setInterval(function(){tries++;if(sync()||tries>120)clearInterval(t)},250);
 })();
