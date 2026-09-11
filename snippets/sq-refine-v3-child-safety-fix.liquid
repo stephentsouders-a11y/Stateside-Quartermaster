@@ -75,7 +75,12 @@
     if(!choices||choices.dataset.sqChildSafetyBound==='true')return;
     choices.dataset.sqChildSafetyBound='true';
     choices.querySelectorAll('input[data-target]').forEach(function(input){
-      input.addEventListener('change',function(){location.assign(input.checked?input.dataset.target:rootTarget())});
+      input.addEventListener('click',function(e){
+        var active=parentActive(input.dataset.target);
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        location.assign(active?rootTarget():input.dataset.target);
+      },true);
     });
   }
   function parentMarkupMatches(choices){
