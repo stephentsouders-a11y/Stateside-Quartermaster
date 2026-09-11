@@ -41,7 +41,7 @@ jobs:
             ['U.S. Marine Corps','armed-forces-gear-u-s-marine-corps'],
             ['U.S. Coast Guard','armed-forces-gear-u-s-coast-guard'],
             ['U.S. Space Force','armed-forces-gear-u-s-space-force'],
-            ['Other Armed Forces Gear','armed-forces-gear-other'],
+            ['Other Armed Forces Gear','other-armed-forces-gear'],
           ]);
 
           fs.mkdirSync('out/screens',{recursive:true});
