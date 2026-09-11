@@ -5,7 +5,7 @@ on:
       - refine-restart-v3
     paths:
       - '.github/workflows/safety-color-pattern-visual-functional-cert.yml'
-      - '.github/scripts/safety-browser-cert-full.mjs'
+      - '.github/scripts/safety-browser-cert-v2.mjs'
       - 'snippets/sq-refine-v3.liquid'
       - 'snippets/sq-uniform-color-pattern-core.liquid'
   workflow_dispatch:
@@ -25,8 +25,8 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Run exhaustive Safety browser certification
-        run: node .github/scripts/safety-browser-cert-full.mjs
+      - name: Run strict Safety browser certification
+        run: node .github/scripts/safety-browser-cert-v2.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
