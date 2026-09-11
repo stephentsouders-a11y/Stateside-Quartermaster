@@ -1,0 +1,92 @@
+name: Footwear Refine Products every-choice Chromium audit 0911
+on:
+  push:
+    paths:
+      - '.github/workflows/footwear-refine-every-choice-chromium-0911.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Click and verify every Refine Products choice
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const ORIGIN='https://www.statesideqm.com';
+          const ROOT='footwear-gloves-eyewear';
+          const THEME='158561894555';
+          const CATEGORIES={
+            'Boots & Duty Footwear':'footwear-tactical-duty-boots',
+            'Casual, Hiking & Athletic Footwear':'footwear-hiking-outdoor-footwear',
+            'Eyewear Accessories & Care':'eyewear-other-eyewear',
+            'Footwear Accessories':'footwear-laces-bootlaces',
+            'Gloves & Hand Protection':'tactical-gloves',
+            'Protective & Tactical Eyewear':'eyewear-safety-tactical-eyewear',
+            'Socks':'footwear-socks'
+          };
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const norm=s=>String(s??'').replace(/\s+/g,' ').trim();
+          const key=s=>norm(s).toLowerCase().replace(/\bgray\b/g,'grey');
+          async function getJson(url){let last;for(let i=0;i<5;i++){try{const r=await fetch(url);if(r.ok)return await r.json();last=new Error('HTTP '+r.status)}catch(e){last=e}await sleep(700*(i+1))}throw last}
+          async function collectionProducts(handle){const out=[], seen=new Set();for(let page=1;page<=20;page++){const u=new URL(`/collections/${handle}/products.json`,ORIGIN);u.searchParams.set('limit','250');u.searchParams.set('page',String(page));const j=await getJson(u);const batch=j.products||[];for(const p of batch)if(!seen.has(p.handle)){seen.add(p.handle);out.push(p)}if(batch.length<250)break}return out}
+          const rootProducts=await collectionProducts(ROOT);const rootByHandle=new Map(rootProducts.map(p=>[p.handle,p]));
+          const expectedCategory={};for(const [label,handle] of Object.entries(CATEGORIES))expectedCategory[label]=new Set((await collectionProducts(handle)).map(p=>p.handle));
+          function productHasOption(p,name,value){const n=key(name),v=key(value);return (p.options||[]).some(o=>(n?key(o.name)===n:/colou?r|pattern|camo/.test(key(o.name)))&&(o.values||[]).some(x=>key(typeof x==='string'?x:x?.name)===v))}
+          function expectedNative(name,value){const n=String(name||''),v=norm(value);return new Set(rootProducts.filter(p=>{
+            if(n==='filter.p.vendor')return key(p.vendor)===key(v);
+            if(n==='filter.p.product_type')return key(p.product_type)===key(v);
+            if(n==='filter.v.availability'){const avail=(p.variants||[]).some(x=>x.available);return String(v)==='1'?avail:!avail}
+            if(/^filter\.v\.option\./.test(n)){const opt=n.replace(/^filter\.v\.option\./,'').replace(/_/g,' ');return productHasOption(p,opt,v)}
+            if(n==='filter.p.tag'){const tags=Array.isArray(p.tags)?p.tags:String(p.tags||'').split(',');return tags.some(t=>key(t)===key(v))}
+            return null;
+          }).filter(Boolean).map(p=>p.handle))}
+          async function waitReady(page){await page.waitForLoadState('domcontentloaded');await page.waitForSelector('#MainContent .sq-refine-v3-sidebar',{timeout:45000});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',{timeout:45000}).catch(()=>{});await sleep(800)}
+          async function actualHandles(page){return await page.evaluate(()=>[...new Set([...document.querySelectorAll('#MainContent .sq-refine-v3-results a[href*="/products/"]')].map(a=>{try{return decodeURIComponent(new URL(a.href,location.origin).pathname.split('/products/')[1]||'').split('/')[0]}catch{return''}}).filter(Boolean))])}
+          async function rootPage(page){const u=new URL(`/collections/${ROOT}`,ORIGIN);u.searchParams.set('preview_theme_id',THEME);u.searchParams.set('sq_per_page','250');await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:45000});await waitReady(page)}
+          const browser=await chromium.launch({headless:true});const context=await browser.newContext({viewport:{width:1440,height:1100}});const page=await context.newPage();page.setDefaultNavigationTimeout(45000);
+          await rootPage(page);
+          const inventory=await page.evaluate(()=>[...document.querySelectorAll('#MainContent .sq-refine-v3-group')].flatMap(g=>{const group=(g.querySelector(':scope>summary')?.textContent||'').replace(/\s+/g,' ').trim();return [...g.querySelectorAll('.sq-refine-v3-choice input')].map(i=>({group,label:(i.closest('label')?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim(),kind:i.dataset.kind|| (i.hasAttribute('data-sq-fw-color')?'footwear-color':'other'),target:i.dataset.target||'',filterName:i.dataset.filterName||'',filterValue:i.dataset.filterValue||'',value:i.value||''}))}) );
+          const rows=[];
+          for(const item of inventory){
+            await rootPage(page);
+            const locator=page.locator('#MainContent .sq-refine-v3-group').filter({has:page.locator(':scope > summary',{hasText:item.group})}).locator('.sq-refine-v3-choice').filter({hasText:item.label}).locator('input').first();
+            if(await locator.count()===0){rows.push({...item,pass:false,error:'choice missing on fresh root'});continue}
+            let expected=null, expectedKind='', expectedHandle='';
+            if(item.kind==='structural'){
+              expectedHandle=CATEGORIES[item.label]||''; expectedKind='structural';
+              if(expectedHandle)expected=expectedCategory[item.label];
+            } else if(item.kind==='native') { expectedKind='native'; expected=expectedNative(item.filterName,item.filterValue); }
+            else if(item.kind==='footwear-color'){ expectedKind='color'; expected=new Set(rootProducts.filter(p=>productHasOption(p,'',item.value)).map(p=>p.handle)); }
+            const before=page.url();let clickError=null;try{await Promise.all([page.waitForLoadState('domcontentloaded',{timeout:45000}).catch(()=>{}),locator.click()]);await sleep(1200);if(item.kind==='footwear-color')await page.waitForFunction(()=>!document.querySelector('#MainContent')?.dataset?.sqFootwearColorBusy,{timeout:30000}).catch(()=>{});else await waitReady(page).catch(()=>{})}catch(e){clickError=String(e)}
+            const after=page.url(), actual=new Set(await actualHandles(page));
+            let pathOK=true,checked=true,urlOK=true;
+            if(item.kind==='structural'&&expectedHandle)pathOK=new URL(after).pathname===`/collections/${expectedHandle}`;
+            if(item.kind==='native')urlOK=new URL(after).searchParams.getAll(item.filterName).includes(item.filterValue);
+            if(item.kind==='footwear-color')urlOK=new URL(after).searchParams.getAll('sq_fw_color').map(key).includes(key(item.value));
+            try{checked=await page.locator('#MainContent .sq-refine-v3-choice input:checked').count()>0}catch{checked=false}
+            let extra=[],missing=[];
+            if(expected instanceof Set){extra=[...actual].filter(h=>!expected.has(h));missing=[...expected].filter(h=>!actual.has(h));}
+            const productSetOK=!(expected instanceof Set)|| (extra.length===0 && missing.length===0);
+            const pass=!clickError&&pathOK&&urlOK&&checked&&productSetOK;
+            rows.push({...item,before,after,expectedKind,expectedCount:expected instanceof Set?expected.size:null,actualCount:actual.size,pathOK,urlOK,checked,extra,missing,pass,error:clickError});
+            console.log(`${pass?'PASS':'FAIL'} :: ${item.group} :: ${item.label} :: actual=${actual.size} expected=${expected instanceof Set?expected.size:'n/a'} :: ${after}`);
+          }
+          await browser.close();
+          const failures=rows.filter(r=>!r.pass);const report={rootProductsStorefrontJson:rootProducts.length,choiceCount:rows.length,passed:rows.length-failures.length,failed:failures.length,failures,rows};fs.mkdirSync('out',{recursive:true});fs.writeFileSync('out/footwear-refine-audit.json',JSON.stringify(report,null,2));console.log(JSON.stringify({rootProductsStorefrontJson:report.rootProductsStorefrontJson,choiceCount:report.choiceCount,passed:report.passed,failed:report.failed},null,2));if(failures.length)process.exitCode=2;
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: footwear-refine-every-choice-0911
+          path: out/footwear-refine-audit.json
+          retention-days: 7
