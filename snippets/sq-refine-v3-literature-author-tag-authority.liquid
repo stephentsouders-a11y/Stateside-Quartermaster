@@ -1,35 +1,47 @@
 {% doc %}
-Makes Literature Shop by Author authoritative and exact when real Author: / Book Author: collection tags exist. If the catalog has no such native tags, it leaves the existing search-backed Literature author group intact rather than deleting it, so Shop by Author remains usable without changing product data or non-Literature routes.
+Keeps verified Literature author controls stable. Reconciliation is idempotent, disconnects its observer during owned writes, preserves disclosure state, and never schedules itself from its own changes. Only Literature is affected.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle == 'literature' %}
-<script data-sq-refine-v3-literature-author-tag-authority>
+<script data-sq-refine-v3-literature-author-tag-authority data-revision="literature-stable-20260911">
 (function(){
   var main=document.getElementById('MainContent');if(!main)return;
-  var busy=false,observer=null;
+  var observer=null,observed=null,timer=0,cached=null;
   function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
   function norm(v){return clean(v).toLowerCase().replace(/[\u2019']/g,'').replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim()}
-  function esc(v){return clean(v).replace(/[&<>"']/g,function(k){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[k]})}
-  function tags(){var n=document.querySelector('[data-sq-refine-v3-book-tags]');try{return JSON.parse(n&&n.textContent||'[]')}catch(_){return[]}}
-  function authors(){var seen=new Set(),out=[];tags().forEach(function(tag){var m=clean(tag).match(/^(author|book author)\s*:\s*(.+)$/i);if(!m)return;var name=clean(m[2]),key=norm(name);if(!name||name.length>90||seen.has(key))return;if(/(?:description|paperback|hardcover|publisher|publication date|language|print length|isbn)/i.test(name))return;seen.add(key);out.push({name:name,tag:clean(tag)})});return out.sort(function(a,b){return a.name.localeCompare(b.name)})}
-  function removeAuthorGroups(side){[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')).forEach(function(d){var s=d.querySelector(':scope > summary');if(clean(s&&s.textContent)==='Shop by Author'||d.hasAttribute('data-sq-author-refine')||d.hasAttribute('data-sq-author-tag-authority'))d.remove()})}
-  function currentTags(){return new Set(new URLSearchParams(location.search).getAll('filter.p.tag'))}
-  function target(tag,checked){var u=new URL(location.href),vals=u.searchParams.getAll('filter.p.tag').filter(function(v){return v!==tag});if(checked)vals.push(tag);u.searchParams.delete('filter.p.tag');Array.from(new Set(vals)).forEach(function(v){u.searchParams.append('filter.p.tag',v)});u.searchParams.delete('sq_author');u.searchParams.delete('page');u.searchParams.delete('sq_view_page');return u.pathname+'?'+u.searchParams.toString()}
-  function build(){
-    if(busy||main.dataset.sqRefineV3Ready!=='true')return false;var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;busy=true;
-    var list=authors();
-    if(!list.length){
-      main.dataset.sqRefineV3AuthorAuthority='search-fallback';
-      main.dataset.sqRefineV3AuthorCount='0';
-      busy=false;
-      return true;
-    }
-    removeAuthorGroups(side);
-    var selected=currentTags(),d=document.createElement('details');d.className='sq-refine-v3-group';d.setAttribute('data-sq-author-tag-authority','true');var rows=list.slice(0,200).map(function(x){var checked=selected.has(x.tag);return '<label class="sq-refine-v3-choice"><input type="checkbox" data-kind="native" data-filter-name="filter.p.tag" data-filter-value="'+esc(x.tag)+'" data-author="'+esc(x.name)+'"'+(checked?' checked':'')+'><span>'+esc(x.name)+'</span></label>'}).join('');d.innerHTML='<summary>Shop by Author</summary><div class="sq-refine-v3-choices">'+rows+'</div>';if(d.querySelector('input:checked')){d.open=true;d.dataset.active='true'}var pub=[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')).find(function(g){var s=g.querySelector(':scope > summary');return /^Shop by Publisher/i.test(clean(s&&s.textContent))});if(pub)side.insertBefore(d,pub);else side.appendChild(d);d.querySelectorAll('input[data-filter-name="filter.p.tag"]').forEach(function(i){i.addEventListener('change',function(){location.assign(target(i.dataset.filterValue,i.checked))})});main.dataset.sqRefineV3AuthorAuthority='native-tag';main.dataset.sqRefineV3AuthorCount=String(list.length);
-    var legacy=new URLSearchParams(location.search).get('sq_author');if(legacy){var hit=list.find(function(x){return norm(x.name)===norm(legacy)});if(hit){location.replace(target(hit.tag,true));busy=false;return true}}
-    if(!observer){observer=new MutationObserver(function(ms){if(ms.some(function(m){return [].slice.call(m.addedNodes||[]).some(function(n){return n.nodeType===1&&((n.matches&&n.matches('details.sq-refine-v3-group'))||(n.querySelector&&n.querySelector('details.sq-refine-v3-group')))})}))setTimeout(build,0)});observer.observe(side,{childList:true,subtree:false})}
-    busy=false;return true;
+  function authors(){
+    if(cached)return cached;var node=document.querySelector('[data-sq-refine-v3-book-tags]'),tags=[];
+    if(!node)return[];try{tags=JSON.parse(node.textContent||'[]')}catch(_){return[]}
+    var seen=new Set();cached=[];
+    tags.forEach(function(tag){var m=clean(tag).match(/^(author|book author)\s*:\s*(.+)$/i);if(!m)return;var name=clean(m[2]),key=norm(name);if(!name||name.length>90||seen.has(key)||/(description|paperback|hardcover|publisher|publication date|language|print length|isbn)/i.test(name))return;seen.add(key);cached.push({name:name,tag:clean(tag)})});
+    return cached.sort(function(a,b){return a.name.localeCompare(b.name)});
   }
-  var tries=0,t=setInterval(function(){if(build()&&++tries>12)clearInterval(t);else if(++tries>120)clearInterval(t)},100);window.addEventListener('load',build,{once:true});
+  function target(tag,checked){var u=new URL(location.href),vals=u.searchParams.getAll('filter.p.tag').filter(function(v){return v!==tag});if(checked)vals.push(tag);u.searchParams.delete('filter.p.tag');Array.from(new Set(vals)).forEach(function(v){u.searchParams.append('filter.p.tag',v)});['sq_author','page','sq_view_page'].forEach(function(k){u.searchParams.delete(k)});return u.pathname+'?'+u.searchParams.toString()}
+  function isAuthor(d){var s=d.querySelector(':scope > summary');return clean(s&&s.textContent)==='Shop by Author'||d.hasAttribute('data-sq-author-refine')||d.hasAttribute('data-sq-author-tag-authority')}
+  function schedule(){clearTimeout(timer);timer=setTimeout(build,80)}
+  function build(){
+    if(main.dataset.sqRefineV3Ready!=='true')return false;var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;
+    var list=authors();if(!list.length){main.dataset.sqRefineV3AuthorAuthority='search-fallback';return true}
+    if(observer)observer.disconnect();
+    try{
+      var groups=Array.from(side.querySelectorAll(':scope > details.sq-refine-v3-group')).filter(isAuthor),d=groups.find(function(g){return g.dataset.sqAuthorTagAuthority==='stable-v2'}),selected=new Set(new URLSearchParams(location.search).getAll('filter.p.tag'));
+      if(!d){
+        var wasOpen=groups.some(function(g){return g.open});d=document.createElement('details');d.className='sq-refine-v3-group';d.dataset.sqAuthorTagAuthority='stable-v2';
+        var summary=document.createElement('summary');summary.textContent='Shop by Author';d.appendChild(summary);var choices=document.createElement('div');choices.className='sq-refine-v3-choices';
+        list.forEach(function(x){var row=document.createElement('label');row.className='sq-refine-v3-choice';var i=document.createElement('input');i.type='checkbox';i.dataset.kind='native';i.dataset.filterName='filter.p.tag';i.dataset.filterValue=x.tag;i.dataset.author=x.name;var span=document.createElement('span');span.textContent=x.name;row.append(i,span);choices.appendChild(row);i.addEventListener('change',function(){location.assign(target(x.tag,i.checked))})});
+        d.appendChild(choices);d.open=wasOpen;var pub=Array.from(side.querySelectorAll(':scope > details')).find(function(g){return /^Shop by Publisher/i.test(clean(g.querySelector('summary')&&g.querySelector('summary').textContent))});side.insertBefore(d,pub||null);
+      }
+      groups.forEach(function(g){if(g!==d)g.remove()});
+      var key=Array.from(selected).sort().join('\n'),any=false;d.querySelectorAll('input').forEach(function(i){i.checked=selected.has(i.dataset.filterValue);any=any||i.checked});if(d.dataset.selectionKey!==key){if(any)d.open=true;d.dataset.selectionKey=key}d.dataset.active=any?'true':'false';
+      main.dataset.sqRefineV3AuthorAuthority='native-tag';main.dataset.sqRefineV3AuthorCount=String(list.length);main.dataset.sqLiteratureStable='true';
+      var legacy=new URLSearchParams(location.search).get('sq_author'),hit=legacy&&list.find(function(x){return norm(x.name)===norm(legacy)});if(hit)location.replace(target(hit.tag,true));
+    }finally{
+      if(!observer)observer=new MutationObserver(schedule);observed=side;observer.observe(observed,{childList:true});
+    }
+    return true;
+  }
+  window.__sqLiteratureAuthorTags={available:function(){return authors().length>0},sync:build};
+  var attempts=0,poll=setInterval(function(){attempts++;if(build()||attempts>=100)clearInterval(poll)},100);
+  window.addEventListener('load',build,{once:true});window.addEventListener('pageshow',schedule);window.addEventListener('popstate',schedule);window.addEventListener('pagehide',function(){clearInterval(poll);clearTimeout(timer);if(observer)observer.disconnect()});
 })();
 </script>
 {% endif %}
