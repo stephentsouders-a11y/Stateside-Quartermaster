@@ -1,4 +1,5 @@
 name: MSA final certification
+# Fresh focused rerun after global V3 first-paint isolation repair.
 on:
   push:
     branches: [refine-restart-v3]
@@ -49,32 +50,7 @@ jobs:
               const sizes=[...document.querySelectorAll('.sq-refine-v3-page-size input')].map(x=>x.value);
               const groups=[...(side?.querySelectorAll('details.sq-refine-v3-group')||[])];
               const sticky=side?getComputedStyle(side).position:'';
-              return {
-                path:location.pathname==='/collections/military-schools-academies',
-                ready:main?.dataset.sqRefineV3Ready==='true',
-                error:main?.dataset.sqRefineV3Error||'',
-                cleanup:main?.dataset.sqRefineV3RootCleanup==='true',
-                isolation:document.querySelector('script[data-sq-refine-v3-legacy-isolation]')?.dataset.sqRefineV3LegacyIsolation||'',
-                dedicated:main?.dataset.sqV3DedicatedGrid==='server-rendered',
-                dedicatedRoot:main?.dataset.sqV3DedicatedGridRoot||'',
-                layout:main?.querySelectorAll('.sq-refine-v3-layout').length||0,
-                sidebar:!!side&&getComputedStyle(side).display!=='none',
-                title:(side?.textContent||'').includes('Refine Products'),
-                pageSizes:['50','100','250'].every(v=>sizes.includes(v)),
-                default50:!!document.querySelector('.sq-refine-v3-page-size input[value="50"]:checked'),
-                groups:groups.length,
-                inactiveClosed:groups.filter(g=>g.dataset.active!=='true').every(g=>!g.open),
-                activeOpen:groups.filter(g=>g.dataset.active==='true').every(g=>g.open),
-                results:!!results,
-                cards:cards.length,
-                columns:gridCols===desired||(cards.length>=desired&&posCols===desired),
-                gridCols,posCols,
-                nativeColumn:!!results?.querySelector('.sq-collection-products-column'),
-                sticky,
-                sqaca:main?.querySelectorAll('.sqaca').length||0,
-                academyGuard:window.__sqAcademyExclusiveTreeV6===true,
-                legacyVisible:[...document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]')].filter(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0}).length
-              };
+              return {path:location.pathname==='/collections/military-schools-academies',ready:main?.dataset.sqRefineV3Ready==='true',error:main?.dataset.sqRefineV3Error||'',cleanup:main?.dataset.sqRefineV3RootCleanup==='true',isolation:document.querySelector('script[data-sq-refine-v3-legacy-isolation]')?.dataset.sqRefineV3LegacyIsolation||'',dedicated:main?.dataset.sqV3DedicatedGrid==='server-rendered',dedicatedRoot:main?.dataset.sqV3DedicatedGridRoot||'',layout:main?.querySelectorAll('.sq-refine-v3-layout').length||0,sidebar:!!side&&getComputedStyle(side).display!=='none',title:(side?.textContent||'').includes('Refine Products'),pageSizes:['50','100','250'].every(v=>sizes.includes(v)),default50:!!document.querySelector('.sq-refine-v3-page-size input[value="50"]:checked'),groups:groups.length,inactiveClosed:groups.filter(g=>g.dataset.active!=='true').every(g=>!g.open),activeOpen:groups.filter(g=>g.dataset.active==='true').every(g=>g.open),results:!!results,cards:cards.length,columns:gridCols===desired||(cards.length>=desired&&posCols===desired),gridCols,posCols,nativeColumn:!!results?.querySelector('.sq-collection-products-column'),sticky,sqaca:main?.querySelectorAll('.sqaca').length||0,academyGuard:window.__sqAcademyExclusiveTreeV6===true,legacyVisible:[...document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]')].filter(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0}).length};
             },{desired});
             const stickyOk=device==='mobile'?d.sticky!=='sticky':d.sticky==='sticky';
             const ok=(response?.status()===200&&errors.length===0&&d.path&&d.ready&&!d.error&&d.cleanup&&d.isolation==='military-schools-academies'&&d.dedicated&&d.dedicatedRoot==='military-schools-academies'&&d.layout===1&&d.sidebar&&d.title&&d.pageSizes&&d.default50&&d.groups>0&&d.inactiveClosed&&d.activeOpen&&d.results&&d.cards===50&&d.columns&&d.nativeColumn&&stickyOk&&d.sqaca===0&&d.academyGuard&&d.legacyVisible===0);
