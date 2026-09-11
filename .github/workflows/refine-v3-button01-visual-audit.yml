@@ -34,3 +34,5 @@ jobs:
           path: audit-evidence/button-01/current
           if-no-files-found: warn
           retention-days: 14
+
+# Dedicated route-by-route release gate: button 01 must pass before button 02.
