@@ -1,0 +1,220 @@
+name: Refine V3 Full Pagination Chromium Certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-pagination-full-cert-0911.yml'
+      - 'snippets/sq-refine-v3-pagination-repair.liquid'
+      - 'snippets/sq-refine-v3.liquid'
+      - 'sections/sq-refine-v3-product-grid.liquid'
+      - 'layout/theme.liquid'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify-pagination:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Exhaustively certify Refine V3 pagination
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          cat > pagination-full-cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const theme='158561894555';
+          const origin='https://www.statesideqm.com';
+          const allRoutes=[
+            {handle:'accessories-gifts-collectibles'},{handle:'airsoft-milsim'},{handle:'apparel'},{handle:'armed-forces-gear'},
+            {handle:'art'},{handle:'body-armor-ballistic-protection'},{handle:'literature'},{handle:'child-safety-shop'},{handle:'dive-scuba'},
+            {handle:'firearm-accessories'},{handle:'first-aid-medical-ifak'},{handle:'flags-patriotic-decor'},{handle:'flashlights-lighting'},
+            {handle:'footwear-gloves-eyewear'},{handle:'k9-dog-gear'},{handle:'knives-axes-cutlery'},{handle:'morale-patches-tactical-id'},
+            {handle:'outdoor-preparedness-gear'},{handle:'patriotic-american-heritage'},{handle:'safety-rescue-climbing'},
+            {handle:'sta-brite-insignia'},{handle:'tactical-gear'},{handle:'thin-line'},{handle:'uniforms'},{handle:'watches'},{handle:'zippos-lighters-torches'},
+            {handle:'stateside-quartermaster-logo-merch'},{handle:'army-national-guard-series'},{handle:'air-national-guard-series'},
+            {handle:'products-built-for-the-line-u-s-army'},{handle:'products-built-for-the-line-u-s-navy'},
+            {handle:'products-built-for-the-line-u-s-air-force'},{handle:'products-built-for-the-line-u-s-marine-corps'},
+            {handle:'products-built-for-the-line-u-s-coast-guard'},{handle:'products-built-for-the-line-u-s-space-force'},
+            {handle:'rotc-series'},{handle:'jrotc-series'},{handle:'military-schools-academies'},{handle:'law-enforcement-corrections'},
+            {handle:'firefighting-ems-search-rescue'},
+            {handle:'literature-u-s-army',root:'literature',special:'reported-army-literature-child'}
+          ];
+          const shard=Number(process.env.SHARD||0);
+          const routes=allRoutes.filter((_,i)=>i%5===shard);
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1000}});
+          const report={theme,shard,routes:routes.map(x=>x.handle),checked:[],failures:[]};
+          const fail=(key,msg)=>report.failures.push(`${key}: ${msg}`);
+          const uniq=a=>[...new Set(a.filter(Boolean))];
+          const resultSelector='#MainContent .sq-refine-v3-results .product-grid';
+          function sourceHandle(route){return route.handle==='air-national-guard-series'?'products-built-for-the-line-u-s-air-force':route.handle}
+          function makeViewUrl(route,perPage,viewPage){
+            const u=new URL(`/collections/${route.handle}`,origin);
+            u.searchParams.set('preview_theme_id',theme);
+            if(route.root)u.searchParams.set('sq_root',route.root);
+            u.searchParams.set('sq_per_page',String(perPage));
+            u.searchParams.set('sq_view_page',String(viewPage));
+            return u.toString();
+          }
+          function makeSourceUrl(route,n){
+            const u=new URL(`/collections/${sourceHandle(route)}`,origin);
+            u.searchParams.set('preview_theme_id',theme);
+            u.searchParams.set('view','sq-refine-v3-products');
+            u.searchParams.set('page',String(n));
+            return u.toString();
+          }
+          async function waitV3(page){
+            await page.waitForLoadState('domcontentloaded');
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',{timeout:30000}).catch(()=>{});
+            await page.waitForTimeout(1800);
+          }
+          async function visibleLinks(page){
+            return await page.evaluate((sel)=>{
+              const grid=document.querySelector(sel); if(!grid)return [];
+              const links=[];
+              for(const a of grid.querySelectorAll('a[href*="/products/"]')){
+                const r=a.getBoundingClientRect(),s=getComputedStyle(a);
+                if(r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden')links.push(a.href.split('?')[0]);
+              }
+              return [...new Set(links)];
+            },resultSelector);
+          }
+          const sourceCache=new Map();
+          async function sourceLinks(route,n){
+            const key=`${sourceHandle(route)}:${n}`;
+            if(sourceCache.has(key))return sourceCache.get(key);
+            const p=await context.newPage();
+            let links=[];
+            try{
+              const r=await p.goto(makeSourceUrl(route,n),{waitUntil:'domcontentloaded',timeout:90000});
+              if(!r||!r.ok())throw new Error(`HTTP ${r?.status()}`);
+              await p.waitForTimeout(500);
+              links=await p.evaluate(()=>[...new Set([...document.querySelectorAll('.product-grid a[href*="/products/"], [data-product-id] a[href*="/products/"], .card-wrapper a[href*="/products/"]')].map(a=>a.href.split('?')[0]))]);
+            }finally{await p.close()}
+            sourceCache.set(key,links); return links;
+          }
+          async function expectedWindow(route,perPage,viewPage){
+            const pagesPerView=perPage/50;
+            const first=(viewPage-1)*pagesPerView+1;
+            const arrays=[];
+            for(let n=first;n<first+pagesPerView;n++)arrays.push(await sourceLinks(route,n));
+            return uniq(arrays.flat()).slice(0,perPage);
+          }
+          async function hasNextWindow(route,perPage,viewPage){
+            const pagesPerView=perPage/50;
+            const nextNative=viewPage*pagesPerView+1;
+            return (await sourceLinks(route,nextNative)).length>0;
+          }
+          async function inspectControls(page,perPage){
+            return await page.evaluate((expected)=>{
+              const box=document.querySelector('#MainContent .sq-refine-v3-page-size');
+              const inputs=box?[...box.querySelectorAll('input')]:[];
+              const values=inputs.map(i=>String(i.value));
+              const checked=inputs.filter(i=>i.checked).map(i=>String(i.value));
+              const text=box?(box.textContent||'').replace(/\s+/g,' ').trim():'';
+              return {exists:!!box,values,checked,text,has50:values.includes('50')||/\b50\b/.test(text),has100:values.includes('100')||/\b100\b/.test(text),has250:values.includes('250')||/\b250\b/.test(text),selected:checked.includes(String(expected))};
+            },perPage);
+          }
+          async function inspectPager(page){
+            return await page.evaluate(()=>{
+              const p=document.querySelector('#MainContent .sq-refine-v3-pager');
+              if(!p)return {exists:false,visible:false,links:[],text:''};
+              const r=p.getBoundingClientRect(),s=getComputedStyle(p);
+              return {exists:true,visible:r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden',text:(p.textContent||'').replace(/\s+/g,' ').trim(),links:[...p.querySelectorAll('a')].map(a=>({text:(a.textContent||'').trim(),href:a.href}))};
+            });
+          }
+          async function preflight(){
+            if(shard!==0)return;
+            const p=await context.newPage();
+            const u=makeViewUrl({handle:'literature-u-s-army',root:'literature'},50,1);
+            let ok=false,last='';
+            for(let i=0;i<18&&!ok;i++){
+              try{
+                await p.goto(u,{waitUntil:'domcontentloaded',timeout:90000});
+                last=await p.evaluate(()=>document.querySelector('script[data-sq-refine-v3-pagination-repair]')?.getAttribute('data-revision')||'');
+                ok=last==='direct-next-probe-20260911';
+              }catch(e){last=String(e)}
+              if(!ok)await p.waitForTimeout(20000);
+            }
+            if(!ok)fail('PREFLIGHT',`draft theme never exposed pagination repair revision; last=${last}`);
+            await p.close();
+          }
+          await preflight();
+          for(const route of routes){
+            for(const perPage of [50,100,250]){
+              const key=`${route.handle}[${perPage}]`;
+              const page=await context.newPage();
+              const errors=[]; page.on('pageerror',e=>errors.push(String(e)));
+              let navError=null;
+              try{await page.goto(makeViewUrl(route,perPage,1),{waitUntil:'domcontentloaded',timeout:90000});await waitV3(page)}catch(e){navError=String(e)}
+              if(navError){fail(key,`page1 navigation failed: ${navError}`);await page.close();continue}
+              const actual1=await visibleLinks(page);
+              const expected1=await expectedWindow(route,perPage,1);
+              const controls=await inspectControls(page,perPage);
+              const pager1=await inspectPager(page);
+              const shouldNext=await hasNextWindow(route,perPage,1);
+              const next=pager1.links.find(x=>/next/i.test(x.text)||new URL(x.href).searchParams.get('sq_view_page')==='2');
+              const data=await page.$eval('#MainContent',el=>({...el.dataset})).catch(()=>({}));
+              const missing=expected1.filter(x=>!actual1.includes(x));
+              const extra=actual1.filter(x=>!expected1.includes(x));
+              if(!controls.exists)fail(key,'50/100/250 page-size control is missing');
+              if(!controls.has50||!controls.has100||!controls.has250)fail(key,`page-size choices incomplete: ${JSON.stringify(controls)}`);
+              if(!controls.selected)fail(key,`requested ${perPage} is not selected: ${JSON.stringify(controls)}`);
+              if(actual1.length!==expected1.length)fail(key,`page1 visible ${actual1.length}, expected ${expected1.length}`);
+              if(missing.length)fail(key,`page1 missing ${missing.length} expected products`);
+              if(extra.length)fail(key,`page1 has ${extra.length} unexpected products`);
+              if(actual1.length>perPage)fail(key,`page1 exceeds per-page limit: ${actual1.length}`);
+              if(shouldNext&&(!pager1.exists||!pager1.visible||!next))fail(key,'next page exists in source but visible Next/Page 2 control is missing');
+              if(!shouldNext&&next)fail(key,'Next/Page 2 shown although next source window is empty');
+              if(data.sqRefineV3PaginationRepairError)fail(key,`repair error: ${data.sqRefineV3PaginationRepairError}`);
+              if(errors.length)fail(key,`${errors.length} page errors on page1: ${errors.slice(0,2).join(' | ')}`);
+              const row={route,perPage,page1:{actual:actual1.length,expected:expected1.length,missing:missing.length,extra:extra.length},controls,pager1,shouldNext,page2:null,data};
+              if(shouldNext&&next){
+                try{
+                  await page.goto(next.href,{waitUntil:'domcontentloaded',timeout:90000}); await waitV3(page);
+                  const actual2=await visibleLinks(page),expected2=await expectedWindow(route,perPage,2),pager2=await inspectPager(page);
+                  const missing2=expected2.filter(x=>!actual2.includes(x)),extra2=actual2.filter(x=>!expected2.includes(x));
+                  const overlap=actual2.filter(x=>actual1.includes(x));
+                  const prev=pager2.links.find(x=>/previous/i.test(x.text)||new URL(x.href).searchParams.get('sq_view_page')==='1');
+                  if(new URL(page.url()).searchParams.get('sq_view_page')!=='2')fail(key,`Next landed at wrong URL: ${page.url()}`);
+                  if(actual2.length!==expected2.length)fail(key,`page2 visible ${actual2.length}, expected ${expected2.length}`);
+                  if(missing2.length)fail(key,`page2 missing ${missing2.length} expected products`);
+                  if(extra2.length)fail(key,`page2 has ${extra2.length} unexpected products`);
+                  if(overlap.length)fail(key,`page2 repeats ${overlap.length} page1 products`);
+                  if(!pager2.exists||!pager2.visible||!prev)fail(key,'page2 has no visible Previous/Page 1 control');
+                  row.page2={actual:actual2.length,expected:expected2.length,missing:missing2.length,extra:extra2.length,overlap:overlap.length,pager:pager2};
+                }catch(e){fail(key,`page2 navigation/check failed: ${String(e)}`)}
+              }
+              if(report.failures.some(x=>x.startsWith(key+':'))||route.special){
+                await page.screenshot({path:`out/${route.handle}-${perPage}.png`,fullPage:true}).catch(()=>{});
+              }
+              report.checked.push(row); await page.close();
+            }
+          }
+          await browser.close();
+          report.summary={routeSizeCases:report.checked.length,failures:report.failures.length};
+          fs.writeFileSync(`out/report-shard-${shard}.json`,JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          if(report.failures.length)process.exitCode=2;
+          EOF
+          node pagination-full-cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine-v3-pagination-full-cert-shard-${{ matrix.shard }}
+          path: out
+          retention-days: 14
