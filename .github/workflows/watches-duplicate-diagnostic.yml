@@ -5,13 +5,14 @@ on:
       - '.github/workflows/watches-duplicate-diagnostic.yml'
       - 'snippets/sq-refine-v3-legacy-isolation.liquid'
       - 'snippets/sq-state-guard-audit-overlay.liquid'
+      - 'layout/theme.liquid'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,25 +20,57 @@ jobs:
           node-version: '22'
       - run: npm install --no-save playwright@1.55.0
       - run: npx playwright install --with-deps chromium
-      - name: Certify preview Watches route
+      - name: Certify current preview Watches route
         run: |
           cat > certify.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'node:fs';
-          const browser=await chromium.launch({headless:true});
           const url='https://www.statesideqm.com/collections/watches?preview_theme_id=158561894555';
           const sizes=[['desktop',1440,1000],['mobile',390,844]];
+          const legacySelectors=['[class*="button-tree"]','[class*="root-categories"]','[class*="third-level"]','[class*="branch-grid"]','[class*="type-grid"]','[class*="program-tree"]','[class*="category-grid"]','[class*="navigation-grid"]','.sq-subcategory-section','.sq-subcategory-card','.sqbfl','.sq-maker-browser','.sq-global-refine-sidebar','.facets-block-wrapper--horizontal .facets__filters-wrapper','.facets-toggle__wrapper','theme-drawer#filters-drawer'];
+          const browser=await chromium.launch({headless:true});
           const report={browser:browser.version(),url,results:[]};
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
           for(const [name,width,height] of sizes){
             const ctx=await browser.newContext({viewport:{width,height}});
-            const page=await ctx.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
-            await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});await page.waitForTimeout(9000);
-            const state=await page.evaluate(()=>{const vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden');const main=document.querySelector('#MainContent');const grids=[...main.querySelectorAll('.product-grid,.sq-refine-v3-grid')].filter(g=>vis(g)&&g.querySelector('a[href*="/products/"]'));const links=grids.map(g=>[...new Set([...g.querySelectorAll('a[href*="/products/"]')].map(a=>new URL(a.href,location.href).pathname))]);let overlap=0;for(let i=0;i<links.length;i++)for(let j=i+1;j<links.length;j++)if(links[i].some(x=>links[j].includes(x)))overlap++;const text=(main.innerText||'').toLowerCase();return{theme:window.Shopify?.theme,guard:!!document.querySelector('[data-sq-watches-single-surface-guard]'),marker:main?.dataset.sqWatchesSingleSurface||'',layouts:[...main.querySelectorAll('.sq-refine-v3-layout')].filter(vis).length,visibleProductGrids:grids.length,gridProductCounts:links.map(x=>x.length),overlapPairs:overlap,stateGuardBuilder:text.includes('state guard uniform builder')||text.includes('build your uniform'),duplicateMarked:[...main.querySelectorAll('[data-sq-watches-duplicate-surface="true"]')].length};});
+            const page=await ctx.newPage();
+            const errors=[];
+            page.on('pageerror',e=>errors.push(e.message));
+            await page.addInitScript(({legacySelectors})=>{
+              window.__sqWatchFlashTrace=[];
+              const visible=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};
+              const clean=s=>String(s||'').replace(/\s+/g,' ').trim().toLowerCase();
+              const tick=()=>{const m=document.querySelector('#MainContent');if(m){const hits=[];for(const sel of legacySelectors){for(const e of m.querySelectorAll(sel)){if(visible(e)&&!e.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results'))hits.push(sel)}}const t=clean(m.innerText);const stateGuard=t.includes('state guard uniform builder')||t.includes('build your uniform');if(hits.length||stateGuard)window.__sqWatchFlashTrace.push({t:Math.round(performance.now()),hits:[...new Set(hits)],stateGuard});}if(performance.now()<4000)requestAnimationFrame(tick)};
+              requestAnimationFrame(tick);
+            },{legacySelectors});
+            await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForFunction(()=>{const m=document.querySelector('#MainContent');return m?.dataset.sqRefineV3Ready==='true'||!!m?.querySelector('.sq-refine-v3-layout')},{timeout:45000});
+            await sleep(7000);
+            const inspect=async()=>page.evaluate(()=>{const vis=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&Number(getComputedStyle(e).opacity||1)>0);const main=document.querySelector('#MainContent');const grids=[...main.querySelectorAll('.product-grid,.sq-refine-v3-grid')].filter(g=>vis(g)&&g.querySelector('a[href*="/products/"]'));const cards=grids[0]?[...grids[0].querySelectorAll(':scope > .product-grid__item, :scope > li')].map(c=>c.querySelector('a[href*="/products/"]')).filter(Boolean).map(a=>new URL(a.href,location.href).pathname):[];const groups=[...main.querySelectorAll('.sq-refine-v3-sidebar details.sq-refine-v3-group')];const pageSize=[...main.querySelectorAll('.sq-refine-v3-page-size input')].map(i=>({value:i.value,checked:i.checked}));const sidebar=main.querySelector('.sq-refine-v3-sidebar');const text=(main.innerText||'').toLowerCase();return{theme:window.Shopify?.theme,guard:!!document.querySelector('[data-sq-watches-single-surface-guard]'),marker:main?.dataset.sqWatchesSingleSurface||'',ready:main?.dataset.sqRefineV3Ready||'',layouts:[...main.querySelectorAll('.sq-refine-v3-layout')].filter(vis).length,visibleProductGrids:grids.length,cardCount:cards.length,uniqueCardCount:new Set(cards).size,duplicateCardPaths:[...new Set(cards.filter((x,i,a)=>a.indexOf(x)!==i))],stateGuardBuilder:text.includes('state guard uniform builder')||text.includes('build your uniform'),sidebarVisible:vis(sidebar),sidebarTitle:sidebar?.querySelector('.sq-refine-v3-sidebar__title')?.textContent.trim()||'',sidebarPosition:sidebar?getComputedStyle(sidebar).position:'',groups:groups.map(g=>({label:g.querySelector(':scope>summary')?.textContent.trim()||'',inputs:g.querySelectorAll('input[type="checkbox"]').length,open:g.open})),checkboxCount:main.querySelectorAll('.sq-refine-v3-sidebar input[type="checkbox"]').length,pageSize,flashTrace:window.__sqWatchFlashTrace||[]};});
+            const initial=await inspect();
+            const scrollSamples=[];
+            for(const ratio of [0.25,0.5,0.75,1]){await page.evaluate(r=>window.scrollTo(0,(document.documentElement.scrollHeight-innerHeight)*r),ratio);await sleep(400);scrollSamples.push(await inspect())}
+            await page.evaluate(()=>window.scrollTo(0,0));
+            const disclosure=await page.evaluate(async()=>{const d=[...document.querySelectorAll('.sq-refine-v3-sidebar details.sq-refine-v3-group')][0];if(!d)return{pass:false,reason:'no group'};const s=d.querySelector(':scope>summary');const before=d.open;s.click();await new Promise(r=>setTimeout(r,100));const changed=d.open!==before;s.click();await new Promise(r=>setTimeout(r,100));return{pass:changed&&d.open===before,before,after:d.open}});
+            const checkbox=await page.evaluate(async()=>{const main=document.querySelector('#MainContent');const inputs=[...main.querySelectorAll('.sq-refine-v3-sidebar input[type="checkbox"]')].filter(i=>!i.disabled);const input=inputs.find(i=>i.dataset.kind==='native')||inputs[0];if(!input)return{pass:false,reason:'no checkbox'};input.scrollIntoView({block:'center'});const beforeUrl=location.href,beforeChecked=input.checked;input.click();await new Promise(r=>setTimeout(r,1800));const afterUrl=location.href;const current=[...document.querySelectorAll('.sq-refine-v3-sidebar input[type="checkbox"]')].find(i=>i.value===input.value&&i.dataset.kind===input.dataset.kind);const checked=!!current?.checked;return{pass:beforeChecked!==checked||beforeUrl!==afterUrl,kind:input.dataset.kind||'',value:input.value||'',beforeUrl,afterUrl,checked}});
+            if(checkbox.afterUrl&&checkbox.afterUrl!==url){await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true'||!!document.querySelector('#MainContent .sq-refine-v3-layout'),{timeout:45000});await sleep(2500)}
+            const size100=page.locator('.sq-refine-v3-page-size input[value="100"]').first();
+            let pageSize100={pass:false};
+            if(await size100.count()){
+              await size100.click({force:true});
+              await sleep(3000);
+              pageSize100=await page.evaluate(()=>({pass:new URL(location.href).searchParams.get('sq_per_page')==='100'||!!document.querySelector('.sq-refine-v3-page-size input[value="100"]:checked'),url:location.href,checked:!!document.querySelector('.sq-refine-v3-page-size input[value="100"]:checked')}));
+            }
             await page.screenshot({path:`watches-${name}.png`,fullPage:true});
-            const pass=state.guard&&state.marker==='true'&&state.layouts===1&&state.visibleProductGrids===1&&!state.stateGuardBuilder&&state.overlapPairs===0&&errors.length===0;
-            report.results.push({name,pass,errors,state});await ctx.close();
+            const allStates=[initial,...scrollSamples];
+            const pass=initial.guard&&initial.marker==='true'&&initial.layouts===1&&initial.visibleProductGrids===1&&initial.cardCount>0&&initial.cardCount===initial.uniqueCardCount&&!initial.stateGuardBuilder&&initial.sidebarVisible&&initial.sidebarTitle==='Refine Products'&&initial.checkboxCount>0&&initial.groups.length>0&&initial.groups.every(g=>g.inputs>0)&&initial.pageSize.map(x=>x.value).join(',')==='50,100,250'&&initial.flashTrace.length===0&&scrollSamples.every(s=>s.layouts===1&&s.visibleProductGrids===1&&s.cardCount===s.uniqueCardCount&&!s.stateGuardBuilder)&&disclosure.pass&&checkbox.pass&&pageSize100.pass&&errors.length===0;
+            report.results.push({name,pass,errors,initial,scrollSamples:scrollSamples.map(s=>({layouts:s.layouts,visibleProductGrids:s.visibleProductGrids,cardCount:s.cardCount,uniqueCardCount:s.uniqueCardCount,stateGuardBuilder:s.stateGuardBuilder})),disclosure,checkbox,pageSize100});
+            await ctx.close();
           }
-          await browser.close();fs.writeFileSync('watches-cert.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));if(report.results.some(r=>!r.pass))process.exit(1);
+          await browser.close();
+          fs.writeFileSync('watches-cert.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          if(report.results.some(r=>!r.pass))process.exit(1);
           EOF
           node certify.mjs
       - uses: actions/upload-artifact@v4
