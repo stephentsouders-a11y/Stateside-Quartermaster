@@ -40,6 +40,11 @@ html[data-sq-refine-v3-child-isolation="true"] #MainContent [data-sq-refine-v3-h
   var current={{ collection.handle | json }};
   var params=new URLSearchParams(location.search);
   var root=params.get('sq_root')||'';
+  if(current==='sta-brite-insignia'||root==='sta-brite-insignia'){
+    window.__sqTypeFamilyRouteAuthority=true;
+    window.__sqTypeRouteCoherenceV3=true;
+    window.__sqTypeFamilyProductsV1=true;
+  }
   if(!root||!ROOTS.has(root)||ROOTS.has(current))return;
 
   document.documentElement.dataset.sqRefineV3ChildIsolation='true';
