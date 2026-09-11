@@ -2,6 +2,9 @@
 V3 Refine Products sidebar presentation and taxonomy normalizer.
 Applies only when the existing V3 controller is present. State Guard and non-V3 pages remain untouched.
 {% enddoc %}
+{% if request.page_type == 'collection' and collection.handle contains 'k9' %}
+{% render 'sq-refine-v3' %}
+{% endif %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 <script type="application/json" data-sq-refine-v3-polish-meta>{"types":{{ collection.all_types | json }},"vendors":{{ collection.all_vendors | json }},"tags":{% if collection.handle == 'firearm-accessories' or collection.handle == 'literature' %}{{ collection.all_tags | json }}{% else %}[]{% endif %}}</script>
 <style data-sq-refine-v3-sidebar-polish>
@@ -54,3 +57,4 @@ Applies only when the existing V3 controller is present. State Guard and non-V3 
 {% endif %}
 
 {% render 'sq-refine-v3-morale-color-pattern' %}
+{% render 'sq-refine-v3-k9-color-pattern' %}
