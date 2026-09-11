@@ -1,0 +1,93 @@
+name: Refine V3 41 fast alphabetical Chromium certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-41-fast-alphabetical-cert.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify-fast-a-to-z:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Build exact 41-button alphabetical matrix and bounded-concurrency interaction engine
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const f='.github/scripts/refine-v3-other40-exhaustive-cert.mjs';
+          let s=fs.readFileSync(f,'utf8');
+          const needle="const routes=[\n";
+          if(!s.includes(needle)) throw new Error('route array start not found');
+          s=s.replace(needle,needle+"['Accessories, Gifts & Collectibles','/collections/accessories-gifts-collectibles','v3'],");
+          const guard="if(routes.some(r=>r[1].includes('state-guard-series')))";
+          if(!s.includes(guard)) throw new Error('State Guard guard missing');
+          s=s.replace(guard,"routes.sort((a,b)=>a[0].localeCompare(b[0],'en',{sensitivity:'base'}));\nif(routes.length!==41) throw new Error('Expected 41 routes, got '+routes.length);\nif(routes.some(r=>r[1].includes('state-guard-series'))) throw new Error('State Guard must never enter certification');\n"+guard);
+          const start=s.indexOf('async function exerciseOptions(');
+          const end=s.indexOf('async function exercisePageSizes(',start);
+          if(start<0||end<0) throw new Error('exerciseOptions block not found');
+          const concurrent=`async function exerciseOptions(p,base,mode,pageErrors){
+            const first=await snapshot(p),options=first.groups.flatMap(g=>g.items.map(i=>({...i,gi:g.gi,group:g.title}))),out=new Array(options.length);
+            const context=p.context();let cursor=0,done=0;
+            async function one(wp,opt){let rec={group:opt.group,label:opt.label,kind:opt.kind,pass:false,selected:false,reset:false,resultCards:null,error:''};try{
+              await nav(wp,base);await openGroup(wp,opt.gi);const inp=await findInput(wp,opt);if(await inp.count()!==1)throw new Error('input not found');const before=(await snapshot(wp)).url;
+              await Promise.all([wp.waitForNavigation({waitUntil:'domcontentloaded',timeout:45000}).catch(()=>null),inp.click()]);await wp.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000}).catch(()=>{});await sleep(500);
+              let st=await snapshot(wp);rec.resultCards=st.cards;const checked=st.groups.flatMap(g=>g.items).some(x=>x.checked&&((opt.kind==='native'&&x.name===opt.name&&x.value===opt.value)||(opt.kind==='structural'&&x.label===opt.label)));const changed=st.url!==before;rec.selected=checked&&changed;if(!rec.selected)throw new Error('selection did not become active');if(baseFailures(st,mode).some(x=>!/no products/.test(x)))throw new Error('layout failure after select');
+              let ai=null;for(const g of st.groups){for(const x of g.items){if(x.checked&&((opt.kind==='native'&&x.name===opt.name&&x.value===opt.value)||(opt.kind==='structural'&&x.label===opt.label))){ai={gi:g.gi,ii:x.ii};break}}if(ai)break}if(!ai)throw new Error('active index missing');
+              await openGroup(wp,ai.gi);const resetInp=groupLocator(wp,ai.gi).locator('input[type=checkbox][data-kind]').nth(ai.ii);await Promise.all([wp.waitForNavigation({waitUntil:'domcontentloaded',timeout:45000}).catch(()=>null),resetInp.click()]);await wp.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000}).catch(()=>{});await sleep(450);st=await snapshot(wp);rec.reset=!st.groups.flatMap(g=>g.items).some(x=>x.checked);if(!rec.reset)throw new Error('reset left checkbox active');rec.pass=true;
+            }catch(e){rec.error=String(e)}return rec}
+            async function worker(id){const wp=await context.newPage();wp.on('pageerror',e=>pageErrors.push(String(e)));try{while(true){const n=cursor++;if(n>=options.length)break;out[n]=await one(wp,options[n]);done++;if(done%10===0||done===options.length)console.log(mode+' option progress '+done+'/'+options.length+' workers=4')}}finally{await wp.close().catch(()=>{})}}
+            const workers=Math.min(4,Math.max(1,options.length));await Promise.all(Array.from({length:workers},(_,i)=>worker(i)));
+            return {count:options.length,passed:out.filter(x=>x&&x.pass).length,failed:out.filter(x=>!x||!x.pass).length,items:out,pageErrors:[...pageErrors]};
+          }
+          `;
+          s=s.slice(0,start)+concurrent+s.slice(end);
+          fs.writeFileSync(f,s);
+          NODE
+      - name: Install Chromium once
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify all 41 strictly A-to-Z with four interaction workers per route
+        run: |
+          set +e
+          : > alphabetical41-fast-status.tsv
+          overall=0
+          for i in $(seq 0 40); do
+            export SHARD="$i" SHARDS=41
+            echo "===== START $((i+1))/41 ====="
+            node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+            rc=$?
+            report="other40-exhaustive/shard-${i}/report.json"
+            if [ -f "$report" ]; then
+              route=$(jq -r '.routes[0].name // "unknown"' "$report")
+              passed=$(jq -r '.interactionPassed // 0' "$report")
+              count=$(jq -r '.interactionCount // 0' "$report")
+              failures=$(jq -r '.failures | length' "$report")
+              pageerrors=$(jq '[.routes[] | select(.type=="v3") | .desktop.pageErrors[], .mobile.pageErrors[]] | length' "$report")
+              failedinteractions=$(jq '[.routes[] | select(.type=="v3") | .desktop.interactions.items[], .mobile.interactions.items[] | select(.pass!=true)] | length' "$report")
+              state=PASS
+              if [ "$rc" -ne 0 ] || [ "$failures" -ne 0 ] || [ "$pageerrors" -ne 0 ] || [ "$failedinteractions" -ne 0 ] || [ "$passed" -ne "$count" ]; then state=FAIL; overall=1; fi
+              printf '%02d\t%s\t%s\t%s/%s\tfailures=%s\tpageErrors=%s\tfailedInteractions=%s\n' "$((i+1))" "$state" "$route" "$passed" "$count" "$failures" "$pageerrors" "$failedinteractions" | tee -a alphabetical41-fast-status.tsv
+            else
+              printf '%02d\tFAIL\tmissing report\n' "$((i+1))" | tee -a alphabetical41-fast-status.tsv; overall=1
+            fi
+            echo "===== END $((i+1))/41 ====="
+          done
+          test "$(wc -l < alphabetical41-fast-status.tsv)" -eq 41 || overall=1
+          grep -q $'\tFAIL\t' alphabetical41-fast-status.tsv && overall=1
+          exit "$overall"
+      - name: Upload complete fast A-to-Z evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alphabetical41-fast-full-evidence
+          path: |
+            other40-exhaustive
+            alphabetical41-fast-status.tsv
+          if-no-files-found: error
+          retention-days: 14
