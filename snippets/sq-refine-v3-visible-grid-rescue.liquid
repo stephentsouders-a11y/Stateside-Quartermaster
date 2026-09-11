@@ -26,6 +26,7 @@ Guarantees that Refine V3 exposes the assembled product cards in the visible V3 
     }
   }
   function repair(){
+    if(main.dataset.sqK9ColorBusy==='true'||main.dataset.sqK9Surface==='true')return true;
     if(main.dataset.sqRefineV3Ready!=='true')return false;
     const results=main.querySelector('.sq-refine-v3-results');
     if(!results)return false;
