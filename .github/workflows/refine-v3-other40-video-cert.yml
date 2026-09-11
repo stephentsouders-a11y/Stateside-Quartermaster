@@ -1,0 +1,35 @@
+name: Refine V3 remaining 40 Chromium video cert
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/scripts/refine-v3-other40-video-cert.mjs'
+      - '.github/workflows/refine-v3-other40-video-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4]
+    env:
+      SHARD: ${{ matrix.shard }}
+      SHARDS: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install playwright@1.55.0
+      - run: npx playwright install --with-deps chromium
+      - run: node .github/scripts/refine-v3-other40-video-cert.mjs
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remaining40-shard-${{ matrix.shard }}
+          path: other40-cert/shard-${{ matrix.shard }}/
+          retention-days: 7
