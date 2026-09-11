@@ -8,6 +8,7 @@ on:
       - 'sections/sq-refine-v3-product-grid.liquid'
       - 'templates/collection.sq-refine-v3-products.json'
   workflow_dispatch:
+# Final regression trigger after visible-author-state repair.
 permissions: { contents: read }
 jobs:
   certify-no-interior-buttons:
