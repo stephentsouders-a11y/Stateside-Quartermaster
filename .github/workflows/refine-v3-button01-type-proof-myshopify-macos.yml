@@ -1,0 +1,36 @@
+name: REFINE V3 Button 01 Type Proof MyShopify macOS
+
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-button01-type-proof-myshopify-macos.yml'
+  workflow_dispatch:
+
+jobs:
+  type-proof:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install chromium >/dev/null 2>&1
+      - name: Prove Button 01 Type via MyShopify origin
+        run: |
+          mkdir -p evidence
+          node <<'NODE'
+          import fs from 'node:fs/promises'; import { chromium } from 'playwright';
+          const START='https://veteran-apparel-co.myshopify.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
+          const b=await chromium.launch({headless:true}); const c=await b.newContext({viewport:{width:1440,height:1000},recordVideo:{dir:'evidence/video',size:{width:960,height:666}}}); const p=await c.newPage(),video=p.video(); const r={pass:false,steps:{},errors:[],responses:[]};
+          p.on('response',x=>{if(x.status()>=400&&(x.url().includes('statesideqm.com')||x.url().includes('myshopify.com')))r.responses.push({status:x.status(),url:x.url()})});
+          const challenge=async()=>/verify you are human|connection needs to be verified/i.test(await p.locator('body').innerText().catch(()=>'')); const ready=async()=>p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:60000});
+          try{await p.goto(START,{waitUntil:'domcontentloaded',timeout:90000});r.steps.root=p.url();if(await challenge())throw new Error('challenge root');await ready();const det=p.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group').filter({has:p.locator(':scope>summary',{hasText:'Shop by Type'})}).first();if(await det.getAttribute('open')===null)await det.locator(':scope>summary').click();const input=det.locator('input:not(:checked)').first();const meta=await input.evaluate(i=>({name:i.dataset.filterName||i.dataset.sqPolishParam||'',value:i.dataset.filterValue||i.dataset.sqPolishValue||i.value||'',label:(i.closest('label')?.innerText||'').trim()}));r.steps.meta=meta;const before=p.url();await input.locator('xpath=ancestor::label[1]').click({noWaitAfter:true});await p.waitForFunction(x=>location.href!==x,before,{timeout:20000});r.steps.after=p.url();if(await challenge())throw new Error('challenge after');await ready();const u=new URL(p.url());if(!u.searchParams.getAll(meta.name).includes(meta.value))throw new Error('type URL missing');r.steps.cards=await p.locator('#MainContent .sq-refine-v3-results .product-grid a[href*="/products/"]').count();if(!r.steps.cards)throw new Error('zero cards');r.steps.checked=await p.evaluate(m=>[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar input:checked')].some(i=>(i.dataset.filterName||i.dataset.sqPolishParam)===m.name&&(i.dataset.filterValue||i.dataset.sqPolishValue||i.value)===m.value),meta);if(!r.steps.checked)throw new Error('not checked');await p.screenshot({path:'evidence/type-filtered.png'});await p.reload({waitUntil:'domcontentloaded',timeout:90000});if(await challenge())throw new Error('challenge refresh');await ready();r.steps.refresh=p.url();r.steps.refreshChecked=await p.evaluate(m=>[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar input:checked')].some(i=>(i.dataset.filterName||i.dataset.sqPolishParam)===m.name&&(i.dataset.filterValue||i.dataset.sqPolishValue||i.value)===m.value),meta);if(!r.steps.refreshChecked)throw new Error('lost refresh');await p.goBack({waitUntil:'domcontentloaded',timeout:90000});if(await challenge())throw new Error('challenge back');await ready();r.steps.back=p.url();if(r.steps.back!==before)throw new Error(`back mismatch ${r.steps.back}`);await p.screenshot({path:'evidence/back-root.png'});r.pass=true}catch(e){r.errors.push(String(e));r.steps.failureUrl=p.url();r.steps.challenge=await challenge();await p.screenshot({path:'evidence/failure.png'}).catch(()=>{})}await fs.writeFile('evidence/report.json',JSON.stringify(r,null,2));console.log(JSON.stringify(r,null,2));await p.close();await c.close();if(video)await fs.copyFile(await video.path(),'evidence/type-proof.webm').catch(()=>{});await b.close();if(!r.pass)process.exit(1);
+          NODE
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: button01-type-proof-myshopify-macos, path: evidence, retention-days: 14 }
