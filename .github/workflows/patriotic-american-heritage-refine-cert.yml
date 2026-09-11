@@ -1,0 +1,99 @@
+name: Patriotic American Heritage Refine Certification
+on:
+  push:
+    paths:
+      - '.github/workflows/patriotic-american-heritage-refine-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Click every refine destination and audit every product
+        env:
+          BASE: https://www.statesideqm.com
+        run: |
+          cat > certify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const ROOT_TAG='SQ Verified Patriotic American Heritage';
+          const cats=[
+            {label:'American Flags',handle:'american-flags-1',count:27,tag:'SQ Patriotic American Flags Clean'},
+            {label:"Don't Tread On Me",handle:'dont-tread-on-me',count:122,tag:'SQ Patriotic Dont Tread Clean'},
+            {label:'Memorial & Remembrance',handle:'memorial-remembrance',count:29,tag:'SQ Patriotic Memorial Clean'},
+            {label:'Patriotic & 2A Patches',handle:'patriotic-2a-patches-2',count:19,tag:'SQ Patriotic Patches Clean'},
+            {label:'Patriotic Accessories & Collectibles',handle:'patriotic-accessories-collectibles',count:21,tag:'SQ Patriotic Accessories Clean'},
+            {label:'Patriotic Apparel & Headwear',handle:'patriotic-apparel-headwear',count:9,tag:'SQ Patriotic Apparel Clean'},
+            {label:'Patriotic Art & Historical Prints',handle:'patriotic-art-historical-prints',count:59,tag:'SQ Patriotic Art Clean'},
+            {label:'Patriotic Stickers & Decals',handle:'patriotic-stickers-decals',count:77,tag:'SQ Patriotic Stickers Clean'},
+            {label:'Veteran & Military Life',handle:'veteran-military-life-1',count:6,tag:'SQ Patriotic Veteran Life Clean'},
+          ];
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1000}});
+          const page=await ctx.newPage();
+          page.setDefaultTimeout(20000);page.setDefaultNavigationTimeout(60000);
+          const report={root:null,totalExpected:cats.reduce((s,c)=>s+c.count,0),totalSeen:0,categories:[],errors:[],httpErrors:[]};
+          page.on('response',r=>{if(r.status()===429||r.status()>=500)report.httpErrors.push(`${r.status()} ${r.url()}`)});
+          const rootUrl=`${process.env.BASE}/collections/patriotic-american-heritage`;
+          let resp=await page.goto(rootUrl,{waitUntil:'domcontentloaded'});
+          report.root={status:resp?.status()??null,title:await page.title(),url:page.url()};
+          await page.screenshot({path:'out/root.png',fullPage:false});
+          for(const c of cats){
+            const row={...c,clicked:false,landed:null,apiStatus:null,seen:0,badTag:[],badRootTag:[],duplicateHandles:[],typeSummary:{},errors:[]};
+            try{
+              await page.goto(rootUrl,{waitUntil:'domcontentloaded'});
+              const locator=page.locator(`a[href*="/collections/${c.handle}"]`).filter({hasText:c.label}).first();
+              await locator.waitFor({state:'visible'});
+              await Promise.all([
+                page.waitForURL(u=>new URL(u).pathname===`/collections/${c.handle}`,{timeout:30000}),
+                locator.click()
+              ]);
+              row.clicked=true; row.landed=page.url();
+              await page.waitForLoadState('domcontentloaded');
+              const r=await ctx.request.get(`${process.env.BASE}/collections/${c.handle}/products.json?limit=250`,{timeout:60000});
+              row.apiStatus=r.status();
+              if(!r.ok()) throw new Error(`products.json HTTP ${r.status()}`);
+              const j=await r.json(); const products=j.products||[]; row.seen=products.length; report.totalSeen+=products.length;
+              const seen=new Set();
+              for(const p of products){
+                const tags=Array.isArray(p.tags)?p.tags:String(p.tags||'').split(',').map(x=>x.trim());
+                if(!tags.includes(c.tag)) row.badTag.push({id:p.id,title:p.title,handle:p.handle,type:p.product_type,tags});
+                if(!tags.includes(ROOT_TAG)) row.badRootTag.push({id:p.id,title:p.title,handle:p.handle,type:p.product_type,tags});
+                if(seen.has(p.handle)) row.duplicateHandles.push(p.handle); else seen.add(p.handle);
+                row.typeSummary[p.product_type||'(blank)']=(row.typeSummary[p.product_type||'(blank)']||0)+1;
+              }
+              if(products.length!==c.count) row.errors.push(`count expected ${c.count}, saw ${products.length}`);
+              if(row.badTag.length) row.errors.push(`${row.badTag.length} product(s) missing category clean tag`);
+              if(row.badRootTag.length) row.errors.push(`${row.badRootTag.length} product(s) missing root heritage tag`);
+              if(row.duplicateHandles.length) row.errors.push(`${row.duplicateHandles.length} duplicate handle(s)`);
+              await page.screenshot({path:`out/${c.handle}.png`,fullPage:false});
+            } catch(e){row.errors.push(String(e?.message||e));}
+            if(row.errors.length) report.errors.push({category:c.label,errors:row.errors});
+            report.categories.push(row);
+            console.log(`AUDIT ${c.label}: ${row.errors.length?'FAIL':'PASS'} ${row.seen}/${c.count}`);
+          }
+          report.httpErrors=[...new Set(report.httpErrors)];
+          if(report.totalSeen!==report.totalExpected) report.errors.push({category:'TOTAL',errors:[`expected ${report.totalExpected}, saw ${report.totalSeen}`]});
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          fs.writeFileSync('out/summary.txt',report.categories.map(c=>`${c.errors.length?'FAIL':'PASS'} | ${c.label} | clicked=${c.clicked} | ${c.seen}/${c.count} | ${c.errors.join('; ')}`).join('\n')+`\nTOTAL ${report.totalSeen}/${report.totalExpected}\n`);
+          console.log(JSON.stringify(report,null,2));
+          await ctx.close();await browser.close();
+          if(report.errors.length) process.exitCode=2;
+          EOF
+          node certify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: patriotic-american-heritage-refine-cert
+          path: out
+          retention-days: 7
