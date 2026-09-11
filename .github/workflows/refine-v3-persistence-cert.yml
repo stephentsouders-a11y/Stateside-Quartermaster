@@ -17,8 +17,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
+        with: { node-version: '24' }
       - run: |
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
@@ -27,70 +26,33 @@ jobs:
         run: |
           cat > persistence.mjs <<'EOF'
           import { chromium } from 'playwright';
-          const BASE='https://www.statesideqm.com', THEME='158561894555';
-          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          const withTheme=(path)=>{const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()};
-          const visJS=`e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0'}`;
-          async function gotoReady(page,path){
-            let response=null,last=null;
-            for(let i=0;i<5;i++){
-              try{response=await page.goto(withTheme(path),{waitUntil:'domcontentloaded',timeout:90000});if(response?.status()===200)break;last=new Error('HTTP '+response?.status())}catch(e){last=e}
-              await sleep(4000*(i+1));
-            }
-            if(response?.status()!==200)throw last||new Error('navigation failed');
-            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:50000});
-            await page.waitForFunction(()=>{const v=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'};return [...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar')].some(v)},null,{timeout:20000});
-            await sleep(1200);
-          }
-          async function state(page){
-            return page.evaluate(()=>{
-              const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0'};
-              const main=document.querySelector('#MainContent');
-              const side=[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar')].find(vis);
-              const grid=[...document.querySelectorAll('#MainContent .sq-refine-v3-results .product-grid')].find(vis);
-              const products=grid?[...grid.querySelectorAll('a[href*="/products/"]')].filter(vis).map(a=>new URL(a.href,location.origin).pathname).filter((x,i,a)=>a.indexOf(x)===i):[];
-              const legacy=[...main.querySelectorAll('[class*="button-tree"],[class*="root-categories"],[class*="third-level"],[class*="branch-grid"],[class*="type-grid"],[class*="program-tree"],[class*="category-grid"],[class*="navigation-grid"],.sqbfl')].filter(e=>!e.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results')&&vis(e));
-              return {url:location.href,side:!!side,title:(side?.querySelector('.sq-refine-v3-sidebar__title')?.textContent||'').trim(),products,legacy:legacy.length,ready:main?.dataset.sqRefineV3Ready==='true',error:main?.dataset.sqRefineV3Error||'',childIsolation:document.documentElement.dataset.sqRefineV3ChildIsolation||'',childRoot:document.documentElement.dataset.sqRefineV3ChildRoot||''};
-            });
-          }
+          const BASE='https://www.statesideqm.com',THEME='158561894555',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const themed=path=>{const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()};
+          async function nav(page,path){let response,last;for(let i=0;i<5;i++){try{response=await page.goto(themed(path),{waitUntil:'domcontentloaded',timeout:90000});if(response?.status()===200)break;last=new Error('HTTP '+response?.status())}catch(e){last=e}await sleep(4000*(i+1))}if(response?.status()!==200)throw last||new Error('navigation failed');await ready(page)}
+          async function ready(page){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:50000});await page.waitForFunction(()=>{const v=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'};return [...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar')].some(v)},null,{timeout:20000});await sleep(1200)}
+          async function state(page){return page.evaluate(()=>{const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0'};const main=document.querySelector('#MainContent'),side=[...main.querySelectorAll('.sq-refine-v3-sidebar')].find(vis),grid=[...main.querySelectorAll('.sq-refine-v3-results .product-grid')].find(vis),products=grid?[...grid.querySelectorAll('a[href*="/products/"]')].filter(vis).map(a=>new URL(a.href,location.origin).pathname).filter((x,i,a)=>a.indexOf(x)===i):[],legacy=[...main.querySelectorAll('[class*="button-tree"],[class*="root-categories"],[class*="third-level"],[class*="branch-grid"],[class*="type-grid"],[class*="program-tree"],[class*="category-grid"],[class*="navigation-grid"],.sqbfl')].filter(e=>!e.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results')&&vis(e));return{url:location.href,side:!!side,title:(side?.querySelector('.sq-refine-v3-sidebar__title')?.textContent||'').trim(),products,legacy:legacy.length,ready:main?.dataset.sqRefineV3Ready==='true',error:main?.dataset.sqRefineV3Error||'',childIsolation:document.documentElement.dataset.sqRefineV3ChildIsolation||'',childRoot:document.documentElement.dataset.sqRefineV3ChildRoot||''}})}
           const changed=(a,b)=>a.length&&b.length&&(a.length!==b.length||a.some(x=>!b.includes(x))||b.some(x=>!a.includes(x)));
-          function assertState(label,s){if(!s.ready||s.error)throw new Error(label+' V3 not ready '+JSON.stringify(s));if(!s.side||s.title!=='REFINE PRODUCTS')throw new Error(label+' sidebar missing '+JSON.stringify(s));if(s.legacy)throw new Error(label+' legacy navigation visible '+JSON.stringify(s));}
+          function assertState(label,s){if(!s.ready||s.error)throw new Error(label+' V3 not ready '+JSON.stringify(s));if(!s.side||s.title!=='REFINE PRODUCTS')throw new Error(label+' sidebar missing '+JSON.stringify(s));if(s.legacy)throw new Error(label+' legacy navigation visible '+JSON.stringify(s))}
           const browser=await chromium.launch({headless:true});
 
-          // Structural checkbox: root -> child collection -> refresh -> back.
+          // Structural filter must keep V3 authoritative on the child route, refresh and Back.
           {
-            const ctx=await browser.newContext({viewport:{width:1440,height:1000}}),page=await ctx.newPage();
-            await gotoReady(page,'/collections/accessories-gifts-collectibles');
-            const before=await state(page);assertState('STRUCTURAL root',before);
-            const input=page.locator('#MainContent .sq-refine-v3-sidebar input[data-kind="structural"][data-target^="/collections/"]').first();
-            if(!await input.count())throw new Error('STRUCTURAL checkbox missing');
-            const details=input.locator('xpath=ancestor::details[1]');if(await details.getAttribute('open')===null)await details.locator(':scope > summary').click();
-            const target=await input.getAttribute('data-target');const targetUrl=new URL(target,BASE);
-            if(targetUrl.searchParams.get('sq_root')!=='accessories-gifts-collectibles')throw new Error('STRUCTURAL target missing sq_root '+target);
-            const old=page.url();await input.evaluate(i=>i.click());await page.waitForFunction(u=>location.href!==u,old,{timeout:30000});await page.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:50000});await sleep(1600);
-            const child=await state(page);assertState('STRUCTURAL child',child);
-            const cu=new URL(child.url);if(cu.searchParams.get('sq_root')!=='accessories-gifts-collectibles')throw new Error('STRUCTURAL child root lost '+child.url);
-            if(cu.pathname==='/collections/accessories-gifts-collectibles')throw new Error('STRUCTURAL did not navigate to child '+child.url);
-            if(child.childIsolation!=='true'||child.childRoot!=='accessories-gifts-collectibles')throw new Error('STRUCTURAL child isolation inactive '+JSON.stringify(child));
-            if(!changed(before.products,child.products))throw new Error('STRUCTURAL product set did not change '+JSON.stringify({before:before.products.slice(0,8),after:child.products.slice(0,8)}));
-            const childUrl=page.url();await page.reload({waitUntil:'domcontentloaded',timeout:90000});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:50000});await sleep(1400);const refreshed=await state(page);assertState('STRUCTURAL refresh',refreshed);if(new URL(refreshed.url).searchParams.get('sq_root')!=='accessories-gifts-collectibles'||refreshed.childIsolation!=='true')throw new Error('STRUCTURAL refresh lost root/isolation '+JSON.stringify(refreshed));if(!refreshed.products.length)throw new Error('STRUCTURAL refresh empty product grid');
-            await page.goBack({waitUntil:'domcontentloaded',timeout:90000});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:50000});await sleep(1200);const back=await state(page);assertState('STRUCTURAL back',back);if(new URL(back.url).pathname!=='/collections/accessories-gifts-collectibles')throw new Error('STRUCTURAL back wrong route '+back.url);
-            console.log('STRUCTURAL PASS',JSON.stringify({target,childUrl,before:before.products.length,child:child.products.length}));await ctx.close();
+            const c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage();await nav(p,'/collections/accessories-gifts-collectibles');const before=await state(p);assertState('STRUCTURAL root',before);
+            const input=p.locator('#MainContent .sq-refine-v3-sidebar input[data-kind="structural"][data-target^="/collections/"]').first();if(!await input.count())throw new Error('STRUCTURAL checkbox missing');const d=input.locator('xpath=ancestor::details[1]');if(await d.getAttribute('open')===null)await d.locator(':scope > summary').click();const target=await input.getAttribute('data-target'),tu=new URL(target,BASE);if(tu.searchParams.get('sq_root')!=='accessories-gifts-collectibles')throw new Error('STRUCTURAL target missing root '+target);
+            const old=p.url();await input.evaluate(i=>i.click());await p.waitForFunction(u=>location.href!==u,old,{timeout:30000});await ready(p);const child=await state(p);assertState('STRUCTURAL child',child);const cu=new URL(child.url);if(cu.pathname==='/collections/accessories-gifts-collectibles'||cu.searchParams.get('sq_root')!=='accessories-gifts-collectibles')throw new Error('STRUCTURAL bad child '+child.url);if(child.childIsolation!=='true'||child.childRoot!=='accessories-gifts-collectibles')throw new Error('STRUCTURAL isolation inactive '+JSON.stringify(child));if(!changed(before.products,child.products))throw new Error('STRUCTURAL products unchanged');
+            await p.reload({waitUntil:'domcontentloaded',timeout:90000});await ready(p);const refreshed=await state(p);assertState('STRUCTURAL refresh',refreshed);if(refreshed.childIsolation!=='true'||new URL(refreshed.url).searchParams.get('sq_root')!=='accessories-gifts-collectibles')throw new Error('STRUCTURAL refresh lost root');
+            await p.goBack({waitUntil:'domcontentloaded',timeout:90000});await ready(p);const back=await state(p);assertState('STRUCTURAL back',back);if(new URL(back.url).pathname!=='/collections/accessories-gifts-collectibles')throw new Error('STRUCTURAL back route '+back.url);console.log('STRUCTURAL PASS',JSON.stringify({target,before:before.products.length,child:child.products.length}));await c.close();
           }
 
-          // Native checkbox: URL state + checked state + visible product-set change + sidebar persistence.
+          // Books Author is a real Shopify native filter.p.tag control. Select, refresh, clear, then switch author.
           {
-            const ctx=await browser.newContext({viewport:{width:1440,height:1000}}),page=await ctx.newPage();await gotoReady(page,'/collections/apparel');const before=await state(page);assertState('NATIVE root',before);
-            const groups=page.locator('#MainContent .sq-refine-v3-sidebar > details.sq-refine-v3-group');let input=null;
-            for(let i=0;i<await groups.count();i++){const g=groups.nth(i),label=(await g.locator(':scope > summary').innerText()).trim();if(/Shop by (Type|Manufacturers?)/i.test(label)){const q=g.locator('input[data-kind="native"][data-filter-name][data-filter-value]:not(:checked)').first();if(await q.count()){if(await g.getAttribute('open')===null)await g.locator(':scope > summary').click();input=q;break}}}
-            if(!input)throw new Error('NATIVE filter missing');const meta=await input.evaluate(i=>({name:i.dataset.filterName,value:i.dataset.filterValue,text:(i.closest('label')?.textContent||'').trim()}));const old=page.url();await input.evaluate(i=>i.click());await page.waitForFunction(u=>location.href!==u,old,{timeout:30000});await page.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:50000});await sleep(1600);const after=await state(page);assertState('NATIVE filtered',after);const u=new URL(after.url);if(!u.searchParams.getAll(meta.name).includes(meta.value))throw new Error('NATIVE URL state missing '+JSON.stringify(meta)+' '+after.url);const checked=await page.locator(`#MainContent .sq-refine-v3-sidebar input[data-kind="native"][data-filter-name="${meta.name}"][data-filter-value="${meta.value}"]`).first().isChecked().catch(()=>false);if(!checked)throw new Error('NATIVE checkbox state lost '+JSON.stringify(meta));if(!changed(before.products,after.products))throw new Error('NATIVE product set did not change '+JSON.stringify({meta,before:before.products.slice(0,8),after:after.products.slice(0,8)}));console.log('NATIVE PASS',JSON.stringify(meta),after.url);await ctx.close();
-          }
-
-          // Books author: exact native author/tag selection must preserve sidebar and really filter.
-          {
-            const ctx=await browser.newContext({viewport:{width:1440,height:1000}}),page=await ctx.newPage();await gotoReady(page,'/collections/literature');const before=await state(page);assertState('BOOKS root',before);
-            const authorGroup=page.locator('#MainContent .sq-refine-v3-sidebar > details.sq-refine-v3-group').filter({has:page.locator(':scope > summary', {hasText:'Shop by Author'})}).first();
-            if(!await authorGroup.count())throw new Error('BOOKS Shop by Author missing');if(await authorGroup.getAttribute('open')===null)await authorGroup.locator(':scope > summary').click();const input=authorGroup.locator('input[data-kind="native"][data-filter-name][data-filter-value]:not(:checked)').first();if(!await input.count())throw new Error('BOOKS native author input missing');const meta=await input.evaluate(i=>({name:i.dataset.filterName,value:i.dataset.filterValue,text:(i.closest('label')?.textContent||'').trim()}));const old=page.url();await input.evaluate(i=>i.click());await page.waitForFunction(u=>location.href!==u,old,{timeout:30000});await page.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:50000});await sleep(1600);const after=await state(page);assertState('BOOKS author filtered',after);const u=new URL(after.url);if(!u.searchParams.getAll(meta.name).includes(meta.value))throw new Error('BOOKS author URL state missing '+JSON.stringify(meta)+' '+after.url);if(!changed(before.products,after.products))throw new Error('BOOKS author product set did not change '+JSON.stringify({meta,before:before.products.slice(0,8),after:after.products.slice(0,8)}));console.log('BOOKS AUTHOR PASS',JSON.stringify(meta),after.url);await ctx.close();
+            const c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage();await nav(p,'/collections/literature');const root=await state(p);assertState('BOOKS root',root);
+            async function authorInputs(){const group=p.locator('#MainContent .sq-refine-v3-sidebar details[data-sq-author-tag-authority="true"]');await group.waitFor({state:'visible',timeout:15000});if(await group.getAttribute('open')===null)await group.locator(':scope > summary').click();return group.locator('input[data-kind="native"][data-filter-name="filter.p.tag"][data-filter-value]')}
+            let inputs=await authorInputs();if(await inputs.count()<2)throw new Error('BOOKS needs at least two native author filters');const first=await inputs.nth(0).evaluate(i=>({value:i.dataset.filterValue,name:(i.closest('label')?.textContent||'').trim()})),second=await inputs.nth(1).evaluate(i=>({value:i.dataset.filterValue,name:(i.closest('label')?.textContent||'').trim()}));
+            let old=p.url();await inputs.nth(0).evaluate(i=>i.click());await p.waitForFunction(u=>location.href!==u,old,{timeout:30000});await ready(p);let one=await state(p);assertState('BOOKS author 1',one);if(!new URL(one.url).searchParams.getAll('filter.p.tag').includes(first.value))throw new Error('BOOKS author 1 URL missing '+JSON.stringify(first));if(!changed(root.products,one.products))throw new Error('BOOKS author 1 products unchanged '+JSON.stringify(first));
+            await p.reload({waitUntil:'domcontentloaded',timeout:90000});await ready(p);let re=await state(p);assertState('BOOKS author refresh',re);inputs=await authorInputs();const checked=inputs.filter(':checked');if(await checked.count()!==1)throw new Error('BOOKS author checked state lost after refresh');
+            old=p.url();await checked.first().evaluate(i=>i.click());await p.waitForFunction(u=>location.href!==u,old,{timeout:30000});await ready(p);let cleared=await state(p);assertState('BOOKS author cleared',cleared);if(new URL(cleared.url).searchParams.getAll('filter.p.tag').length)throw new Error('BOOKS author tag did not clear '+cleared.url);
+            inputs=await authorInputs();const secondInput=inputs.filter(`[data-filter-value="${second.value.replace(/\\/g,'\\\\').replace(/"/g,'\\"')}"]`).first();old=p.url();await secondInput.evaluate(i=>i.click());await p.waitForFunction(u=>location.href!==u,old,{timeout:30000});await ready(p);let two=await state(p);assertState('BOOKS author 2',two);if(!new URL(two.url).searchParams.getAll('filter.p.tag').includes(second.value))throw new Error('BOOKS author 2 URL missing '+JSON.stringify(second));if(!changed(root.products,two.products))throw new Error('BOOKS author 2 products unchanged '+JSON.stringify(second));console.log('BOOKS AUTHOR PASS',JSON.stringify({first,second,one:one.products.length,two:two.products.length}));await c.close();
           }
           await browser.close();console.log('PERSISTENCE CERT PASS');
           EOF
