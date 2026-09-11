@@ -1,14 +1,12 @@
 {% doc %}
 Sitewide safety repair for Refine V3 50-per-page pagination.
-The primary V3 assembler has a page-1 fast path that infers whether page 2 exists
-from the visible theme pager. Some collection templates do not expose a matching
-native next-page selector, which can incorrectly leave the custom pager at Page 1.
-This guard verifies alternate-view page 2 directly and restores the Next link when
-products actually exist there. It applies to every V3 collection root and leaves
-State Guard Series untouched.
+The V3 assembler can miss the native Shopify next-page control on some collection
+surfaces and incorrectly stop after the first 50 products. This guard verifies the
+alternate 50-product source page directly and makes the custom pager authoritative.
+It applies to every V3 collection root and child route and leaves State Guard Series untouched.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
-<script data-sq-refine-v3-pagination-repair>
+<script data-sq-refine-v3-pagination-repair data-revision="direct-next-probe-20260911">
 (function(){
   if(window.__sqRefineV3PaginationRepair)return;
   window.__sqRefineV3PaginationRepair=true;
@@ -18,8 +16,11 @@ State Guard Series untouched.
   var currentHandle='{{ collection.handle | escape }}';
   var rootHandle=q.get('sq_root')||currentHandle;
   if(!ROOTS.has(rootHandle))return;
-  if(parseInt(q.get('sq_per_page')||'50',10)!==50)return;
-  if(Math.max(1,parseInt(q.get('sq_view_page')||'1',10)||1)!==1)return;
+  var perPage=parseInt(q.get('sq_per_page')||'50',10);
+  if(perPage!==50)return;
+  var view=Math.max(1,parseInt(q.get('sq_view_page')||'1',10)||1);
+  var main=document.getElementById('MainContent');
+  if(!main)return;
 
   function sourcePath(){
     return currentHandle==='air-national-guard-series'
@@ -42,50 +43,90 @@ State Guard Series untouched.
     u.searchParams.set('sq_view_page',String(page));
     return u.pathname+'?'+u.searchParams.toString();
   }
-  function hasProductCards(doc){
-    return !!doc.querySelector('.product-grid > .product-grid__item a[href*="/products/"], .product-grid > [data-product-id], .product-grid > [data-product-handle]');
+  function productLinks(doc){
+    var grid=doc.querySelector('.product-grid');
+    if(!grid)return[];
+    return Array.from(new Set(Array.from(grid.querySelectorAll('a[href*="/products/"]')).map(function(a){return a.getAttribute('href')||a.href}).filter(Boolean)));
+  }
+  function ensurePager(){
+    var pager=main.querySelector('.sq-refine-v3-pager');
+    if(pager)return pager;
+    var grid=main.querySelector('.sq-refine-v3-results .product-grid');
+    if(!grid||!grid.parentElement)return null;
+    pager=document.createElement('nav');
+    pager.className='sq-refine-v3-pager';
+    pager.setAttribute('aria-label','Product pages');
+    grid.parentElement.appendChild(pager);
+    return pager;
+  }
+  function setLink(pager,kind,page,label){
+    var selector='a[data-sq-pagination-repair="'+kind+'"]';
+    var a=pager.querySelector(selector);
+    if(!a){
+      a=document.createElement('a');
+      a.dataset.sqPaginationRepair=kind;
+      if(kind==='previous')pager.insertBefore(a,pager.firstChild);
+      else pager.appendChild(a);
+    }
+    a.href=viewUrl(page);
+    a.textContent=label;
+    a.setAttribute('aria-label',label+' product page');
+    return a;
+  }
+  function removeRepairLink(pager,kind){
+    var a=pager.querySelector('a[data-sq-pagination-repair="'+kind+'"]');
+    if(a)a.remove();
+  }
+  function ensurePageLabel(pager){
+    var span=Array.from(pager.querySelectorAll('span')).find(function(x){return /^Page\s+\d+/i.test((x.textContent||'').trim())});
+    if(!span){span=document.createElement('span');pager.insertBefore(span,pager.querySelector('a')||null)}
+    span.textContent='Page '+view;
+  }
+  async function pageHasProducts(page){
+    var r=await fetch(alternateUrl(page),{credentials:'same-origin',cache:'no-store'});
+    if(!r.ok)throw new Error('HTTP '+r.status+' for source page '+page);
+    var doc=new DOMParser().parseFromString(await r.text(),'text/html');
+    return productLinks(doc).length>0;
   }
   async function repair(){
-    var main=document.getElementById('MainContent');
-    if(!main||main.dataset.sqRefineV3Error)return;
-    var pager=main.querySelector('.sq-refine-v3-pager');
+    if(main.dataset.sqRefineV3Error)return;
+    var pager=ensurePager();
     if(!pager)return;
-    if(pager.querySelector('a[href*="sq_view_page=2"]')){
-      main.dataset.sqRefineV3PaginationCertified='native-next';
-      return;
-    }
+    ensurePageLabel(pager);
+    if(view>1){
+      var nativePrev=Array.from(pager.querySelectorAll('a')).some(function(a){return /previous/i.test((a.textContent||''))||new URL(a.href,location.origin).searchParams.get('sq_view_page')===String(view-1)});
+      if(!nativePrev)setLink(pager,'previous',view-1,'Previous');
+    }else removeRepairLink(pager,'previous');
     try{
-      var r=await fetch(alternateUrl(2),{credentials:'same-origin',cache:'no-store'});
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      var doc=new DOMParser().parseFromString(await r.text(),'text/html');
-      if(!hasProductCards(doc)){
-        main.dataset.sqRefineV3PaginationCertified='single-page';
-        return;
+      var hasNext=await pageHasProducts(view+1);
+      var nativeNext=Array.from(pager.querySelectorAll('a')).some(function(a){return /next/i.test((a.textContent||''))||new URL(a.href,location.origin).searchParams.get('sq_view_page')===String(view+1)});
+      if(hasNext&&!nativeNext){
+        setLink(pager,'next',view+1,'Next');
+        main.dataset.sqRefineV3PaginationRepaired='true';
+        main.dataset.sqRefineV3PaginationCertified='alternate-page-'+(view+1);
+      }else if(hasNext){
+        main.dataset.sqRefineV3PaginationCertified='native-next';
+      }else{
+        removeRepairLink(pager,'next');
+        main.dataset.sqRefineV3PaginationCertified='last-page';
       }
-      var a=document.createElement('a');
-      a.href=viewUrl(2);
-      a.textContent='Next';
-      a.setAttribute('aria-label','Next product page');
-      pager.appendChild(a);
-      main.dataset.sqRefineV3PaginationRepaired='true';
-      main.dataset.sqRefineV3PaginationCertified='alternate-page-2';
     }catch(e){
       main.dataset.sqRefineV3PaginationRepairError=String(e&&e.message||e);
       console.error('[SQ V3 pagination repair]',e);
     }
   }
+  function schedule(){
+    clearTimeout(window.__sqRefineV3PaginationTimer);
+    window.__sqRefineV3PaginationTimer=setTimeout(repair,80);
+  }
   function whenReady(){
-    var main=document.getElementById('MainContent');
-    if(!main)return;
-    if(main.dataset.sqRefineV3Ready==='true')return repair();
+    if(main.dataset.sqRefineV3Ready==='true')schedule();
     var obs=new MutationObserver(function(){
-      if(main.dataset.sqRefineV3Ready==='true'){
-        obs.disconnect();
-        repair();
-      }
+      if(main.dataset.sqRefineV3Ready==='true')schedule();
     });
-    obs.observe(main,{attributes:true,attributeFilter:['data-sq-refine-v3-ready']});
-    setTimeout(function(){obs.disconnect();if(main.dataset.sqRefineV3Ready==='true')repair()},12000);
+    obs.observe(main,{childList:true,subtree:true,attributes:true,attributeFilter:['data-sq-refine-v3-ready']});
+    setTimeout(function(){if(main.dataset.sqRefineV3Ready==='true')schedule()},1200);
+    setTimeout(function(){obs.disconnect();if(main.dataset.sqRefineV3Ready==='true')schedule()},12000);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',whenReady,{once:true});
   else whenReady();
