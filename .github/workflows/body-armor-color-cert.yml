@@ -85,7 +85,7 @@ jobs:
             const selectedStructural=page.locator('.sq-refine-v3-sidebar input[data-kind="structural"]:checked').first();
             if(await selectedStructural.count()!==1)throw Error(name+': structural checkbox did not remain selected after navigation');
             await openDetails(selectedStructural);
-            await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),selectedStructural.uncheck()]);
+            await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),selectedStructural.evaluate(el=>el.click())]);
             await ready(page,true);
             const returned=await page.evaluate(()=>{const u=new URL(location.href);return{path:u.pathname,root:u.searchParams.get('sq_root'),colors:u.searchParams.getAll('sq_ucp')}});
             const structuralResult={target,child,returned};
@@ -93,7 +93,7 @@ jobs:
             await ready(page,true);
             const checked=page.locator('[data-sq-ucp-group] input[value="black"]');
             await openDetails(checked);
-            await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),checked.uncheck()]);
+            await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),checked.evaluate(el=>el.click())]);
             await ready(page);
             const cleared=await page.evaluate(()=>{const u=new URL(location.href);return{params:u.searchParams.getAll('sq_ucp'),root:u.searchParams.get('sq_root'),path:u.pathname,filtered:document.documentElement.classList.contains('sq-ucp-filtered'),nativeCards:document.querySelectorAll('.sq-refine-v3-results collection-component .product-grid > .product-grid__item').length}});
             cleared.columns=await gridColumns(page,'.sq-refine-v3-results collection-component .product-grid');
