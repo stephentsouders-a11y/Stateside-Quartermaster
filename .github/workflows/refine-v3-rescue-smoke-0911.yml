@@ -31,3 +31,4 @@ jobs:
           await b.close();console.log(`SMOKE_SUMMARY failures=${fail}`);if(fail)process.exit(2);
           EOF
           node smoke.mjs
+# post-Shopify-sync rerun 2026-09-11
