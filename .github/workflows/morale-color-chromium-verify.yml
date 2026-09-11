@@ -8,21 +8,36 @@ permissions:
   contents: write
 concurrency:
   group: morale-color-chromium-verification
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           ref: refine-restart-v3
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install browser and validation tools
+      - name: Restore the unchanged browser assertions from their audited commit
         run: |
           mkdir -p /tmp/morale-verify/out
+          python - <<'PY'
+          import pathlib, subprocess
+          source = subprocess.check_output(['git', 'show', 'e42ab118a280bdadb41129eb78b2f8d5766ad249:.github/workflows/morale-color-chromium-verify.yml'], text=True)
+          lines = source.splitlines()
+          start = next(i for i, line in enumerate(lines) if "cat > /tmp/morale-verify/test.mjs <<'JS'" in line)
+          end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == 'JS')
+          margin = len(lines[start]) - len(lines[start].lstrip())
+          script = '\n'.join(line[margin:] for line in lines[start + 1:end]) + '\n'
+          assert "if(report.status!=='PASS')process.exitCode=1;" in script
+          pathlib.Path('/tmp/morale-verify/test.mjs').write_text(script)
+          PY
+          node --check /tmp/morale-verify/test.mjs
+      - name: Install browser and validation tools
+        run: |
           cd /tmp/morale-verify
           npm init -y >/dev/null
           npm install playwright@1.55.0 agent-browser @shopify/theme-check-common @shopify/theme-check-docs-updater @shopify/theme-check-node >/dev/null
@@ -43,106 +58,6 @@ jobs:
           npx agent-browser --session morale close
       - name: Verify desktop mobile filtering and product truth
         run: |
-          cat > /tmp/morale-verify/test.mjs <<'JS'
-          import { chromium } from 'playwright';
-          import fs from 'node:fs';
-          import assert from 'node:assert/strict';
-          const root='https://www.statesideqm.com/collections/morale-patches-tactical-id';
-          const theme='158561894555';
-          const base=root+'?preview_theme_id='+theme+'&filter.v.availability=1';
-          const report={status:'RUNNING',theme,publication:'UNPUBLISHED',sourceCommit:process.env.GITHUB_SHA,started:new Date().toISOString(),checks:[],pageErrors:[],tests:[]};
-          const out='/tmp/morale-verify/out';
-          const browser=await chromium.launch({headless:true});
-          report.browserVersion=browser.version();
-          const context=await browser.newContext({viewport:{width:1440,height:1000},recordVideo:{dir:out+'/video',size:{width:1440,height:1000}}});
-          await context.tracing.start({screenshots:true,snapshots:true,sources:true});
-          const page=await context.newPage();
-          page.setDefaultTimeout(30000);page.setDefaultNavigationTimeout(70000);
-          page.on('pageerror',e=>report.pageErrors.push({url:page.url(),message:String(e)}));
-          const side=()=>page.locator('.sq-refine-v3-sidebar');
-          const group=()=>page.locator('.sq-refine-v3-sidebar > details').filter({has:page.locator(':scope > summary').filter({hasText:/^Shop by Color \/ Pattern$/})});
-          const cards=()=>page.locator('.sq-refine-v3-results .product-grid > .product-grid__item');
-          const productCache=new Map();
-          async function ready(){
-            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:65000});
-            await page.waitForFunction(()=>!!document.querySelector('.sq-refine-v3-sidebar [data-sq-morale-color-pattern]'),null,{timeout:15000});
-            assert.equal(await page.evaluate(()=>String(window.Shopify?.theme?.id)),theme,'Actual Shopify theme id');
-            assert.equal(await side().count(),1,'One sidebar');
-            assert.equal(await group().count(),1,'One combined color/pattern group');
-            assert.ok(await cards().count()>0,'Products are rendered');
-          }
-          async function go(url){const r=await page.goto(url,{waitUntil:'domcontentloaded'});assert.ok(r?.ok(),'Page response '+r?.status());await ready();}
-          async function open(){if(!await group().evaluate(d=>d.open))await group().locator(':scope > summary').click();}
-          async function handles(){return cards().evaluateAll(es=>es.map(e=>{const a=e.querySelector('a[href*="/products/"]');return a?new URL(a.href).pathname.split('/products/')[1].split('/')[0]:null}).filter(Boolean));}
-          async function product(handle){
-            if(productCache.has(handle))return productCache.get(handle);
-            const r=await page.request.get('https://www.statesideqm.com/products/'+handle+'.js');
-            assert.ok(r.ok(),'Product JSON '+handle+' '+r.status());const data=await r.json();productCache.set(handle,data);return data;
-          }
-          async function truth(tags){
-            const list=await handles();assert.ok(list.length>0);assert.equal(new Set(list).size,list.length,'No repeated products in grid');
-            const samples=[];
-            for(const h of list.slice(0,8)){
-              const p=await product(h);assert.ok(tags.some(t=>p.tags.includes(t)),'Product does not match selected color: '+h);assert.ok(p.available,'In stock product expected');samples.push({handle:h,colorTags:p.tags.filter(t=>/^SQ Color\/Pattern:/.test(t)),available:p.available});
-            }
-            return {visibleCount:list.length,samples};
-          }
-          function input(tag){return group().locator('input[data-sq-morale-color-tag='+JSON.stringify(tag)+']');}
-          async function check(tag,on){
-            await open();
-            await Promise.all([page.waitForURL(u=>u.searchParams.getAll('filter.p.tag').includes(tag)===on,{waitUntil:'domcontentloaded'}),input(tag).setChecked(on)]);
-            await ready();assert.equal(new URL(page.url()).searchParams.get('filter.v.availability'),'1','Availability retained');assert.equal(await input(tag).isChecked(),on,'Correct checked state');
-          }
-          try{
-            await go(base);await open();
-            report.groups=await side().locator(':scope > details > summary').allTextContents();
-            report.mode=await group().getAttribute('data-sq-morale-color-pattern');
-            report.options=await group().locator('label').evaluateAll(es=>es.map(e=>({label:e.querySelector('span')?.textContent.trim(),tag:e.querySelector('input')?.dataset.sqMoraleColorTag})));
-            assert.ok(report.options.length>=2,'Real color options available');
-            assert.ok(report.options.every(o=>o.tag?.startsWith('SQ Color/Pattern: ')),'Canonical tag-backed choices');
-            assert.equal(new Set(report.options.map(o=>o.label)).size,report.options.length,'No repeated color choices');
-            const baseline=await handles();report.baselineVisibleCount=baseline.length;assert.equal(new Set(baseline).size,baseline.length,'Baseline products unique');
-            await group().scrollIntoViewIfNeeded();await page.screenshot({path:out+'/desktop-options.png'});
-            report.checks.push('Desktop: exact heading, unique real checkbox options, one sidebar');
-            const candidates=[];
-            for(const label of ['Gray','Black','White']){const o=report.options.find(o=>o.label===label);if(o)candidates.push(o);}
-            const pattern=report.options.find(o=>/multicam|ocp|woodland|camo|digital|marpat|nwu/i.test(o.label));if(pattern&&!candidates.includes(pattern))candidates.push(pattern);
-            if(!candidates.length)candidates.push(...report.options.slice(0,3));
-            for(const choice of candidates){
-              await go(base);await check(choice.tag,true);
-              const result=await truth([choice.tag]);assert.notDeepEqual(await handles(),baseline,'Color changes results');
-              assert.ok(await group().evaluate(d=>d.open),'Selected group open');
-              report.tests.push({label:choice.label,tag:choice.tag,url:page.url(),...result});
-              await group().scrollIntoViewIfNeeded();await page.screenshot({path:out+'/desktop-'+choice.label.toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.png'});
-              await check(choice.tag,false);assert.deepEqual(await handles(),baseline,'Clearing restores baseline');
-            }
-            report.checks.push('Select and clear each tested color/pattern; products independently checked against Shopify product JSON');
-            const chosen=candidates[0];
-            await check(chosen.tag,true);const filtered=page.url();
-            await page.reload({waitUntil:'domcontentloaded'});await ready();assert.ok(await input(chosen.tag).isChecked(),'Reload persistence');
-            report.checks.push('Selected checkbox and open group persist on reload');
-            const second=report.options.find(o=>o.tag!==chosen.tag);
-            await check(second.tag,true);assert.ok(await input(chosen.tag).isChecked(),'First selection retained');
-            report.multiSelect={tags:[chosen.tag,second.tag],...await truth([chosen.tag,second.tag])};
-            await check(second.tag,false);await truth([chosen.tag]);
-            report.checks.push('Two-color selection and removal retain the other selection');
-            for(const size of [100,250]){
-              const u=new URL(filtered);u.searchParams.set('sq_per_page',String(size));await go(u.href);assert.ok(await input(chosen.tag).isChecked(),'Color retained for page size '+size);await truth([chosen.tag]);
-              report.checks.push('Color remains applied at '+size+' products per page');
-            }
-            await page.setViewportSize({width:390,height:844});await go(base);await open();
-            await group().scrollIntoViewIfNeeded();await page.screenshot({path:out+'/mobile-options.png'});
-            await check(chosen.tag,true);await truth([chosen.tag]);
-            assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'No mobile horizontal overflow');
-            await group().scrollIntoViewIfNeeded();await page.screenshot({path:out+'/mobile-selected.png'});
-            await check(chosen.tag,false);assert.deepEqual(await handles(),baseline,'Mobile clear restores results');
-            report.checks.push('Mobile 390px: select, matching results, clear, and no horizontal overflow');
-            report.refineErrors=report.pageErrors.filter(e=>/sq-refine|sqMorale|morale.*color|SQ V3/i.test(e.message));assert.equal(report.refineErrors.length,0,'No Refine or Color controller errors');
-            report.status='PASS';
-          }catch(error){report.status='FAIL';report.failure=String(error.stack||error);report.failureUrl=page.url();await page.screenshot({path:out+'/failure.png',fullPage:true}).catch(()=>{});fs.writeFileSync(out+'/failure.html',await page.content().catch(()=>''));}
-          finally{report.finished=new Date().toISOString();await context.tracing.stop({path:out+'/trace.zip'}).catch(()=>{});await context.close();await browser.close();fs.writeFileSync(out+'/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));}
-          if(report.status!=='PASS')process.exitCode=1;
-          JS
           cd /tmp/morale-verify
           node test.mjs
       - name: Record actual verification report in GitHub
@@ -154,11 +69,13 @@ jobs:
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git add .github/audits/morale-color-chromium-report.json
-            git commit -m 'Record actual morale Color Pattern Chromium test results'
-            for attempt in 1 2 3; do
-              git pull --rebase origin refine-restart-v3
-              if git push origin HEAD:refine-restart-v3; then break; fi
-            done
+            if ! git diff --cached --quiet; then
+              git commit -m 'Record actual morale Color Pattern Chromium test results'
+              for attempt in 1 2 3; do
+                git pull --rebase origin refine-restart-v3
+                if git push origin HEAD:refine-restart-v3; then break; fi
+              done
+            fi
           fi
       - uses: actions/upload-artifact@v4
         if: always()
