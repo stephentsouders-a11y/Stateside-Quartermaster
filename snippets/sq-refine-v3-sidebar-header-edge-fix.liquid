@@ -1,5 +1,5 @@
 {% doc %}
-Ensures the V3 Refine Products navy title bar reaches both rounded top corners with no white scrollbar-gutter or corner seam while preserving the sticky desktop sidebar.
+Ensures the V3 Refine Products navy title bar reaches both rounded top corners while the filter body stays white throughout scrolling, preserving the sticky desktop sidebar.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 {% render 'sq-refine-v3-sidebar-polish-rescue' %}
@@ -19,23 +19,16 @@ Ensures the V3 Refine Products navy title bar reaches both rounded top corners w
 {% render 'sq-refine-v3-button01-filter-owner-v2' %}
 {% render 'sq-refine-v3-button01-availability-v3' %}
 <style data-sq-refine-v3-header-edge-fix>
+/* Paint the actual scrollport white; a viewport-sized overlay scrolls away. */
 #MainContent .sq-refine-v3-sidebar{
-  background-color:#08283f!important;
+  background-color:#fff!important;
   background-image:none!important;
   scrollbar-gutter:auto!important;
   scrollbar-width:none!important;
 }
 #MainContent .sq-refine-v3-sidebar::before{
-  content:""!important;
-  position:absolute!important;
-  z-index:0!important;
-  left:1px!important;
-  right:1px!important;
-  top:40px!important;
-  bottom:1px!important;
-  background:#fff!important;
-  border-radius:0 0 8px 8px!important;
-  pointer-events:none!important;
+  content:none!important;
+  display:none!important;
 }
 #MainContent .sq-refine-v3-sidebar>*{position:relative;z-index:1}
 #MainContent .sq-refine-v3-sidebar::-webkit-scrollbar{width:0!important;height:0!important;display:none!important}
