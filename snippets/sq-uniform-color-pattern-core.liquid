@@ -18,7 +18,7 @@ html.sq-ucp-filtered #MainContent.sq-refine-v3-active .sq-refine-v3-results>:not
 (function(){
   'use strict';
   var configNode=document.querySelector('[data-sq-ucp-config]'),config=JSON.parse(configNode.textContent),query=new URLSearchParams(location.search);
-  if((query.get('sq_root')||config.handle)!=='uniforms'||window.__sqUniformColor)return;
+  var activeRoot=query.get('sq_root')||config.handle;if(['uniforms','safety-rescue-climbing'].indexOf(activeRoot)===-1||window.__sqUniformColor)return;
   var PARAM='sq_ucp',selected=query.getAll(PARAM),main=document.getElementById('MainContent'),group,catalog,counts;
   var api=window.__sqUniformColor={version:'2026-09-11.1',ready:false,total:0,choices:[],resultIds:[]};
   if(selected.length)document.documentElement.classList.add('sq-ucp-pending');
