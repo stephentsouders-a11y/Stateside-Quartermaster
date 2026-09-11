@@ -1,0 +1,100 @@
+name: Zippos double grid fix 0911
+on:
+  push:
+    paths:
+      - '.github/workflows/zippos-double-grid-fix-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fix-and-certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Patch Zippos duplicate-grid guard
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('snippets/sq-refine-v3.liquid')
+          s=p.read_text()
+          css="#MainContent.sq-refine-v3-active [data-sq-refine-v3-duplicate-grid='true']{display:none!important}\n"
+          anchor="#MainContent.sq-refine-v3-active .product-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}\n"
+          if css not in s:
+            assert anchor in s
+            s=s.replace(anchor,anchor+css,1)
+          fn="  function enforceSingleProductGrid(){if(rootHandle!=='zippos-lighters-torches'||!productHost)return;var primary=productHost.querySelector('.product-grid');if(!primary)return;main.querySelectorAll('.product-grid').forEach(function(g){if(g!==primary)g.dataset.sqRefineV3DuplicateGrid='true'});var seen=new Set();[].slice.call(primary.querySelectorAll(':scope > .product-grid__item')).forEach(function(card){var a=card.querySelector('a[href*=\"/products/\"]');if(!a)return;var key=(a.pathname||a.getAttribute('href')||'').split('?')[0];if(!key)return;if(seen.has(key))card.remove();else seen.add(key)})}\n  function guardSingleProductGrid(){if(rootHandle!=='zippos-lighters-torches')return;enforceSingleProductGrid();var observer=new MutationObserver(function(){enforceSingleProductGrid()});observer.observe(main,{childList:true,subtree:true});window.__sqZipposGridGuard=observer}\n"
+          hide="  function hideSources(){sourceNodes.forEach(function(n){if(n&&n!==productHost&&!n.contains(productHost))n.dataset.sqRefineV3HiddenNav='true'})}\n"
+          if 'function guardSingleProductGrid()' not in s:
+            assert hide in s
+            s=s.replace(hide,hide+fn,1)
+          old="await assembleProducts();main.dataset.sqRefineV3Ready='true'"
+          new="await assembleProducts();guardSingleProductGrid();main.dataset.sqRefineV3Ready='true'"
+          if new not in s:
+            assert old in s
+            s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - name: Validate Liquid and embedded JavaScript
+        run: |
+          npm install --no-save @shopify/liquid-html-parser >/dev/null 2>&1
+          node - <<'NODE'
+          const fs=require('fs'),vm=require('vm');
+          const {toLiquidHtmlAST}=require('@shopify/liquid-html-parser');
+          const f='snippets/sq-refine-v3.liquid',s=fs.readFileSync(f,'utf8');
+          toLiquidHtmlAST(s);
+          if(!s.includes("function guardSingleProductGrid()"))throw new Error('guard missing');
+          if(!s.includes("data-sq-refine-v3-duplicate-grid"))throw new Error('duplicate-grid CSS missing');
+          const js=s.match(/<script data-sq-refine-v3[^>]*>([\s\S]*?)<\/script>/)[1].replace(/\{\{[\s\S]*?\}\}/g,"''");
+          new vm.Script(js);
+          console.log('VALIDATION_PASS');
+          NODE
+      - name: Commit fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-refine-v3.liquid
+          git diff --cached --quiet || git commit -m 'fix(zippos): prevent repeated product grids and duplicate cards'
+          for attempt in 1 2 3; do
+            git pull --rebase origin refine-restart-v3
+            if git push origin HEAD:refine-restart-v3; then break; fi
+            test "$attempt" != 3
+          done
+          git rev-parse HEAD
+      - name: Chromium certification
+        run: |
+          npm install --no-save playwright@1.55.0 agent-browser >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          mkdir -p out
+          export AGENT_BROWSER_EXECUTABLE_PATH="$(node -e "console.log(require('playwright').chromium.executablePath())")"
+          npx agent-browser open 'https://www.statesideqm.com/collections/zippos-lighters-torches?preview_theme_id=158561894555'
+          npx agent-browser snapshot -i > out/agent-browser.txt
+          npx agent-browser screenshot out/agent-browser.png
+          npx agent-browser close
+          cat > cert.mjs <<'EOF'
+          import {chromium} from 'playwright';import fs from 'node:fs';
+          const browser=await chromium.launch({headless:true});const report=[];
+          for(const [name,viewport,url] of [['preview-desktop',{width:1440,height:1000},'https://www.statesideqm.com/collections/zippos-lighters-torches?preview_theme_id=158561894555'],['preview-mobile',{width:390,height:844},'https://www.statesideqm.com/collections/zippos-lighters-torches?preview_theme_id=158561894555'],['live-desktop',{width:1440,height:1000},'https://www.statesideqm.com/collections/zippos-lighters-torches']]){
+            const c=await browser.newContext({viewport});const p=await c.newPage();const errors=[];p.on('pageerror',e=>errors.push(String(e)));
+            let r=await p.goto(url,{waitUntil:'domcontentloaded',timeout:90000});await p.waitForTimeout(8000);
+            for(let y=0;y<Math.min(await p.evaluate(()=>document.documentElement.scrollHeight),60000);y+=1200){await p.evaluate(y=>scrollTo(0,y),y);await p.waitForTimeout(80)}
+            await p.waitForTimeout(1200);
+            const state=await p.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};const grids=[...m.querySelectorAll('.product-grid')].filter(vis);const cards=grids.flatMap(g=>[...g.querySelectorAll(':scope > .product-grid__item')].filter(vis));const ids=cards.map(c=>c.querySelector('a[href*="/products/"]')?.pathname).filter(Boolean);const dup=[...new Set(ids.filter((x,i)=>ids.indexOf(x)!==i))];return{ready:m?.dataset.sqRefineV3Ready||'',visibleGrids:grids.length,cards:cards.length,duplicates:dup,guard:!!window.__sqZipposGridGuard,hiddenDuplicateGrids:[...m.querySelectorAll('[data-sq-refine-v3-duplicate-grid="true"]')].length}});
+            await p.screenshot({path:`out/${name}.png`,fullPage:true});report.push({name,status:r?.status(),errors,state});await c.close();
+          }
+          await browser.close();fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+          const preview=report.filter(x=>x.name.startsWith('preview'));if(preview.some(x=>x.status!==200||x.errors.length||x.state.ready!=='true'||x.state.visibleGrids!==1||x.state.duplicates.length))process.exitCode=2;
+          EOF
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zippos-double-grid-fix-0911
+          path: out
+          retention-days: 7
