@@ -1,0 +1,67 @@
+name: Safety Rescue Climbing refine certification
+on:
+  push:
+    paths:
+      - '.github/workflows/safety-rescue-climbing-refine-cert.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Audit every Refine Products route in Chromium
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const ROOT='https://www.statesideqm.com/collections/safety-rescue-climbing';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1100}});
+          page.setDefaultNavigationTimeout(45000);
+          await page.goto(ROOT,{waitUntil:'domcontentloaded'});
+          await page.waitForTimeout(2200);
+          const filters=await page.evaluate(()=>{
+            const side=document.querySelector('.sq-global-refine-sidebar')||document.querySelector('aside');
+            if(!side)return [];
+            return [...side.querySelectorAll('a[href]')].map((a,i)=>({i,text:(a.textContent||'').replace(/\s+/g,' ').trim(),href:a.href})).filter(x=>x.text&&x.href.includes('/collections/'));
+          });
+          const unique=[]; const seen=new Set();
+          for(const f of filters){const k=f.text+'|'+f.href;if(!seen.has(k)){seen.add(k);unique.push(f)}}
+          const results=[];
+          for(const f of unique){
+            await page.goto(ROOT,{waitUntil:'domcontentloaded'}); await page.waitForTimeout(1100);
+            const target=page.locator('.sq-global-refine-sidebar a[href]').filter({hasText:f.text}).first();
+            let clicked=false;
+            try{await target.click();clicked=true;await page.waitForLoadState('domcontentloaded');await page.waitForTimeout(1300)}catch{await page.goto(f.href,{waitUntil:'domcontentloaded'});await page.waitForTimeout(1300)}
+            const rec=await page.evaluate(()=>{
+              const sels=['.product-card a[href*="/products/"]','.product-grid__item a[href*="/products/"]','a.full-unstyled-link[href*="/products/"]'];
+              const links=[...document.querySelectorAll(sels.join(','))];
+              const m=new Map();
+              for(const a of links){const text=(a.textContent||'').replace(/\s+/g,' ').trim();if(text&&!m.has(a.href))m.set(a.href,text)}
+              return {url:location.href,title:document.title,products:[...m].map(([href,title])=>({title,href})),body:(document.querySelector('#MainContent')?.textContent||'').replace(/\s+/g,' ').trim().slice(0,1200)};
+            });
+            results.push({filter:f.text,expectedHref:f.href,clicked,...rec});
+          }
+          fs.writeFileSync('safety-rescue-climbing-refine.json',JSON.stringify({root:ROOT,filterCount:unique.length,filters:unique,results},null,2));
+          await page.screenshot({path:'safety-rescue-climbing-root.png',fullPage:true});
+          await browser.close();
+          console.log(JSON.stringify({filterCount:unique.length,labels:unique.map(x=>x.text)},null,2));
+          if(unique.length===0)process.exitCode=2;
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: safety-rescue-climbing-refine-cert
+          path: |
+            safety-rescue-climbing-refine.json
+            safety-rescue-climbing-root.png
+          retention-days: 7
