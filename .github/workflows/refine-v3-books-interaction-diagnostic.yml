@@ -1,0 +1,62 @@
+name: Refine V3 Books interaction diagnostic
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-books-interaction-diagnostic.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  books:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Inspect Books refinements and clicks
+        run: |
+          cat > books.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const B='https://www.statesideqm.com',T='158561894555';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          function u(path){const x=new URL(path,B);x.searchParams.set('preview_theme_id',T);return x.toString()}
+          const browser=await chromium.launch({headless:true});
+          const c=await browser.newContext({viewport:{width:1440,height:1000}});const p=await c.newPage();
+          const r=await p.goto(u('/collections/literature'),{waitUntil:'domcontentloaded',timeout:70000});if(r?.status()!==200)throw new Error('root HTTP '+r?.status());
+          await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});await sleep(5000);
+          const dump=await p.evaluate(()=>[...document.querySelectorAll('.sq-refine-v3-sidebar > details.sq-refine-v3-group')].map(g=>({label:(g.querySelector(':scope>summary')?.textContent||'').replace(/\s+/g,' ').trim(),inputs:[...g.querySelectorAll('input[type=checkbox]')].slice(0,8).map(i=>({text:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),kind:i.dataset.kind||'',target:i.dataset.target||'',name:i.dataset.filterName||'',value:i.dataset.filterValue||'',checked:i.checked}))})));
+          console.log('GROUPS='+JSON.stringify(dump));
+          const author=dump.find(g=>g.label==='Shop by Author');const publisher=dump.find(g=>g.label==='Shop by Publisher'||g.label==='Shop by Publishers');
+          if(!author||!author.inputs.length)throw new Error('Author group missing after 5s');
+          if(!publisher||!publisher.inputs.length)throw new Error('Publisher group missing after 5s');
+          function sane(i){return i.text.length>0&&i.text.length<90&&!/(description|paperback|hardcover|publication date|language|print length|isbn)/i.test(i.text)}
+          if(!author.inputs.every(sane))throw new Error('unsafe Author labels '+JSON.stringify(author.inputs));
+          if(!publisher.inputs.every(sane))throw new Error('unsafe Publisher labels '+JSON.stringify(publisher.inputs));
+          async function exercise(labelRegex){
+            await p.goto(u('/collections/literature'),{waitUntil:'domcontentloaded',timeout:70000});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});await sleep(2500);
+            const group=p.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group').filter({has:p.locator('summary', {hasText:labelRegex})}).first();
+            if(!await group.count())throw new Error('group not found '+labelRegex);
+            if(await group.getAttribute('open')===null)await group.locator(':scope > summary').click();
+            const input=group.locator('input[type=checkbox]').first();const data=await input.evaluate(i=>({kind:i.dataset.kind||'',target:i.dataset.target||'',name:i.dataset.filterName||'',value:i.dataset.filterValue||'',text:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').trim()}));
+            console.log('EXERCISE',String(labelRegex),JSON.stringify(data));
+            const before=p.url();
+            await input.evaluate(i=>i.click());
+            await p.waitForFunction(b=>location.href!==b,before,{timeout:30000});
+            await p.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});await sleep(1000);
+            const after=p.url();console.log('NAV',before,'=>',after);
+            if(after===before)throw new Error('no navigation '+labelRegex);
+            if(!after.includes('/collections/')&&!after.includes('/search'))throw new Error('unexpected destination '+after);
+            const status=await p.evaluate(()=>({ready:document.querySelector('#MainContent')?.dataset.sqRefineV3Ready||'',error:document.querySelector('#MainContent')?.dataset.sqRefineV3Error||'',cards:[...document.querySelectorAll('.sq-refine-v3-results .product-grid .product-grid__item')].filter(x=>{const r=x.getBoundingClientRect(),s=getComputedStyle(x);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&x.querySelector('a[href*="/products/"]')}).length}));
+            console.log('DEST='+JSON.stringify(status));
+            if(after.includes('/collections/')&&status.error)throw new Error('destination V3 error '+status.error);
+            return {data,after,status};
+          }
+          const a=await exercise(/^Shop by Author$/);await sleep(3000);const pub=await exercise(/^Shop by Publisher(s)?$/);
+          console.log('RESULT='+JSON.stringify({author:a,publisher:pub}));
+          await c.close();await browser.close();
+          EOF
+          node books.mjs
