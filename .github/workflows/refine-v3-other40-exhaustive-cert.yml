@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-# Final latest-code certification trigger after Child Safety capture-v2 fix 6cad5bd.
+# Definitive 40-route certification after green Child Safety desktop/mobile visible-control trace 34632055088.
 jobs:
   certify:
     strategy:
