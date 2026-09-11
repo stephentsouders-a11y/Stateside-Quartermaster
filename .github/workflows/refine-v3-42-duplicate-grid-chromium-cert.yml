@@ -8,8 +8,12 @@ permissions:
   contents: read
 jobs:
   certify:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6]
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,217 +25,42 @@ jobs:
         run: |
           npm install --no-save playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Run hardened storefront certification
+      - name: Audit shard
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
-          mkdir -p out/screens out/videos
+          mkdir -p out
           cat > cert.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'node:fs';
-
-          const BASE='https://www.statesideqm.com';
-          const THEME='158561894555';
+          const BASE='https://www.statesideqm.com', THEME='158561894555';
           const routes=[
-            ['Accessories','/collections/accessories-gifts-collectibles','v3'],
-            ['Airsoft','/collections/airsoft-milsim','v3'],
-            ['Apparel','/collections/apparel','v3'],
-            ['Armed Forces Gear','/collections/armed-forces-gear','v3'],
-            ['Armored Vehicles','/pages/armored-vehicles-purchase-inquiry','legacy'],
-            ['Art','/collections/art','v3'],
-            ['Body Armor','/collections/body-armor-ballistic-protection','v3'],
-            ['Books','/collections/literature','v3'],
-            ['Child Safety','/collections/child-safety-shop','v3'],
-            ['DIVE / SCUBA','/collections/dive-scuba','v3'],
-            ['Firearm Accessories','/collections/firearm-accessories','v3'],
-            ['First Aid','/collections/first-aid-medical-ifak','v3'],
-            ['Flags','/collections/flags-patriotic-decor','v3'],
-            ['Flashlights','/collections/flashlights-lighting','v3'],
-            ['Footwear','/collections/footwear-gloves-eyewear','v3'],
-            ['K9','/collections/k9-dog-gear','v3'],
-            ['Knives','/collections/knives-axes-cutlery','v3'],
-            ['Morale Patches','/collections/morale-patches-tactical-id','v3'],
-            ['Outdoor','/collections/outdoor-preparedness-gear','v3'],
-            ['Patriotic','/collections/patriotic-american-heritage','v3'],
-            ['Safety Rescue','/collections/safety-rescue-climbing','v3'],
-            ['Sta-Brite','/collections/sta-brite-insignia','v3'],
-            ['Tactical Gear','/collections/tactical-gear','v3'],
-            ['Thin Line','/collections/thin-line','v3'],
-            ['Uniforms','/collections/uniforms','v3'],
-            ['Watches','/collections/watches','v3'],
-            ['Lighters','/collections/zippos-lighters-torches','v3'],
-            ['Logo Merch','/collections/stateside-quartermaster-logo-merch','v3'],
-            ['Army National Guard','/collections/army-national-guard-series','v3'],
-            ['Air National Guard','/collections/air-national-guard-series','v3'],
-            ['State Guard','/collections/state-guard-series','state'],
-            ['U.S. Army','/collections/products-built-for-the-line-u-s-army','v3'],
-            ['U.S. Navy','/collections/products-built-for-the-line-u-s-navy','v3'],
-            ['U.S. Air Force','/collections/products-built-for-the-line-u-s-air-force','v3'],
-            ['U.S. Marines','/collections/products-built-for-the-line-u-s-marine-corps','v3'],
-            ['U.S. Coast Guard','/collections/products-built-for-the-line-u-s-coast-guard','v3'],
-            ['U.S. Space Force','/collections/products-built-for-the-line-u-s-space-force','v3'],
-            ['ROTC','/collections/rotc-series','v3'],
-            ['JROTC','/collections/jrotc-series','v3'],
-            ['Military Schools & Academies','/collections/military-schools-academies','v3'],
-            ['Law Enforcement & Corrections','/collections/law-enforcement-corrections','v3'],
-            ['Firefighting, EMS & SAR','/collections/firefighting-ems-search-rescue','v3']
-          ];
-          const colorRoutes=new Set([
-            '/collections/body-armor-ballistic-protection','/collections/child-safety-shop',
-            '/collections/footwear-gloves-eyewear','/collections/k9-dog-gear',
-            '/collections/morale-patches-tactical-id','/collections/patriotic-american-heritage',
-            '/collections/safety-rescue-climbing','/collections/tactical-gear','/collections/uniforms'
-          ]);
-          const viewports=[['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]];
+          ['Accessories','/collections/accessories-gifts-collectibles','v3'],['Airsoft','/collections/airsoft-milsim','v3'],['Apparel','/collections/apparel','v3'],['Armed Forces Gear','/collections/armed-forces-gear','v3'],['Armored Vehicles','/pages/armored-vehicles-purchase-inquiry','legacy'],['Art','/collections/art','v3'],['Body Armor','/collections/body-armor-ballistic-protection','v3'],['Books','/collections/literature','v3'],['Child Safety','/collections/child-safety-shop','v3'],['DIVE / SCUBA','/collections/dive-scuba','v3'],['Firearm Accessories','/collections/firearm-accessories','v3'],['First Aid','/collections/first-aid-medical-ifak','v3'],['Flags','/collections/flags-patriotic-decor','v3'],['Flashlights','/collections/flashlights-lighting','v3'],['Footwear','/collections/footwear-gloves-eyewear','v3'],['K9','/collections/k9-dog-gear','v3'],['Knives','/collections/knives-axes-cutlery','v3'],['Morale Patches','/collections/morale-patches-tactical-id','v3'],['Outdoor','/collections/outdoor-preparedness-gear','v3'],['Patriotic','/collections/patriotic-american-heritage','v3'],['Safety Rescue','/collections/safety-rescue-climbing','v3'],['Sta-Brite','/collections/sta-brite-insignia','v3'],['Tactical Gear','/collections/tactical-gear','v3'],['Thin Line','/collections/thin-line','v3'],['Uniforms','/collections/uniforms','v3'],['Watches','/collections/watches','v3'],['Lighters','/collections/zippos-lighters-torches','v3'],['Logo Merch','/collections/stateside-quartermaster-logo-merch','v3'],['Army National Guard','/collections/army-national-guard-series','v3'],['Air National Guard','/collections/air-national-guard-series','v3'],['State Guard','/collections/state-guard-series','state'],['U.S. Army','/collections/products-built-for-the-line-u-s-army','v3'],['U.S. Navy','/collections/products-built-for-the-line-u-s-navy','v3'],['U.S. Air Force','/collections/products-built-for-the-line-u-s-air-force','v3'],['U.S. Marines','/collections/products-built-for-the-line-u-s-marine-corps','v3'],['U.S. Coast Guard','/collections/products-built-for-the-line-u-s-coast-guard','v3'],['U.S. Space Force','/collections/products-built-for-the-line-u-s-space-force','v3'],['ROTC','/collections/rotc-series','v3'],['JROTC','/collections/jrotc-series','v3'],['Military Schools & Academies','/collections/military-schools-academies','v3'],['Law Enforcement & Corrections','/collections/law-enforcement-corrections','v3'],['Firefighting, EMS & SAR','/collections/firefighting-ems-search-rescue','v3']];
+          const shard=Number(process.env.SHARD||0), mine=routes.filter((_,i)=>i%7===shard);
           const browser=await chromium.launch({headless:true});
-          const report={theme:THEME,generatedAt:new Date().toISOString(),routes:[],thinLineCold:[],failures:[]};
-          const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
-          const visibleFn=`el=>{if(!el)return false;const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0}`;
-
-          function normalizeLabel(s){return String(s||'').toLowerCase().replace(/manufacturers?/g,'manufacturer').replace(/shop by /g,'').replace(/\s+/g,' ').trim()}
-          function routeFailures(row){
-            const f=[]; const a=row.audit||{};
-            if(row.status!==200)f.push(`HTTP ${row.status}`);
-            if(row.navigationError)f.push(`navigation ${row.navigationError}`);
-            if(row.pageErrors?.length)f.push(`pageerror ${row.pageErrors[0]}`);
-            if(row.type==='legacy')return f;
-            if(row.type==='state'){
-              if(!a.main)f.push('MainContent missing');
-              if(!a.sidebarCount)f.push('State Guard refine sidebar missing');
-              if(a.legacyPaints?.length)f.push(`legacy navigation painted at ${a.legacyPaints[0].t}ms`);
-              return f;
+          const results=[];
+          const norm=s=>String(s||'').toLowerCase().replace(/manufacturers?/g,'manufacturer').replace(/^shop by\s+/,'').replace(/\s+/g,' ').trim();
+          async function one(name,path,type,device,viewport){
+            const context=await browser.newContext({viewport}); const page=await context.newPage();
+            await page.addInitScript(()=>{window.__sqOld=[];const sels=['[class*="button-tree"]','[class*="root-categories"]','[class*="subcategory"]','[class*="third-level"]','[class*="branch-grid"]','[class*="type-grid"]','[class*="program-tree"]','[class*="category-grid"]','[class*="navigation-grid"]'];const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};const sample=()=>{for(const q of sels)for(const e of document.querySelectorAll(q)){if(e.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results'))continue;if(vis(e)){window.__sqOld.push({t:Math.round(performance.now()),q});return}}};new MutationObserver(()=>requestAnimationFrame(sample)).observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});[0,75,150,250,500,750,1000,1500,2000,3000].forEach(t=>setTimeout(sample,t))});
+            const pageErrors=[];page.on('pageerror',e=>pageErrors.push(String(e)));
+            const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);const started=Date.now();let status=null,navError=null,usable=null;
+            try{const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});status=r?.status()??null;const deadline=Date.now()+15000;while(Date.now()<deadline){const ok=await page.evaluate((type)=>{const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};const m=document.querySelector('#MainContent');if(!m)return false;if(type==='legacy'||type==='state')return true;return [...m.querySelectorAll('.sq-refine-v3-sidebar')].some(vis)&&[...m.querySelectorAll('.product-grid')].some(g=>vis(g)&&[...g.querySelectorAll(':scope > .product-grid__item')].some(c=>vis(c)&&c.querySelector('a[href*="/products/"]')))},type);if(ok){usable=Date.now()-started;break}await page.waitForTimeout(100)}await page.waitForTimeout(700)}catch(e){navError=String(e)}
+            const a=await page.evaluate(()=>{const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};const m=document.querySelector('#MainContent');const sides=m?[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis):[];const s=sides[0],t=s?.querySelector('.sq-refine-v3-sidebar__title'),sr=s?.getBoundingClientRect(),tr=t?.getBoundingClientRect();const grids=m?[...m.querySelectorAll('.product-grid')].filter(g=>vis(g)&&[...g.querySelectorAll(':scope > .product-grid__item')].some(c=>vis(c)&&c.querySelector('a[href*="/products/"]'))):[];const g=grids.find(x=>x.closest('.sq-refine-v3-results'))||grids[0];const cards=g?[...g.querySelectorAll(':scope > .product-grid__item')].filter(c=>vis(c)&&c.querySelector('a[href*="/products/"]')):[];const rs=cards.slice(0,10).map(x=>x.getBoundingClientRect()),row=rs.length?rs.filter(x=>Math.abs(x.top-rs[0].top)<4).length:0;const hs=cards.map(c=>{const x=c.querySelector('a[href*="/products/"]');try{return new URL(x.href).pathname.match(/^\/products\/([^/]+)/)?.[1]||''}catch{return''}}).filter(Boolean),seen=new Set(),dups=[];for(const h of hs){if(seen.has(h)&&!dups.includes(h))dups.push(h);seen.add(h)}const summaries=s?[...s.querySelectorAll(':scope > details > summary')].map(x=>(x.textContent||'').replace(/\s+/g,' ').trim()):[];const sizes=[...document.querySelectorAll('#MainContent .sq-refine-v3-page-size input,#MainContent .sq-refine-v3-page-size option')].map(x=>x.value).filter(Boolean);const fcp=performance.getEntriesByType('paint').find(x=>x.name==='first-contentful-paint')?.startTime??null;return{main:!!m,sidebars:sides.length,body:s?getComputedStyle(s).backgroundColor:null,title:(t?.textContent||'').trim(),titleBg:t?getComputedStyle(t).backgroundColor:null,gap:sr&&tr?Math.max(0,sr.right-tr.right):999,grids:grids.length,cards:cards.length,row,dups,summaries,sizes:[...new Set(sizes)],fcp,old:(window.__sqOld||[]).slice(0,4)}}).catch(e=>({evalError:String(e)}));
+            const f=[];if(status!==200)f.push('HTTP '+status);if(navError)f.push('navigation');if(pageErrors.length)f.push('pageerror');
+            if(type==='state'){if(a.sidebars!==0)f.push('State Guard contaminated by V3 sidebar')}
+            else if(type==='v3'){
+              if(a.sidebars!==1)f.push('sidebars '+a.sidebars);if(a.grids!==1)f.push('visible product grids '+a.grids);if(a.cards<1)f.push('no products');if(a.dups?.length)f.push('duplicate products '+a.dups.slice(0,3).join(','));const want=Math.min(device==='desktop'?3:2,a.cards||0);if(want&&a.row!==want)f.push(`row ${a.row}/${want}`);if(a.body!=='rgb(255, 255, 255)')f.push('sidebar body '+a.body);if(a.titleBg!=='rgb(8, 40, 63)'||a.title.toUpperCase()!=='REFINE PRODUCTS'||a.gap>2)f.push('header edge/color');if(!['50','100','250'].every(x=>a.sizes?.includes(x)))f.push('page sizes');if(a.old?.length)f.push('legacy flash '+a.old[0].t+'ms');if(usable==null||usable>3500)f.push('usable '+usable);if(a.fcp!=null&&a.fcp>2500)f.push('FCP '+Math.round(a.fcp));const labels=(a.summaries||[]).map(norm),has=x=>labels.some(y=>y===x||y.startsWith(x));if(!has('type'))f.push('missing type');if(path==='/collections/armed-forces-gear'&&(labels.length!==3||!['branch','availability','type'].every(x=>labels.includes(x))))f.push('AFG policy '+a.summaries.join('|'));if(path==='/collections/apparel'&&(labels.length!==4||!['category','type','manufacturer / artist','availability'].every(x=>labels.includes(x))))f.push('Apparel policy '+a.summaries.join('|'));if(path==='/collections/firearm-accessories'&&!labels.some(x=>x.includes('firearm make / model')))f.push('missing firearm make/model');if(path==='/collections/literature'&&!['author','publisher','branch','topic'].every(x=>has(x)))f.push('Books policy '+a.summaries.join('|'));
             }
-            if(a.sidebarCount!==1)f.push(`visible V3 sidebars ${a.sidebarCount}`);
-            if(a.productGridCount!==1)f.push(`product-bearing visible grids ${a.productGridCount}`);
-            if(a.cards<1)f.push('no visible product cards');
-            if(a.duplicateHandles?.length)f.push(`duplicate cards ${a.duplicateHandles.slice(0,5).join(',')}`);
-            const expected=Math.min(row.device==='desktop'?3:2,a.cards||0);
-            if(expected&&a.firstRowCount!==expected)f.push(`${row.device} first row ${a.firstRowCount}, expected ${expected}`);
-            if(!['50','100','250'].every(x=>a.pageSizes?.includes(x)))f.push(`page sizes ${JSON.stringify(a.pageSizes||[])}`);
-            if(a.sidebarBg!=='rgb(255, 255, 255)')f.push(`sidebar body ${a.sidebarBg}`);
-            if(a.titleBg!=='rgb(8, 40, 63)'||String(a.title||'').trim().toUpperCase()!=='REFINE PRODUCTS'||a.titleRightGap>2)f.push('Refine header edge/color');
-            if(a.legacyPaints?.length)f.push(`legacy navigation painted at ${a.legacyPaints[0].t}ms: ${a.legacyPaints[0].selector}`);
-            if(row.usableMs==null||row.usableMs>3500)f.push(`usable ${row.usableMs==null?'timeout':row.usableMs+'ms'}`);
-            if(a.fcp!=null&&a.fcp>2500)f.push(`FCP ${Math.round(a.fcp)}ms`);
-            const labels=(a.summaries||[]).map(normalizeLabel);
-            const has=x=>labels.some(y=>y===x||y.startsWith(x));
-            if(!has('type'))f.push('missing Shop by Type');
-            if(row.path==='/collections/armed-forces-gear'){
-              const allowed=new Set(['branch','availability','type']);
-              if(labels.length!==3||labels.some(x=>!allowed.has(x))||![...allowed].every(x=>labels.includes(x)))f.push(`AFG filters ${a.summaries?.join(' | ')}`);
-            }
-            if(row.path==='/collections/apparel'){
-              const need=['category','type','manufacturer / artist','availability'];
-              if(labels.length!==4||!need.every(x=>labels.includes(x)))f.push(`Apparel filters ${a.summaries?.join(' | ')}`);
-            }
-            if(row.path==='/collections/literature'){
-              for(const req of ['author','publisher','branch','topic'])if(!has(req))f.push(`Books missing ${req}`);
-              if(!labels.some(x=>/^war( \/ (era \/ )?conflict)?$/.test(x)||x.startsWith('war / conflict')))f.push('Books missing War / Conflict');
-            }
-            if(row.path==='/collections/firearm-accessories'&&!labels.some(x=>x.includes('firearm make / model')||x==='make / model'))f.push('Firearm Make / Model missing');
-            if(colorRoutes.has(row.path)){
-              if(!labels.some(x=>x==='color / pattern'||x==='color' || x==='pattern'))f.push('Shop by Color / Pattern missing');
-              if(a.colorInputs<1)f.push('Color / Pattern has no loaded checkboxes');
-            }
-            return f;
+            const row={shard,name,path,type,device,status,usable,pageErrors,a,failures:f};results.push(row);console.log(`${f.length?'FAIL':'PASS'} ${device} ${name} usable=${usable} fcp=${a.fcp==null?'n/a':Math.round(a.fcp)} grids=${a.grids??'n/a'} cards=${a.cards??'n/a'}${f.length?' :: '+f.join(' | '):''}`);if(f.length)await page.screenshot({path:`out/${name.replace(/[^a-z0-9]+/gi,'-')}-${device}.png`,fullPage:false}).catch(()=>{});await context.close();
           }
-
-          async function addInit(page){
-            await page.addInitScript(()=>{
-              window.__sqLegacyPaints=[];
-              window.__sqLcp=null;
-              try{new PerformanceObserver(list=>{for(const e of list.getEntries())window.__sqLcp=e.startTime}).observe({type:'largest-contentful-paint',buffered:true})}catch{}
-              const selectors=['[class*="button-tree"]','[class*="root-categories"]','[class*="subcategory"]','[class*="third-level"]','[class*="branch-grid"]','[class*="type-grid"]','[class*="program-tree"]','[class*="category-grid"]','[class*="navigation-grid"]'];
-              const vis=el=>{if(!el)return false;const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};
-              let pending=false;
-              const sample=()=>{pending=false;for(const sel of selectors){for(const el of document.querySelectorAll(sel)){if(el.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results'))continue;if(vis(el)){window.__sqLegacyPaints.push({t:Math.round(performance.now()),selector:sel,text:(el.innerText||'').replace(/\s+/g,' ').trim().slice(0,120)});return}}}};
-              const schedule=()=>{if(!pending){pending=true;requestAnimationFrame(sample)}};
-              new MutationObserver(schedule).observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden']});
-              requestAnimationFrame(sample);[75,150,250,500,750,1000,1500,2000,3000].forEach(t=>setTimeout(sample,t));
-            });
-          }
-
-          async function auditRoute(name,path,type,device,viewport){
-            const videoDir='out/videos';
-            const context=await browser.newContext({viewport,recordVideo:{dir:videoDir,size:viewport}});
-            const page=await context.newPage(); await addInit(page);
-            const pageErrors=[],requestFailures=[],serverErrors=[];
-            page.on('pageerror',e=>pageErrors.push(String(e)));
-            page.on('requestfailed',r=>{try{const u=new URL(r.url());if(u.hostname.endsWith('statesideqm.com'))requestFailures.push(`${r.method()} ${u.pathname}: ${r.failure()?.errorText||'failed'}`)}catch{}});
-            page.on('response',r=>{try{const u=new URL(r.url());if(u.hostname.endsWith('statesideqm.com')&&r.status()>=500)serverErrors.push(`${r.status()} ${u.pathname}`)}catch{}});
-            const url=new URL(path,BASE);url.searchParams.set('preview_theme_id',THEME);
-            const started=Date.now(); let status=null,navigationError=null,usableMs=null;
-            try{
-              const res=await page.goto(url.toString(),{waitUntil:'domcontentloaded',timeout:90000});status=res?.status()??null;
-              const ready=()=>page.evaluate((kind)=>{
-                const vis=el=>{if(!el)return false;const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};
-                const main=document.querySelector('#MainContent');if(!main)return false;
-                if(kind==='legacy')return true;
-                const side=[...main.querySelectorAll('.sq-refine-v3-sidebar,.sq-global-refine-sidebar')].find(vis);
-                if(kind==='state')return !!side;
-                const grids=[...main.querySelectorAll('.product-grid')].filter(g=>vis(g)&&[...g.querySelectorAll(':scope > .product-grid__item')].some(c=>vis(c)&&c.querySelector('a[href*="/products/"]')));
-                return !!side&&grids.length>0;
-              },type);
-              const deadline=Date.now()+30000;
-              while(Date.now()<deadline){if(await ready()){usableMs=Date.now()-started;break}await page.waitForTimeout(100)}
-              await page.waitForTimeout(650);
-            }catch(e){navigationError=String(e)}
-
-            let colorInputs=0;
-            if(type==='v3'&&colorRoutes.has(path)){
-              const details=page.locator('#MainContent .sq-refine-v3-sidebar details').filter({has:page.locator('summary', {hasText:/Color \/ Pattern|Color|Pattern/i})}).first();
-              if(await details.count()){
-                if(!(await details.getAttribute('open')))await details.locator('summary').click().catch(()=>{});
-                await page.waitForTimeout(1000);
-                colorInputs=await details.locator('input[type="checkbox"]').count().catch(()=>0);
-              }
-            }
-
-            const audit=await page.evaluate((colorInputs)=>{
-              const main=document.querySelector('#MainContent');
-              const vis=el=>{if(!el)return false;const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};
-              const sidebars=main?[...main.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis):[];
-              const side=sidebars[0]||null,title=side?.querySelector('.sq-refine-v3-sidebar__title');
-              const sr=side?.getBoundingClientRect(),tr=title?.getBoundingClientRect();
-              const grids=main?[...main.querySelectorAll('.product-grid')].filter(g=>vis(g)&&[...g.querySelectorAll(':scope > .product-grid__item')].some(c=>vis(c)&&c.querySelector('a[href*="/products/"]'))):[];
-              const preferred=grids.find(g=>g.closest('.sq-refine-v3-results'))||grids[0]||null;
-              const cards=preferred?[...preferred.querySelectorAll(':scope > .product-grid__item')].filter(c=>vis(c)&&c.querySelector('a[href*="/products/"]')):[];
-              const handles=cards.map(c=>{const a=c.querySelector('a[href*="/products/"]');try{return new URL(a.href,location.origin).pathname.match(/^\/products\/([^/?#]+)/)?.[1]||''}catch{return''}}).filter(Boolean);
-              const seen=new Set(),dups=[];for(const h of handles){if(seen.has(h)&&!dups.includes(h))dups.push(h);seen.add(h)}
-              const rects=cards.slice(0,12).map(c=>c.getBoundingClientRect());const firstRowCount=rects.length?rects.filter(r=>Math.abs(r.top-rects[0].top)<4).length:0;
-              const summaries=side?[...side.querySelectorAll(':scope > details > summary')].map(s=>(s.textContent||'').replace(/\s+/g,' ').trim()):[];
-              const pageSizes=[...document.querySelectorAll('#MainContent .sq-refine-v3-page-size input,#MainContent .sq-refine-v3-page-size select option')].map(x=>x.value).filter(Boolean);
-              const paints=performance.getEntriesByType('paint');const fcp=paints.find(x=>x.name==='first-contentful-paint')?.startTime??null;
-              return {main:!!main,sidebarCount:sidebars.length,sidebarBg:side?getComputedStyle(side).backgroundColor:null,title:(title?.textContent||'').trim(),titleBg:title?getComputedStyle(title).backgroundColor:null,titleRightGap:sr&&tr?Math.max(0,sr.right-tr.right):999,productGridCount:grids.length,cards:cards.length,firstRowCount,duplicateHandles:dups,pageSizes:[...new Set(pageSizes)],summaries,colorInputs,legacyPaints:(window.__sqLegacyPaints||[]).slice(0,5),fcp,lcp:window.__sqLcp??null};
-            },colorInputs).catch(e=>({evalError:String(e),colorInputs}));
-            const row={name,path,type,device,status,navigationError,usableMs,pageErrors,requestFailures:requestFailures.slice(0,10),serverErrors:serverErrors.slice(0,10),audit};
-            row.failures=routeFailures(row); report.routes.push(row); row.failures.forEach(x=>report.failures.push(`${device}/${name}: ${x}`));
-            const shot=`out/screens/${String(routes.findIndex(r=>r[1]===path)+1).padStart(2,'0')}-${slug(name)}-${device}.png`;
-            await page.screenshot({path:shot,fullPage:false}).catch(()=>{});
-            const video=page.video(); await page.close().catch(()=>{}); const vp=video?await video.path().catch(()=>null):null; await context.close().catch(()=>{});
-            if(vp){const keep=name==='Thin Line'||row.failures.length;if(keep){try{fs.renameSync(vp,`out/videos/${slug(name)}-${device}.webm`)}catch{}}else{try{fs.unlinkSync(vp)}catch{}}}
-            console.log(`${row.failures.length?'FAIL':'PASS'} ${device} ${name} usable=${usableMs} fcp=${audit.fcp==null?'n/a':Math.round(audit.fcp)} grids=${audit.productGridCount??'n/a'} cards=${audit.cards??'n/a'}${row.failures.length?' :: '+row.failures.join(' | '):''}`);
-          }
-
-          for(const [device,viewport] of viewports){for(const [name,path,type] of routes)await auditRoute(name,path,type,device,viewport)}
-
-          // Two additional cold Chromium samples for Thin Line to catch intermittent delays.
-          for(let i=0;i<2;i++){
-            const context=await browser.newContext({viewport:{width:1440,height:1000}});const page=await context.newPage();await addInit(page);const u=`${BASE}/collections/thin-line?preview_theme_id=${THEME}`;const started=Date.now();let usableMs=null,status=null;
-            try{const r=await page.goto(u,{waitUntil:'domcontentloaded',timeout:90000});status=r?.status()??null;const deadline=Date.now()+30000;while(Date.now()<deadline){const ok=await page.evaluate(()=>{const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'};const m=document.querySelector('#MainContent');return !!m&&[...m.querySelectorAll('.sq-refine-v3-sidebar')].some(vis)&&[...m.querySelectorAll('.product-grid')].some(g=>vis(g)&&[...g.querySelectorAll(':scope > .product-grid__item')].some(c=>vis(c)&&c.querySelector('a[href*="/products/"]')))});if(ok){usableMs=Date.now()-started;break}await page.waitForTimeout(100)}}catch{}
-            const metrics=await page.evaluate(()=>({fcp:performance.getEntriesByType('paint').find(x=>x.name==='first-contentful-paint')?.startTime??null,legacy:(window.__sqLegacyPaints||[]).slice(0,3)})).catch(()=>({}));report.thinLineCold.push({sample:i+2,status,usableMs,...metrics});await context.close();
-          }
-          await browser.close();
-          const thinPrimary=report.routes.find(r=>r.name==='Thin Line'&&r.device==='desktop');if(thinPrimary)report.thinLineCold.unshift({sample:1,status:thinPrimary.status,usableMs:thinPrimary.usableMs,fcp:thinPrimary.audit?.fcp??null,legacy:thinPrimary.audit?.legacyPaints||[]});
-          const vals=report.thinLineCold.map(x=>x.usableMs).filter(Number.isFinite).sort((a,b)=>a-b);report.thinLineMedianUsable=vals.length?vals[Math.floor(vals.length/2)]:null;
-          report.pass=report.failures.length===0;
-          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
-          fs.writeFileSync('out/summary.txt',`routes=${routes.length}\nchecks=${report.routes.length}\nfailures=${report.failures.length}\nthinLineMedianUsable=${report.thinLineMedianUs}\npass=${report.pass}\n`);
-          console.log('SUMMARY '+JSON.stringify({routes:routes.length,checks:report.routes.length,failures:report.failures.length,thinLineMedianUsable:report.thinLineMedianUs,pass:report.pass}));
-          if(!report.pass)process.exit(2);
+          for(const [name,path,type] of mine){for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]])await one(name,path,type,device,viewport)}
+          await browser.close();const failures=results.flatMap(r=>r.failures.map(f=>`${r.device}/${r.name}: ${f}`));fs.writeFileSync(`out/shard-${shard}.json`,JSON.stringify({shard,routes:mine.length,checks:results.length,failures,results},null,2));console.log('SHARD_SUMMARY '+JSON.stringify({shard,routes:mine.length,checks:results.length,failures:failures.length}));if(failures.length)process.exit(2);
           EOF
           node cert.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: refine-v3-42-chromium-cert
+          name: refine-v3-42-shard-${{ matrix.shard }}
           path: out
           retention-days: 14
