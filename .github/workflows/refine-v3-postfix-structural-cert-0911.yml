@@ -27,30 +27,9 @@ jobs:
           import { chromium } from 'playwright';
           const base='https://www.statesideqm.com', theme='158561894555';
           const routes=[
-            ['Flags','/collections/flags-patriotic-decor'],
-            ['Airsoft','/collections/airsoft-milsim'],
-            ['Child Safety','/collections/child-safety-shop'],
-            ['First Aid','/collections/first-aid-medical-ifak'],
-            ['Outdoor','/collections/outdoor-preparedness-gear'],
-            ['Firearm Accessories','/collections/firearm-accessories'],
-            ['Morale Patches','/collections/morale-patches-tactical-id'],
-            ['Uniforms','/collections/uniforms'],
-            ['Body Armor','/collections/body-armor-ballistic-protection'],
-            ['Flashlights','/collections/flashlights-lighting'],
-            ['Safety Rescue','/collections/safety-rescue-climbing'],
-            ['Books','/collections/literature'],
-            ['Footwear','/collections/footwear-gloves-eyewear'],
-            ['DIVE / SCUBA','/collections/dive-scuba'],
-            ['Knives','/collections/knives-axes-cutlery'],
-            ['U.S. Army','/collections/products-built-for-the-line-u-s-army'],
-            ['U.S. Marines','/collections/products-built-for-the-line-u-s-marine-corps'],
-            ['JROTC','/collections/jrotc-series'],
-            ['ROTC','/collections/rotc-series'],
-            ['U.S. Coast Guard','/collections/products-built-for-the-line-u-s-coast-guard'],
-            ['Thin Line','/collections/thin-line']
+            ['Flags','/collections/flags-patriotic-decor'],['Airsoft','/collections/airsoft-milsim'],['Child Safety','/collections/child-safety-shop'],['First Aid','/collections/first-aid-medical-ifak'],['Outdoor','/collections/outdoor-preparedness-gear'],['Firearm Accessories','/collections/firearm-accessories'],['Morale Patches','/collections/morale-patches-tactical-id'],['Uniforms','/collections/uniforms'],['Body Armor','/collections/body-armor-ballistic-protection'],['Flashlights','/collections/flashlights-lighting'],['Safety Rescue','/collections/safety-rescue-climbing'],['Books','/collections/literature'],['Footwear','/collections/footwear-gloves-eyewear'],['DIVE / SCUBA','/collections/dive-scuba'],['Knives','/collections/knives-axes-cutlery'],['U.S. Army','/collections/products-built-for-the-line-u-s-army'],['U.S. Marines','/collections/products-built-for-the-line-u-s-marine-corps'],['JROTC','/collections/jrotc-series'],['ROTC','/collections/rotc-series'],['U.S. Coast Guard','/collections/products-built-for-the-line-u-s-coast-guard'],['Thin Line','/collections/thin-line']
           ];
           const browser=await chromium.launch({headless:true}); let fails=0;
-          const vis=e=>!!e;
           for(const [name,path] of routes){
             for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
               const ctx=await browser.newContext({viewport}); const page=await ctx.newPage();
@@ -64,13 +43,13 @@ jobs:
                   const m=document.querySelector('#MainContent'); const results=m?.querySelector('.sq-refine-v3-results');
                   const all=m?[...m.querySelectorAll('.product-grid')]:[];
                   const grids=all.filter(g=>visible(g)&&[...g.querySelectorAll(':scope > .product-grid__item')].some(c=>visible(c)&&c.querySelector('a[href*="/products/"]')));
-                  return {ready:m?.dataset.sqRefineV3Ready||null,results:!!results,grids:grids.length,cards:grids[0]?[...grids[0].querySelectorAll(':scope > .product-grid__item')].filter(visible).length:0,detail:all.map((g,i)=>({i,inResults:!!g.closest('.sq-refine-v3-results'),visible:visible(g),cards:g.querySelectorAll(':scope > .product-grid__item').length,visibleCards:[...g.querySelectorAll(':scope > .product-grid__item')].filter(visible).length,classes:g.className,host:g.closest('collection-component')?.className||null,hostHidden:g.closest('collection-component')?.hidden||false,display:getComputedStyle(g).display,visibility:getComputedStyle(g).visibility}))};
+                  return {ready:m?.dataset.sqRefineV3Ready||null,rescue:!!document.querySelector('[data-sq-refine-v3-visible-grid-rescue]'),results:!!results,grids:grids.length,cards:grids[0]?[...grids[0].querySelectorAll(':scope > .product-grid__item')].filter(visible).length:0,detail:all.map((g,i)=>({i,inResults:!!g.closest('.sq-refine-v3-results'),visible:visible(g),cards:g.querySelectorAll(':scope > .product-grid__item').length,visibleCards:[...g.querySelectorAll(':scope > .product-grid__item')].filter(visible).length,authoritative:g.classList.contains('sq-v3-authoritative-grid'),duplicate:g.getAttribute('data-sq-refine-v3-duplicate-surface'),classes:g.className,host:g.closest('collection-component')?.className||null,hostHidden:g.closest('collection-component')?.hidden||false,display:getComputedStyle(g).display,visibility:getComputedStyle(g).visibility}))};
                 });
-                if(state.grids===1&&state.cards>0)break;
+                if(state.grids===1&&state.cards>0&&state.rescue)break;
                 await page.waitForTimeout(150);
               }while(Date.now()<deadline);
-              const elapsed=Date.now()-start; const ok=status===200&&state.grids===1&&state.cards>0;
-              console.log(`${ok?'PASS':'FAIL'} ${device} ${name} status=${status} usable<=${elapsed} grids=${state.grids} cards=${state.cards} ready=${state.ready}`);
+              const elapsed=Date.now()-start; const ok=status===200&&state.rescue&&state.grids===1&&state.cards>0;
+              console.log(`${ok?'PASS':'FAIL'} ${device} ${name} status=${status} usable<=${elapsed} rescue=${state.rescue} grids=${state.grids} cards=${state.cards} ready=${state.ready}`);
               if(!ok){fails++;console.log('DETAIL '+JSON.stringify(state.detail));await page.screenshot({path:`${name.replace(/[^a-z0-9]+/gi,'-')}-${device}.png`,fullPage:false}).catch(()=>{})}
               await ctx.close();
             }
@@ -84,3 +63,4 @@ jobs:
           name: refine-v3-postfix-structural-evidence
           path: '*.png'
           if-no-files-found: ignore
+# wired-rescue rerun 2026-09-11
