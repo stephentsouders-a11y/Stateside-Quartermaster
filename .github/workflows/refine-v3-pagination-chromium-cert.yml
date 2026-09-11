@@ -54,10 +54,38 @@ jobs:
           const fail=(h,s,v,m)=>report.failures.push(`${h} @ ${s ?? 'source'} page ${v}: ${m}`);
           const norm=x=>{try{return new URL(x,'https://www.statesideqm.com').pathname.replace(/\/$/,'')}catch{return x}};
           const cardSelector='#MainContent .sq-refine-v3-results .product-grid > .product-grid__item';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          async function gotoWithRetry(page,url,label){
+            let last=null;
+            for(let attempt=1;attempt<=7;attempt++){
+              try{
+                const r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
+                const status=r?.status()||0;
+                if(r?.ok()){
+                  await sleep(350);
+                  return r;
+                }
+                last=new Error(`HTTP ${status}`);
+                if(status===429 || status>=500){
+                  await sleep(Math.min(15000,1000*Math.pow(2,attempt-1)));
+                  continue;
+                }
+                throw last;
+              }catch(e){
+                last=e;
+                if(attempt===7)break;
+                await sleep(Math.min(15000,1000*Math.pow(2,attempt-1)));
+              }
+            }
+            throw new Error(`${label}: ${String(last)}`);
+          }
           async function waitV3(page){
-            await page.waitForLoadState('domcontentloaded');
-            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',{timeout:30000});
-            await page.waitForTimeout(850);
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',{timeout:45000});
+            await page.waitForFunction(()=>{
+              const d=document.querySelector('#MainContent')?.dataset||{};
+              return d.sqRefineV3PaginationRepaired==='true'||!!d.sqRefineV3PaginationRepairError;
+            },{timeout:30000}).catch(()=>{});
+            await sleep(300);
           }
           async function customerHrefs(page){
             return await page.$$eval(cardSelector,els=>[...new Set(els.map(el=>el.querySelector('a[href*="/products/"]')?.href).filter(Boolean))]);
@@ -87,6 +115,7 @@ jobs:
             const page=await context.newPage();
             const expected=new Set();
             const counts=[];
+            let terminated=false;
             try{
               for(let nativePage=1;nativePage<=150;nativePage++){
                 const u=new URL(`${base}${sourcePath(route)}`);
@@ -94,15 +123,15 @@ jobs:
                 u.searchParams.set('view','sq-refine-v3-products');
                 u.searchParams.set('page',String(nativePage));
                 if(route.root)u.searchParams.set('sq_root',route.root);
-                const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:90000});
-                if(!r?.ok())throw new Error(`HTTP ${r?.status()}`);
+                await gotoWithRetry(page,u.toString(),`${route.handle} source page ${nativePage}`);
                 const links=(await sourceHrefs(page)).map(norm);
                 counts.push(links.length);
-                if(!links.length)break;
+                if(!links.length){terminated=true;break;}
                 links.forEach(x=>expected.add(x));
-                if(links.length<50)break;
-                if(nativePage===150)fail(route.handle,null,nativePage,'source enumeration did not terminate');
+                if(links.length<50){terminated=true;break;}
+                await sleep(400);
               }
+              if(!terminated)fail(route.handle,null,150,'source enumeration did not terminate');
             }catch(e){fail(route.handle,null,counts.length+1,`source enumeration failed: ${String(e)}`)}
             await page.close();
             report.source.push({handle:route.handle,totalUniqueProducts:expected.size,nativePageCounts:counts});
@@ -110,7 +139,7 @@ jobs:
           }
           for(const route of routes){
             const expected=await enumerateSource(route);
-            if(expected.size<1){fail(route.handle,null,1,'source contains zero products');continue;}
+            if(expected.size<1){fail(route.handle,null,1,'source contains zero products');await sleep(1200);continue;}
             for(const size of sizes){
               const page=await context.newPage();
               const seen=new Set();
@@ -123,8 +152,10 @@ jobs:
                 const u=routeUrl(route);
                 u.searchParams.set('sq_per_page',String(size));
                 u.searchParams.set('sq_view_page',String(view));
-                try{await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:90000});await waitV3(page)}
-                catch(e){fail(route.handle,size,view,`navigation/readiness failed: ${String(e)}`);break}
+                try{
+                  await gotoWithRetry(page,u.toString(),`${route.handle} customer ${size} page ${view}`);
+                  await waitV3(page);
+                }catch(e){fail(route.handle,size,view,`navigation/readiness failed: ${String(e)}`);break}
                 const products=(await customerHrefs(page)).map(norm);
                 const pager=await pagerState(page);
                 const mainData=await page.$eval('#MainContent',el=>({...el.dataset})).catch(()=>({}));
@@ -138,12 +169,14 @@ jobs:
                 if(view===1 && pager.previous)fail(route.handle,size,view,'Page 1 exposes Previous');
                 if(view>1 && !pager.previous)fail(route.handle,size,view,'missing Previous');
                 if(mainData.sqRefineV3PaginationRepairError)fail(route.handle,size,view,`repair error: ${mainData.sqRefineV3PaginationRepairError}`);
+                if(mainData.sqRefineV3PaginationRepaired!=='true')fail(route.handle,size,view,'pagination repair marker missing');
                 if(mainData.sqRefineV3PaginationPageSize!==String(size))fail(route.handle,size,view,`page-size marker is ${mainData.sqRefineV3PaginationPageSize||'missing'}`);
                 if(pager.next){
                   const nextUrl=new URL(pager.next.href);const nextView=Number(nextUrl.searchParams.get('sq_view_page'));
                   if(nextView!==view+1)fail(route.handle,size,view,`Next targets page ${nextView}, expected ${view+1}`);
                   view++;
                 }else finished=true;
+                await sleep(450);
               }
               if(guard>=150 && !finished)fail(route.handle,size,view,'pagination did not terminate within 150 pages');
               if(errors.length)fail(route.handle,size,view,`${errors.length} uncaught browser page error(s)`);
@@ -155,7 +188,9 @@ jobs:
               report.checked.push({handle:route.handle,root:route.root,size,sourceUniqueProducts:expected.size,totalLogicalPages:pages.length,totalUniqueProducts:seen.size,missing:missing.slice(0,25),unexpected:unexpected.slice(0,25),finished,pages});
               if(route.handle==='literature-u-s-army'||report.failures.some(x=>x.startsWith(`${route.handle} @ ${size}`))){await page.screenshot({path:`out/${route.handle}-${size}-final.png`,fullPage:true}).catch(()=>{})}
               await page.close();
+              await sleep(700);
             }
+            await sleep(1200);
           }
           await browser.close();
           report.summary={routes:routes.length,sizes:sizes.length,cases:report.checked.length,totalLogicalPages:report.checked.reduce((n,x)=>n+x.totalLogicalPages,0),failures:report.failures.length};
