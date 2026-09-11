@@ -1,5 +1,5 @@
 {% doc %}
-Adds collection-scoped, exact product-option color and pattern checkboxes to Tactical Gear's V3 sidebar. The paginated data view avoids unsupported native color parameters and uses a single filtered product surface. Existing category, manufacturer, type, availability, and page-size selections are retained.
+Adds collection-scoped color and pattern checkboxes to Tactical Gear's V3 sidebar. Filters supplier option noise, caches the complete catalog with native gzip compression, and keeps one visible result surface when colors are selected.
 {% enddoc %}
 {% if request.page_type == 'collection' %}
 <script data-sq-tactical-color-pattern data-current-handle="{{ collection.handle | escape }}" data-currency="{{ cart.currency.iso_code | escape }}">
@@ -22,8 +22,14 @@ Adds collection-scoped, exact product-option color and pattern checkboxes to Tac
   function esc(v) { return clean(v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function color(v) {
     v = clean(v).replace(/^\(\d+\)\s*/, '').replace(/^\d{2,5}\s*[-:]\s*/, '');
-    if (!v || v.length > 72 || /%|\b(?:polyester|nylon|cotton|spandex|denier|size|small|medium|large|xxl|3xl|4xl)\b/i.test(v) || /^(?:default title|standard|none|other|assorted|various|n\/a)$/i.test(v)) return '';
-    return v.toLowerCase().replace(/\bgrey\b/g, 'gray').replace(/\bmulti[ -]?cam\b/g, 'multicam').replace(/(^|[\s/(-])([a-z])/g, function (_, lead, letter) { return lead + letter.toUpperCase(); }).replace(/\b(?:Ocp|Acu|Ucp|Nwu|Od|Us|M81|Dcu|Abu|Marpat|Atacs)\b/g, function (s) { return s.toUpperCase(); });
+    if (!v || v.length > 100 || /%|\b(?:polyester|nylon|cotton|spandex|denier)\b/i.test(v)) return '';
+    if (/^(?:[EO]\d+\s+|\d(?:st|nd|rd|th)\s+)?(?:private(?: first class)?|corporal|specialist|(?:staff |master |first )?sergeant(?: first class)?|lieutenant(?: colonel)?|captain|major|colonel|general)$/i.test(v)) return '';
+    if (/^(?:default title|standard|none|other(?: color \/ pattern)?|assorted|various|n\/a|full set|empty bag|only bag|bag with medical kit|only ptt|only throat mic|just cpr manikin|cpr with accessories|cpr with feedback|shock cord|weekly drop box)$/i.test(v)) return '';
+    if (/(?:sg906|906max|\b\d+pc\s*\d*cm\b)/i.test(v)) return '';
+    var recognizable = /\b(?:black|blackout|white|gr[ae]y|charcoal|red|blue|navy|green|olive|foliage|foilage|coyote|tan|khaki|brown|sand|earth|gold|golden|silver|bronze|copper|orange|yellow|pink|purple|maroon|burgundy|teal|aqua|beige|turquoise|lavender|indigo|sage|seafoam|loden|avocado|graphite|gravel|smoke|steel|gunmetal|walnut|berry|rose|natural|rustic|clear|tinted|photochromic|infrared|ir|fde|fdeb|od|odb|cp|mc|ocp|acu|ucp|dcu|abu|mtp|emr|mm14|rbs|ral|nwu|m81|m84|m96|camo|camouflage|digital|woodland|desert|arctic|alpine|tiger|stripe|tigerstripe|topo|python|snakeskin|kryptek|kyryptek|obskura|typhon|mandrake|pencott|flecktarn|tropentarn|auscam|erdl|dnc|fatacs|atacs|brushstroke|frog|realtree|snowdrift|splatter|raid|carbon|basketweave|basket weave|dazzle|mirage|metro|mountain|wolf|neon|astronaut|calico|cats|kittens|dinosaurs|elephants|robots|unicorn|animals|puppies|flag|usa|transportation|transformation|trifecta|titan|skye|merica)\b|multi[ -]?cam|multcam|muticam|mcamblk|marpat|mrpat|aor[12]|first lite|out of this world|faded tapestry|chocolate chip|depth charge|desertcam|evergreen|gun metal|multicolor|multi color|rainbow|tan499/i;
+    if (!recognizable.test(v)) return '';
+    v = v.replace(/^(?:\.\d+|\d+)\s+caliber\s*\([^)]*\)\s*&\s*/i, '').replace(/\s*\+\s*\$\s*[\d.,]+\s*$/,'').replace(/\s+\d+\s*(?:[- ]?pack)(?:\s+safe bundle)?$/i, '');
+    return v.toLowerCase().replace(/\bgrey\b/g, 'gray').replace(/\bmulti[ -]?cam\b/g, 'multicam').replace(/(^|[\s/(-])([a-z])/g, function (_, lead, letter) { return lead + letter.toUpperCase(); }).replace(/\b(?:Ocp|Acu|Ucp|Nwu|Od|Us|Usa|M81|M84|M96|Dcu|Abu|Marpat|Atacs|Fde|Fdeb|Ir|Dnc|Mtp|Emr|Mm14|Rbs|Cp|Mc|Ral|Aor1|Aor2)\b/g, function (s) { return s.toUpperCase(); });
   }
   function prepare(p) {
     var indexes = [];
@@ -100,12 +106,36 @@ Adds collection-scoped, exact product-option color and pattern checkboxes to Tac
     }
     throw last;
   }
-  async function loadCatalog() {
-    var cacheKey = 'sq-tactical-color-v1:' + ((window.Shopify && Shopify.theme && Shopify.theme.id) || '') + ':' + location.pathname + ':' + (query.get('sort_by') || '') + ':' + currency;
+  async function readCatalogCache(key) {
     try {
-      var saved = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
-      if (saved && Date.now() - saved.time < 300000 && Array.isArray(saved.products)) return saved.products.map(prepare);
-    } catch (_) {}
+      var saved = JSON.parse(sessionStorage.getItem(key) || 'null');
+      if (!saved || Date.now() - saved.time >= 300000) return null;
+      if (Array.isArray(saved.products)) return saved.products;
+      if (!saved.gzip || !window.DecompressionStream) return null;
+      var bytes = Uint8Array.from(atob(saved.gzip), function (c) { return c.charCodeAt(0); });
+      var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+      var products = JSON.parse(await new Response(stream).text());
+      return Array.isArray(products) ? products : null;
+    } catch (_) { return null; }
+  }
+  async function writeCatalogCache(key, products) {
+    try {
+      var raw = JSON.stringify(products), saved = { time: Date.now() };
+      if (window.CompressionStream && window.DecompressionStream) {
+        var stream = new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip'));
+        var bytes = new Uint8Array(await new Response(stream).arrayBuffer()), binary = '';
+        for (var offset = 0; offset < bytes.length; offset += 32768) binary += String.fromCharCode.apply(null, bytes.subarray(offset, offset + 32768));
+        saved.gzip = btoa(binary);
+      } else saved.products = products;
+      sessionStorage.setItem(key, JSON.stringify(saved));
+      main.dataset.sqTacticalColorCacheStored = 'true';
+    } catch (_) { main.dataset.sqTacticalColorCacheStored = 'false'; }
+  }
+  async function loadCatalog() {
+    var cacheKey = 'sq-tactical-color-v2:' + ((window.Shopify && Shopify.theme && Shopify.theme.id) || '') + ':' + location.pathname + ':' + (query.get('sort_by') || '') + ':' + currency;
+    var cached = await readCatalogCache(cacheKey);
+    if (cached) { main.dataset.sqTacticalColorCache = 'hit'; return cached.map(prepare); }
+    main.dataset.sqTacticalColorCache = 'miss';
     var first = await getPage(1), pages = [first], next = 2;
     if (first.pages > 100) throw new Error('Color catalog exceeds the supported page limit');
     async function worker() {
@@ -118,7 +148,7 @@ Adds collection-scoped, exact product-option color and pattern checkboxes to Tac
     var products = pages.flatMap(function (p) { return p.products; });
     if (products.length !== first.total || new Set(products.map(function (p) { return p.id; })).size !== products.length) throw new Error('Color catalog changed while loading; please retry');
     products = products.filter(function (p) { return norm(p.type) !== 'options_hidden_product' && norm(p.type) !== 'options hidden product'; });
-    try { sessionStorage.setItem(cacheKey, JSON.stringify({ time: Date.now(), products: products })); } catch (_) {}
+    await writeCatalogCache(cacheKey, products);
     return products.map(prepare);
   }
   function updateChoices() {
@@ -218,13 +248,15 @@ Adds collection-scoped, exact product-option color and pattern checkboxes to Tac
       startLoad();
     }
     main.dataset.sqTacticalColorInstalled = 'true';
+    main.dataset.sqTacticalColorVersion = '2';
     return true;
   }
   if (!launch()) { var attempts = 0, timer = setInterval(function () { if (launch() || ++attempts > 600) clearInterval(timer); }, 100); }
 })();
 </script>
 <style>
-html[data-sq-tactical-color-active="true"] #MainContent .sq-refine-v3-results > collection-component,
+html[data-sq-tactical-color-active="true"] #MainContent collection-component,
+html[data-sq-tactical-color-active="true"] #MainContent .product-grid,
 html[data-sq-tactical-color-active="true"] #MainContent .sq-tactical-native-results{display:none!important}
 #MainContent [data-sq-tactical-colors] .sq-tactical-color-tools{padding:0 0 8px}
 #MainContent [data-sq-tactical-colors] input[type="search"]{width:100%;min-height:38px;padding:8px;border:1px solid #cfd9df;border-radius:6px;font:inherit;font-size:12px}
@@ -241,5 +273,7 @@ html[data-sq-tactical-color-active="true"] #MainContent .sq-tactical-native-resu
 #MainContent .sq-tactical-color-card__badge{position:absolute;right:8px;top:8px;padding:5px 10px;border-radius:20px;background:#edf0e9;font-size:12px}
 #MainContent .sq-tactical-color-card__price{font-size:13px}
 @media(max-width:900px){#MainContent .sq-tactical-color-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 14px}#MainContent .sq-tactical-color-card{font-size:12px}}
+
+#MainContent [data-sq-tactical-colors] .sq-refine-v3-choices{max-height:380px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px!important}
 </style>
 {% endif %}
