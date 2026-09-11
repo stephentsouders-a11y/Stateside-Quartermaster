@@ -42,3 +42,4 @@ jobs:
           await mc.close();await c.close();await browser.close();console.log('FAILURES='+JSON.stringify(failures));if(failures.length)process.exit(1);console.log('ALL CUSTOMER JOURNEYS GREEN');
           EOF
           node customer-v4.mjs
+# trigger 2026-09-10 education and no-interior-button repairs
