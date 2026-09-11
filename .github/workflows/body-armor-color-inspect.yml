@@ -1,0 +1,42 @@
+name: Body Armor Color Pattern Inspect
+on:
+  workflow_dispatch:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/body-armor-color-inspect.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          mkdir -p armor-inspect
+          npm install --no-save playwright@1.55.0 agent-browser >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Capture Chromium baseline and product options
+        run: |
+          cat > inspect.mjs <<'JS'
+          import fs from 'node:fs'; import {chromium} from 'playwright';
+          const browser=await chromium.launch({headless:true}); const base='https://www.statesideqm.com',route='/collections/body-armor-ballistic-protection';
+          for(const target of ['live','draft']){const c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));const r=await p.goto(base+route+(target==='draft'?'?preview_theme_id=158561894555':''),{waitUntil:'domcontentloaded',timeout:90000});await p.waitForTimeout(5000);const d=await p.evaluate(()=>({url:location.href,theme:window.Shopify?.theme,groups:[...document.querySelectorAll('.sq-refine-v3-sidebar details')].map(g=>({heading:g.querySelector('summary')?.textContent?.trim(),inputs:[...g.querySelectorAll('input')].map(i=>({label:i.closest('label')?.textContent?.trim(),name:i.name,value:i.value,data:i.dataset}))})),filters:[...document.querySelectorAll('input[name^="filter."]')].map(i=>({name:i.name,value:i.value})),cards:document.querySelectorAll('.sq-refine-v3-results .product-grid > .product-grid__item').length}));fs.writeFileSync('armor-inspect/'+target+'.json',JSON.stringify({http:r.status(),errors,...d},null,2));await p.screenshot({path:'armor-inspect/'+target+'.png',fullPage:true});console.log('BASELINE '+JSON.stringify({target,http:r.status(),theme:d.theme,groups:d.groups.map(g=>({heading:g.heading,count:g.inputs.length})),cards:d.cards,errors}));if(target==='live'){const products=[];for(let n=1;n<=10;n++){const pr=await p.request.get(base+route+'/products.json?limit=250&page='+n);if(!pr.ok())throw Error('Product feed '+pr.status());const batch=(await pr.json()).products||[];products.push(...batch);if(batch.length<250)break;}fs.writeFileSync('armor-inspect/products.json',JSON.stringify(products,null,2));const options={};for(const product of products)for(const o of product.options||[]){options[o.name]??={};for(const v of o.values||[])options[o.name][v]=(options[o.name][v]||0)+1;}console.log('OPTIONS '+JSON.stringify({count:products.length,options}));}await c.close();}await browser.close();
+          JS
+          node inspect.mjs
+      - name: Agent browser snapshot
+        continue-on-error: true
+        run: |
+          npx agent-browser --session armor-color open 'https://www.statesideqm.com/collections/body-armor-ballistic-protection?preview_theme_id=158561894555'
+          npx agent-browser --session armor-color snapshot -i > armor-inspect/agent-browser.txt
+          npx agent-browser --session armor-color screenshot armor-inspect/agent-browser.png
+          npx agent-browser --session armor-color close
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: body-armor-color-inspection
+          path: armor-inspect/
+          retention-days: 7
