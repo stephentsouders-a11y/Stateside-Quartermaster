@@ -199,3 +199,8 @@ html:has(.sq-ps-root) body #MainContent.sq-refine-v3-active .sq-refine-v3-result
 </style>
 {% endif %}
 {% endif %}
+{% if request.page_type == 'collection' and collection.handle == 'literature' %}
+<style data-sq-literature-v3-prepaint>
+#MainContent .sq-books-tree{display:none!important;visibility:hidden!important}
+</style>
+{% endif %}
