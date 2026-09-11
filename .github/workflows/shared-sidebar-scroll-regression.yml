@@ -4,9 +4,13 @@ on:
     branches: [refine-restart-v3]
     paths:
       - '.github/workflows/shared-sidebar-scroll-regression.yml'
+      - 'snippets/sq-refine-v3-sidebar-header-edge-fix.liquid'
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: shared-sidebar-scroll-regression
+  cancel-in-progress: true
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -22,8 +26,6 @@ jobs:
       - name: Check all shared sidebars without modifying storefront data
         run: |
           mkdir -p out
-          cat > /tmp/shared-sidebar-audit.mjs <<'EOF'
-          EOF
           cat > shared-sidebar-audit.mjs <<'EOF'
           import fs from 'node:fs';
           import crypto from 'node:crypto';
@@ -35,7 +37,7 @@ jobs:
           const roots=['accessories-gifts-collectibles','airsoft-milsim','apparel','armed-forces-gear','art','body-armor-ballistic-protection','literature','child-safety-shop','dive-scuba','firearm-accessories','first-aid-medical-ifak','flags-patriotic-decor','flashlights-lighting','footwear-gloves-eyewear','k9-dog-gear','knives-axes-cutlery','morale-patches-tactical-id','outdoor-preparedness-gear','patriotic-american-heritage','safety-rescue-climbing','sta-brite-insignia','tactical-gear','thin-line','uniforms','watches','zippos-lighters-torches','stateside-quartermaster-logo-merch','army-national-guard-series','air-national-guard-series','products-built-for-the-line-u-s-army','products-built-for-the-line-u-s-navy','products-built-for-the-line-u-s-air-force','products-built-for-the-line-u-s-marine-corps','products-built-for-the-line-u-s-coast-guard','products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series','military-schools-academies','law-enforcement-corrections','firefighting-ems-search-rescue'];
           const mobile=['flags-patriotic-decor','accessories-gifts-collectibles','literature','tactical-gear','products-built-for-the-line-u-s-navy','firearm-accessories','uniforms','thin-line'];
           const jobs=[...roots.map(handle=>({handle,width:1366,height:768})),...mobile.map(handle=>({handle,width:390,height:844})),{handle:'flags-patriotic-decor',width:1440,height:1000}];
-          const report={timestamp:new Date().toISOString(),commit:process.env.GITHUB_SHA,theme,sourceChecks,results:[],controls:[]};
+          const report={timestamp:new Date().toISOString(),commit:process.env.GITHUB_SHA,theme,sourceChecks,disclosureInteraction:'Keyboard Enter on focused native summary; avoids Shopify preview-toolbar pointer interception without hiding storefront elements',results:[],controls:[]};
           const browser=await chromium.launch({headless:true});
           report.browser=browser.version();
           function writeReport(){fs.writeFileSync('out/report.json',JSON.stringify(report,null,2))}
@@ -74,7 +76,12 @@ jobs:
               r.groups=await groups.locator(':scope > summary').allTextContents();
               for(let i=0;i<await groups.count();i++){
                 const d=groups.nth(i);if(!await d.isVisible())continue;
-                if(!await d.evaluate(e=>e.open))await d.locator(':scope > summary').click();
+                if(!await d.evaluate(e=>e.open)){
+                  await d.locator(':scope > summary').focus();
+                  await p.keyboard.press('Enter');
+                  await p.waitForTimeout(80);
+                  if(!await d.evaluate(e=>e.open))throw new Error('Disclosure did not open via keyboard: '+await d.locator(':scope > summary').textContent());
+                }
               }
               await p.waitForTimeout(350);
               async function move(ratio){await side.evaluate((e,arg)=>{if(arg.desktop)e.scrollTop=(e.scrollHeight-e.clientHeight)*arg.ratio;else{const r=e.getBoundingClientRect();window.scrollBy({top:r.top-18+Math.max(0,r.height-innerHeight+36)*arg.ratio,behavior:'instant'});}},{desktop:job.width>900,ratio});await p.waitForTimeout(200)}
