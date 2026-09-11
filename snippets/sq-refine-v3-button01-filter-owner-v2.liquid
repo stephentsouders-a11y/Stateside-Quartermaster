@@ -1,0 +1,41 @@
+{% doc %}
+Owns Accessories, Gifts & Collectibles Type and Availability checkbox navigation from the window capture phase. The live MainContent/sidebar is resolved at click time so V3 DOM replacement cannot leave the handler pointing at a detached tree. State Guard is excluded.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<script data-sq-refine-v3-button01-filter-owner-v2>
+(function(){
+  var params=new URLSearchParams(location.search),current={{ collection.handle | json }},root=params.get('sq_root')||current;
+  if(root!=='accessories-gifts-collectibles'||window.__sqButton01WindowOwnerV2)return;
+  window.__sqButton01WindowOwnerV2=true;
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
+  function key(v){return clean(v).toLowerCase().replace(/[\u2019']/g,'').replace(/&/g,' ').replace(/\band\b/g,' ').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim()}
+  function filterUrl(name,value,checked){
+    var u=new URL(location.href),vals=u.searchParams.getAll(name).filter(function(v){return v!==value});
+    if(checked)vals.push(value);
+    u.searchParams.delete(name);
+    Array.from(new Set(vals)).forEach(function(v){u.searchParams.append(name,v)});
+    u.searchParams.delete('page');u.searchParams.delete('sq_view_page');u.searchParams.delete('preview_theme_id');
+    return u.pathname+(u.searchParams.toString()?'?'+u.searchParams.toString():'');
+  }
+  window.addEventListener('click',function(e){
+    var main=document.getElementById('MainContent'),side=main&&main.querySelector('.sq-refine-v3-sidebar');
+    if(!side)return;
+    var input=e.target&&e.target.closest?e.target.closest('input[type="checkbox"]'):null;
+    if(!input){var row=e.target&&e.target.closest?e.target.closest('.sq-refine-v3-choice'):null;input=row&&row.querySelector('input[type="checkbox"]')}
+    if(!input||!side.contains(input))return;
+    var details=input.closest('details.sq-refine-v3-group'),summary=details&&details.querySelector(':scope > summary'),group=key(summary&&summary.textContent),name='',value='';
+    if(group===key('Shop by Type')){
+      name='filter.p.product_type';value=clean(input.dataset.filterValue||input.dataset.sqPolishValue||input.value);
+    }else if(group===key('Availability')){
+      name='filter.v.availability';var choice=input.closest('.sq-refine-v3-choice'),span=choice&&choice.querySelector('span'),choiceLabel=key(span&&span.textContent);
+      value=choiceLabel.indexOf('in stock')>-1?'1':choiceLabel.indexOf('out of stock')>-1?'0':'';
+    }else{return}
+    if(!name||!value||value==='on')return;
+    e.preventDefault();e.stopImmediatePropagation();
+    var nextChecked=!input.checked,href=filterUrl(name,value,nextChecked);
+    window.__sqButton01LastOwnedClick={owner:'window-v2',name:name,value:value,checked:nextChecked,href:href};
+    location.assign(href);
+  },true);
+})();
+</script>
+{% endif %}
