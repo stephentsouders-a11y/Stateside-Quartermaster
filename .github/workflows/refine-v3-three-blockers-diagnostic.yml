@@ -1,4 +1,4 @@
-name: Refine V3 Child Safety Chromium trace
+name: Refine V3 Child Safety Chromium event probe
 on:
   push:
     branches: [refine-restart-v3]
@@ -7,11 +7,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-# Latest capture-v2 certification trigger after Child Safety parent document-capture fix 6cad5bd.
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/setup-node@v4
         with: { node-version: '24' }
@@ -19,70 +18,48 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Trace Child Safety root category type reset on desktop and mobile
+      - name: Probe trusted Child Safety parent click propagation
         run: |
-          cat > child-safety-trace.mjs <<'EOF'
+          cat > child-safety-event-probe.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'node:fs';
           const BASE='https://www.statesideqm.com';
-          const THEME='158561894555';
           const ROOT='/collections/child-safety-shop';
-          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          function u(path){const x=new URL(path,BASE);x.searchParams.set('preview_theme_id',THEME);return x.toString()}
-          async function nav(page,path){let last;for(let i=0;i<6;i++){try{const r=await page.goto(u(path),{waitUntil:'domcontentloaded',timeout:90000});if(r?.status()===200){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:45000});await sleep(900);return}last=new Error('HTTP '+(r?.status()||0))}catch(e){last=e}await sleep(2500*(i+1))}throw last||new Error('navigation failed')}
-          async function state(page){return page.evaluate(()=>{const main=document.querySelector('#MainContent');const sidebar=document.querySelector('#MainContent .sq-refine-v3-sidebar');const groups=sidebar?[...sidebar.querySelectorAll(':scope>details.sq-refine-v3-group')].map(g=>({title:(g.querySelector(':scope>summary')?.textContent||'').replace(/\s+/g,' ').trim(),active:g.dataset.active||'',items:[...g.querySelectorAll('input[type=checkbox][data-kind]')].map(i=>({label:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),kind:i.dataset.kind||'',target:i.dataset.target||'',checked:i.checked,pathActive:i.hasAttribute('data-sq-path-active')}))})):[];const cards=[...document.querySelectorAll('#MainContent .sq-refine-v3-results .product-grid a[href*="/products/"]')].length;return{href:location.href,taxonomy:main?.dataset.sqChildSafetyTaxonomy||'',ready:main?.dataset.sqRefineV3Ready||'',groups,cards,pageErrors:window.__traceErrors||[]}})}
-          function group(s,title){return s.groups.find(g=>g.title.toLowerCase()===title.toLowerCase())}
-          function item(g,label){return g?.items.find(i=>i.label===label)}
-          function labeledInput(page,groupTitle,label){return page.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group').filter({has:page.locator('summary',{hasText:groupTitle})}).locator('label.sq-refine-v3-choice').filter({hasText:label}).locator('input[data-kind="structural"]').first()}
-          async function clickAndNavigate(page,input,predicate){
-            await Promise.all([
-              page.waitForURL(predicate,{timeout:45000}),
-              input.click({force:true})
-            ]);
-            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:45000});
-            await sleep(1200);
-          }
-          const categories=['Ballistic Backpacks & Inserts','First Aid & Emergency Kits'];
-          const devices=[['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]];
+          const THEME='158561894555';
           const browser=await chromium.launch({headless:true});
-          const report=[];
-          for(const [device,viewport] of devices){for(const category of categories){const page=await browser.newPage({viewport});page.on('pageerror',e=>page.evaluate(x=>{window.__traceErrors=window.__traceErrors||[];window.__traceErrors.push(x)},String(e)).catch(()=>{}));const row={device,category,checks:[]};try{
-            await nav(page,ROOT);
-            let s=await state(page);row.root=s;
-            let cg=group(s,'Shop by Category'),ci=item(cg,category);
-            row.checks.push(['root category exists',!!ci]);
-            if(!ci)throw new Error('missing root category '+category);
-            const target=ci.target;
-            await clickAndNavigate(page,labeledInput(page,'Shop by Category',category),v=>v.pathname!==ROOT);
-            s=await state(page);row.afterCategory=s;cg=group(s,'Shop by Category');ci=item(cg,category);
-            row.checks.push(['category path reached',new URL(s.href).pathname.startsWith(new URL(target,BASE).pathname)]);
-            row.checks.push(['parent category persists',!!ci]);
-            row.checks.push(['parent category checked',!!ci?.checked]);
-            row.checks.push(['parent path active',!!ci?.pathActive]);
-            row.checks.push(['stable parent taxonomy',s.taxonomy==='stable-parent']);
-            row.checks.push(['products visible',s.cards>0]);
-            row.checks.push(['no page errors',s.pageErrors.length===0]);
-            const tg=group(s,'Shop by Type');const ti=tg?.items.find(x=>x.kind==='structural');
-            row.checks.push(['Shop by Type present',!!tg]);
-            if(ti){
-              const typeInput=page.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group').filter({has:page.locator('summary',{hasText:'Shop by Type'})}).locator('input[data-kind="structural"]').first();
-              const beforeType=new URL(s.href).pathname;
-              await clickAndNavigate(page,typeInput,v=>v.pathname!==beforeType);
-              const t=await state(page);row.afterType=t;const pc=item(group(t,'Shop by Category'),category);const at=group(t,'Shop by Type')?.items.find(x=>x.checked);
-              row.checks.push(['parent stays checked after type',!!pc?.checked]);row.checks.push(['type becomes checked',!!at]);row.checks.push(['type products visible',t.cards>0]);row.checks.push(['type no page errors',t.pageErrors.length===0]);
-            }
-            await clickAndNavigate(page,labeledInput(page,'Shop by Category',category),v=>v.pathname===ROOT);
-            const r=await state(page);row.afterReset=r;row.checks.push(['reset returns root',new URL(r.href).pathname===ROOT]);row.checks.push(['reset clears parent',!item(group(r,'Shop by Category'),category)?.checked]);row.checks.push(['reset no page errors',r.pageErrors.length===0]);
-            await page.screenshot({path:`child-safety-${device}-${category.startsWith('Ballistic')?'ballistic':'first-aid'}.png`,fullPage:true});
-          }catch(e){row.error=String(e)}row.pass=!row.error&&row.checks.every(x=>x[1]===true);report.push(row);await page.close();await sleep(1800)}}
-          fs.writeFileSync('child-safety-trace.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));await browser.close();
-          if(report.some(r=>!r.pass))process.exit(1);
+          const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          await page.addInitScript(() => {
+            try { sessionStorage.removeItem('sqProbeEvents'); } catch (_) {}
+            const push=(where,e)=>{try{const a=JSON.parse(sessionStorage.getItem('sqProbeEvents')||'[]');a.push({where,type:e.type,target:e.target?.tagName||'',cls:e.target?.className||'',kind:e.target?.dataset?.kind||'',targetUrl:e.target?.dataset?.target||'',checked:e.target?.checked,phase:e.eventPhase,defaultPrevented:e.defaultPrevented,time:Date.now()});sessionStorage.setItem('sqProbeEvents',JSON.stringify(a.slice(-50)));}catch(_){}};
+            window.addEventListener('click',e=>push('window-capture',e),true);
+            document.addEventListener('click',e=>push('document-capture-early',e),true);
+            document.addEventListener('click',e=>push('document-bubble-early',e),false);
+            window.addEventListener('beforeunload',e=>push('beforeunload',e),true);
+          });
+          const url=new URL(ROOT,BASE);url.searchParams.set('preview_theme_id',THEME);
+          const response=await page.goto(url.toString(),{waitUntil:'domcontentloaded',timeout:90000});
+          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:45000});
+          await page.waitForTimeout(1200);
+          const input=page.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group').filter({has:page.locator('summary',{hasText:'Shop by Category'})}).locator('label.sq-refine-v3-choice').filter({hasText:'Ballistic Backpacks & Inserts'}).locator('input[data-kind="structural"]').first();
+          await input.evaluate(el=>{el.addEventListener('click',e=>{try{const a=JSON.parse(sessionStorage.getItem('sqProbeEvents')||'[]');a.push({where:'input-direct',type:e.type,target:e.target?.tagName||'',kind:e.target?.dataset?.kind||'',targetUrl:e.target?.dataset?.target||'',checked:e.target?.checked,phase:e.eventPhase,defaultPrevented:e.defaultPrevented,time:Date.now()});sessionStorage.setItem('sqProbeEvents',JSON.stringify(a.slice(-50)));}catch(_){}})});
+          const before=await page.evaluate(()=>({href:location.href,fix:document.querySelector('#MainContent')?.dataset.sqChildSafetyFix||'',taxonomy:document.querySelector('#MainContent')?.dataset.sqChildSafetyTaxonomy||'',scriptPresent:!!document.querySelector('script[data-sq-refine-v3-child-safety-taxonomy]'),input:[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar input[data-kind="structural"][data-target]')].map(i=>({label:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),target:i.dataset.target,checked:i.checked}))}));
+          let clickError='';
+          try{await input.click({force:true,noWaitAfter:true,timeout:10000})}catch(e){clickError=String(e)}
+          await page.waitForTimeout(2500).catch(()=>{});
+          const afterUrl=page.url();
+          let after={};
+          try{after=await page.evaluate(()=>({href:location.href,fix:document.querySelector('#MainContent')?.dataset.sqChildSafetyFix||'',taxonomy:document.querySelector('#MainContent')?.dataset.sqChildSafetyTaxonomy||'',events:JSON.parse(sessionStorage.getItem('sqProbeEvents')||'[]')}))}catch(e){after={evalError:String(e)}}
+          const report={status:response?.status()||0,before,clickError,afterUrl,after};
+          console.log(JSON.stringify(report,null,2));
+          fs.writeFileSync('child-safety-event-probe.json',JSON.stringify(report,null,2));
+          await page.screenshot({path:'child-safety-event-probe.png',fullPage:true}).catch(()=>{});
+          await browser.close();
           EOF
-          node child-safety-trace.mjs
+          node child-safety-event-probe.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: child-safety-chromium-trace
+          name: child-safety-event-probe
           path: |
-            child-safety-trace.json
-            child-safety-*.png
+            child-safety-event-probe.json
+            child-safety-event-probe.png
