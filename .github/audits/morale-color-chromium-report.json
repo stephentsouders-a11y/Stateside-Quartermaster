@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "theme": "158561894555",
+  "publication": "UNPUBLISHED",
+  "sourceCommit": "304eb3e7fe76cdff654c6e2fa54a4fe3c0d3ad8b",
+  "started": "2026-09-11T19:39:45.272Z",
+  "checks": [],
+  "pageErrors": [],
+  "tests": [],
+  "browserVersion": "140.0.7339.16",
+  "failure": "page.waitForFunction: Timeout 15000ms exceeded.\n    at ready (/tmp/morale-verify/test.mjs:22:14)\n    at async go (/tmp/morale-verify/test.mjs:28:132)\n    at async file:///tmp/morale-verify/test.mjs:51:3",
+  "failureUrl": "https://www.statesideqm.com/collections/morale-patches-tactical-id?filter.v.availability=1",
+  "finished": "2026-09-11T19:40:18.183Z"
+}
