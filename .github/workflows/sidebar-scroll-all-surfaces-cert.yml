@@ -1,0 +1,122 @@
+name: All sidebar surfaces scroll certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/sidebar-scroll-all-surfaces-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Install Chromium
+        run: |
+          npm install --no-save playwright@1.55.0 pngjs@7.0.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Test actual draft without injecting styles or mocking responses
+        run: |
+          mkdir -p sidebar-evidence
+          cat > sidebar-cert.mjs <<'EOF'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          import {chromium} from 'playwright';
+          import {PNG} from 'pngjs';
+          const dir='sidebar-evidence',theme=158561894555;
+          const controller=fs.readFileSync('snippets/sq-refine-v3.liquid','utf8');
+          const rootsBlock=controller.match(/var ROOTS=new Set\(\[([^\]]+)\]\)/);
+          if(!rootsBlock)throw new Error('Cannot derive authoritative V3 collection roots');
+          const roots=Array.from(rootsBlock[1].matchAll(/'([^']+)'/g),m=>m[1]);
+          if(roots.length!==40||new Set(roots).size!==40)throw new Error('Unexpected root count; review coverage');
+          const shared=fs.readFileSync('snippets/sq-refine-v3-sidebar-header-edge-fix.liquid','utf8');
+          const report={at:new Date().toISOString(),commit:process.env.GITHUB_SHA,theme,roots,sourceMd5:crypto.createHash('md5').update(shared).digest('hex'),sourceChecks:{whiteBody:shared.includes('background-color:#fff!important'),noMovingOverlay:/::before\{\s*content:none!important;\s*display:none!important/.test(shared),globalMount:fs.readFileSync('layout/theme.liquid','utf8').includes("render 'sq-refine-v3-sidebar-header-edge-fix'"),stateGuardExcluded:shared.includes("collection.handle != 'state-guard-series'")},cases:[],controls:[]};
+          const save=()=>fs.writeFileSync(dir+'/report.json',JSON.stringify(report,null,2));
+          const browser=await chromium.launch();report.browser=browser.version();
+          const jobs=roots.flatMap(handle=>[{handle,width:1366,height:768},{handle,width:390,height:844}]);
+          jobs.push({handle:'flags-patriotic-decor',width:1440,height:1000});
+          async function attempt(job,n){
+            const tag=job.handle+'-'+job.width+'-attempt'+n;
+            const ctx=await browser.newContext({viewport:{width:job.width,height:job.height},...(job.handle==='flags-patriotic-decor'?{recordVideo:{dir:dir+'/video',size:{width:job.width,height:job.height}}}:{})});
+            const p=await ctx.newPage();p.setDefaultTimeout(15000);
+            const r={...job,attempt:n,states:[],pageErrors:[],consoleErrors:[],passed:false};
+            p.on('pageerror',e=>r.pageErrors.push(String(e)));
+            p.on('console',m=>{if(m.type()==='error')r.consoleErrors.push(m.text().slice(0,300));});
+            const started=Date.now();
+            try{
+              const response=await p.goto(`https://www.statesideqm.com/collections/${job.handle}?preview_theme_id=${theme}`,{waitUntil:'domcontentloaded',timeout:75000});
+              r.status=response?.status();if(r.status!==200)throw new Error('HTTP '+r.status);
+              await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true'&&document.querySelector('.sq-refine-v3-sidebar'),null,{timeout:45000});
+              await p.waitForTimeout(1800);
+              r.actualTheme=await p.evaluate(()=>window.Shopify?.theme);if(r.actualTheme?.id!==theme)throw new Error('Wrong Shopify theme');
+              r.url=p.url();
+              const side=p.locator('#MainContent .sq-refine-v3-sidebar');
+              if(await side.count()!==1)throw new Error('Expected one sidebar');
+              r.servedStyle=await p.locator('style[data-sq-refine-v3-header-edge-fix]').allTextContents();
+              await side.scrollIntoViewIfNeeded();
+              async function capture(label){
+                await p.waitForTimeout(220);
+                const data=await side.evaluate(e=>{const s=getComputedStyle(e),b=getComputedStyle(e,'::before'),t=e.querySelector('.sq-refine-v3-sidebar__title'),r=e.getBoundingClientRect(),tr=t?.getBoundingClientRect();return{scrollTop:e.scrollTop,maxScroll:e.scrollHeight-e.clientHeight,pageY:window.scrollY,background:s.backgroundColor,before:b.content,position:s.position,rect:{x:r.x,y:r.y,width:r.width,height:r.height},title:tr?{x:tr.x,y:tr.y,width:tr.width,height:tr.height,background:getComputedStyle(t).backgroundColor}:null};});
+                data.label=label;
+                const png=PNG.sync.read(await p.screenshot({path:`${dir}/${tag}-${label}.png`,timeout:20000}));
+                const xvals=[Math.ceil(data.rect.x+4),Math.floor(data.rect.x+data.rect.width-5)];
+                const lo=Math.ceil(Math.max(0,data.rect.y+55)),hi=Math.floor(Math.min(png.height-85,data.rect.y+data.rect.height-12));
+                data.pixels=[];
+                if(hi>lo)for(const x of xvals)for(const f of [.2,.5,.8]){const y=Math.round(lo+(hi-lo)*f);if(x>=0&&x<png.width){const i=(y*png.width+x)*4;data.pixels.push({x,y,rgb:Array.from(png.data.subarray(i,i+3))});}}
+                data.whiteBody=data.background==='rgb(255, 255, 255)';
+                data.overlayRemoved=data.before==='none';
+                data.navyHeader=data.title?.background==='rgb(8, 40, 63)';
+                data.fullWidthHeader=data.title&&Math.abs(data.title.width-(data.rect.width-2))<=3;
+                data.visibleWhiteSurface=data.pixels.length===6&&data.pixels.every(x=>x.rgb.every(v=>v===255));
+                data.passed=data.whiteBody&&data.overlayRemoved&&data.navyHeader&&data.fullWidthHeader&&data.visibleWhiteSurface;
+                r.states.push(data);
+              }
+              await capture('collapsed');
+              const groups=side.locator(':scope > details');r.groups=[];
+              for(let i=0;i<await groups.count();i++){
+                const g=groups.nth(i);if(!await g.isVisible())continue;
+                const sm=g.locator(':scope > summary'),label=await sm.innerText();
+                if(!await g.evaluate(e=>e.open)){await sm.focus();await p.keyboard.press('Enter');await p.waitForTimeout(100);}
+                if(!await g.evaluate(e=>e.open))throw new Error('Disclosure did not open: '+label);
+                r.groups.push(label);
+              }
+              await p.waitForTimeout(350);
+              if(job.width>900)await side.scrollIntoViewIfNeeded();
+              async function move(f){await side.evaluate((e,a)=>{if(a.desktop)e.scrollTop=(e.scrollHeight-e.clientHeight)*a.f;else{const r=e.getBoundingClientRect();window.scrollBy({top:r.top-18+Math.max(0,r.height-innerHeight+105)*a.f,behavior:'instant'});}},{desktop:job.width>900,f});}
+              for(const [label,f] of [['top',0],['middle',.5],['bottom',1],['return',0]]){await move(f);await capture(label);}
+              r.internalScrollAvailable=r.states.some(x=>x.maxScroll>0);
+              r.internalScrollTested=r.states.some(x=>x.scrollTop>0);
+              r.pageScrollTested=Math.max(...r.states.map(x=>x.pageY))-Math.min(...r.states.map(x=>x.pageY))>100;
+              r.scrollPass=job.width>900?(!r.internalScrollAvailable||r.internalScrollTested):(!r.states.some(x=>x.rect.height>job.height)||r.pageScrollTested);
+              r.passed=r.states.length===5&&r.states.every(x=>x.passed)&&r.scrollPass;
+              if(!r.passed)r.failure='Sidebar surface or scrolling assertion failed';
+            }catch(e){r.failure=String(e);await p.screenshot({path:`${dir}/${tag}-error.png`,timeout:5000}).catch(()=>{});await p.content().then(html=>fs.writeFileSync(`${dir}/${tag}-error.html`,html)).catch(()=>{});}
+            r.durationMs=Date.now()-started;await ctx.close();return r;
+          }
+          let cursor=0;
+          await Promise.all(Array.from({length:3},async()=>{while(cursor<jobs.length){const j=jobs[cursor++],first=await attempt(j,1);report.cases.push(first);save();console.log('SIDEBAR_CASE',JSON.stringify({handle:j.handle,width:j.width,passed:first.passed,failure:first.failure,ms:first.durationMs}));}}));
+          const failures=report.cases.filter(r=>!r.passed);
+          report.rechecks=[];
+          for(const r of failures){await new Promise(resolve=>setTimeout(resolve,1200));const retry=await attempt({handle:r.handle,width:r.width,height:r.height},2);report.rechecks.push(retry);save();console.log('SIDEBAR_RECHECK',JSON.stringify({handle:r.handle,width:r.width,passed:retry.passed,failure:retry.failure}));}
+          for(const [name,path,preview] of [['state-guard','/collections/state-guard-series',true],['armored-vehicles','/pages/armored-vehicles-purchase-inquiry',true],['live-flags','/collections/flags-patriotic-decor',false]]){
+            const ctx=await browser.newContext({viewport:{width:1366,height:768}}),p=await ctx.newPage(),r={name};
+            try{const res=await p.goto('https://www.statesideqm.com'+path+(preview?'?preview_theme_id='+theme:''),{waitUntil:'domcontentloaded',timeout:60000});await p.waitForTimeout(2000);Object.assign(r,await p.evaluate(()=>({theme:window.Shopify?.theme,v3Sidebar:!!document.querySelector('.sq-refine-v3-sidebar'),sharedStyle:!!document.querySelector('[data-sq-refine-v3-header-edge-fix]')})));r.status=res?.status();r.passed=r.status===200&&!r.v3Sidebar&&!r.sharedStyle;await p.screenshot({path:dir+'/control-'+name+'.png'});}catch(e){r.failure=String(e);r.passed=false;}report.controls.push(r);save();await ctx.close();
+          }
+          await browser.close();
+          const final=report.cases.map(r=>report.rechecks.find(x=>x.handle===r.handle&&x.width===r.width)||r);
+          report.summary={total:final.length,passed:final.filter(x=>x.passed).length,firstAttemptPassed:report.cases.filter(x=>x.passed).length,desktopRootPages:40,mobileRootPages:40,additionalFlagsDesktop:1,rechecks:report.rechecks.length,failures:final.filter(x=>!x.passed).map(x=>({handle:x.handle,width:x.width,failure:x.failure})),pageErrorCases:final.filter(x=>x.pageErrors.length).map(x=>({handle:x.handle,width:x.width,errors:x.pageErrors})),controls:report.controls,sourceChecks:report.sourceChecks};
+          save();console.log('SIDEBAR_FINAL',JSON.stringify(report.summary));
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'## All shared sidebar surfaces\n\n```json\n'+JSON.stringify(report.summary,null,2)+'\n```\n');
+          if(report.summary.failures.length||report.controls.some(x=>!x.passed)||Object.values(report.sourceChecks).some(x=>!x))process.exitCode=1;
+          EOF
+          node sidebar-cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: all-sidebar-surfaces-evidence
+          path: sidebar-evidence
+          retention-days: 14
