@@ -1,0 +1,102 @@
+name: Thin Line category navigation Chromium certification
+on:
+  push:
+    paths:
+      - '.github/workflows/thin-line-child-navigation-cert-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OPT_OUT_INSTRUMENTATION: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium and validation
+        run: |
+          mkdir -p out/screens out/videos out/source validation-tools
+          npm install --no-save playwright@1.55.0 agent-browser @shopify/theme-check-common @shopify/theme-check-node @shopify/theme-check-docs-updater
+          npx playwright install --with-deps chromium
+          curl --fail --retry 3 -L https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/search_docs.mjs -o validation-tools/search_docs.mjs
+          curl --fail --retry 3 -L https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/validate.mjs -o validation-tools/validate.mjs
+      - name: Search and validate category routing section
+        run: |
+          node validation-tools/search_docs.mjs 'Liquid collection handle conditional section' --model 'GPT-6 Astra Pro' --client-name ChatGPT --client-version 1 > out/shopify-documentation.txt
+          node validation-tools/validate.mjs --filename sq-thin-stabrite-type-browser.liquid --filetype sections --file sections/sq-thin-stabrite-type-browser.liquid --model 'GPT-6 Astra Pro' --client-name ChatGPT --client-version 1 --artifact-id thin-line-child-owner --revision 1 > out/liquid-validation.txt
+          cp sections/sq-thin-stabrite-type-browser.liquid out/source/
+      - name: Agent browser category inspection
+        run: |
+          npx agent-browser --session thin-child open 'https://www.statesideqm.com/collections/thin-line-shop-thin-blue-line?sq_root=thin-line&preview_theme_id=158561894555'
+          npx agent-browser --session thin-child snapshot -i > out/agent-browser-snapshot.txt
+          npx agent-browser --session thin-child screenshot out/screens/agent-browser.png
+          npx agent-browser --session thin-child close
+      - name: Test all Thin Line category routes and native type selection
+        run: |
+          cat > thin-child-cert.mjs <<'JS'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          const browser=await chromium.launch({headless:true});const results=[];
+          const suffixes=['general-multi-line','thin-blue-line','thin-camo-line','thin-gold-line','thin-gray-line','thin-green-line','thin-orange-line','thin-pink-line','thin-purple-teal-line','thin-red-line','thin-white-line','thin-yellow-line'];
+          const cases=suffixes.map(s=>({handle:'thin-line-shop-'+s,width:1440,height:1000})).concat(['thin-blue-line','thin-red-line'].map(s=>({handle:'thin-line-shop-'+s,width:390,height:844})));
+          function check(row,name,ok,detail){row.checks.push({name,ok:!!ok,detail});}
+          async function state(page){return page.evaluate(()=>{
+            const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return !!(r.width&&r.height&&s.visibility!=='hidden'&&s.display!=='none'&&s.opacity!=='0'&&e.getClientRects().length)};
+            const main=document.querySelector('#MainContent'),grids=[...main.querySelectorAll('.product-grid')].filter(visible),cards=[...main.querySelectorAll('.sq-refine-v3-results .product-grid__item')].filter(visible);
+            const keys=cards.map(e=>e.dataset.productId||e.querySelector('product-card')?.dataset.productId||e.querySelector('a[href*="/products/"]')?.href?.split('?')[0]||e.textContent.trim());
+            const groups=[...main.querySelectorAll('.sq-refine-v3-sidebar .sq-refine-v3-group')];
+            const category=groups.find(e=>e.querySelector('summary')?.textContent.trim().toLowerCase()==='shop by category');
+            const selected=[...category?.querySelectorAll('input[data-kind="structural"][data-target]:checked')||[]].map(e=>({path:new URL(e.dataset.target,location.origin).pathname,label:e.closest('label')?.textContent.trim()}));
+            return {url:location.href,theme:window.Shopify?.theme,ready:main.dataset.sqRefineV3Ready,root:document.documentElement.dataset.sqRefineV3ChildRoot,marker:!!document.querySelector('[data-sq-thin-line-type-prepaint]'),legacy:[...main.querySelectorAll('.sq-ts-match-card')].filter(visible).length,legacyMode:document.body.classList.contains('sq-tst-choice'),grids:grids.length,columns:grids.map(e=>getComputedStyle(e).gridTemplateColumns.split(' ').length),cards:cards.length,duplicates:keys.length-new Set(keys).size,sidebar:[...main.querySelectorAll('.sq-refine-v3-sidebar')].filter(visible).length,selected,overflow:document.documentElement.scrollWidth>innerWidth+2,trace:window.__thinChildTrace||[],frames:window.__thinChildFrames||0};
+          });}
+          async function ready(page){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{}, {timeout:90000});await page.waitForTimeout(6500);}
+          try{
+            for(const {handle,width,height} of cases){
+              const name=handle+'-'+(width===390?'mobile':'desktop');const record=/thin-(blue|red)-line$/.test(handle);const row={name,checks:[],errors:[]};
+              const context=await browser.newContext({viewport:{width,height},recordVideo:record?{dir:'out/videos',size:{width,height}}:undefined});const page=await context.newPage();page.on('pageerror',e=>row.errors.push(String(e)));
+              await page.addInitScript(()=>{
+                window.__thinChildTrace=[];window.__thinChildFrames=0;let last='';
+                const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return !!(r.width&&r.height&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0')};
+                function sample(){window.__thinChildFrames++;const main=document.querySelector('#MainContent');if(main){const n=[...main.querySelectorAll('.sq-ts-match-card')].filter(vis).length;const ready=main.dataset.sqRefineV3Ready||'';const key=n+'|'+ready;if(key!==last){window.__thinChildTrace.push({t:Math.round(performance.now()),legacy:n,ready});last=key;}}if(performance.now()<22000)requestAnimationFrame(sample);}requestAnimationFrame(sample);
+              });
+              const cdp=await context.newCDPSession(page);await cdp.send('Network.enable');await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
+              if(width===390){await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:120,downloadThroughput:1500000,uploadThroughput:750000});}
+              try{
+                const response=await page.goto('https://www.statesideqm.com/collections/'+handle+'?sq_root=thin-line&preview_theme_id=158561894555',{waitUntil:'domcontentloaded',timeout:90000});check(row,'HTTP 200',response.status()===200,response.status());await ready(page);row.final=await state(page);const s=row.final;
+                check(row,'Correct theme and Thin Line context',s.theme?.id===158561894555&&s.root==='thin-line',s.theme);
+                check(row,'Child prepaint patch deployed',s.marker);
+                check(row,'No legacy-button frames',s.trace.length>0&&s.trace.every(f=>f.legacy===0),s.trace);
+                check(row,'No legacy type takeover',!s.legacyMode&&s.legacy===0,{mode:s.legacyMode,buttons:s.legacy});
+                check(row,'One populated unique V3 product grid',s.grids===1&&s.sidebar===1&&s.cards>0&&s.cards<=50&&s.duplicates===0,{grids:s.grids,sidebar:s.sidebar,cards:s.cards,duplicates:s.duplicates});
+                check(row,'Responsive grid',s.columns.length===1&&s.columns[0]===(width===390?2:3),s.columns);
+                check(row,'Correct active category retained',s.selected.length===1&&s.selected[0].path==='/collections/'+handle,s.selected);
+                check(row,'No horizontal overflow',!s.overflow);
+                await page.screenshot({path:'out/screens/'+name+'.png',fullPage:true});
+                if(handle==='thin-line-shop-thin-blue-line'&&width===1440){
+                  const typeGroup=page.locator('.sq-refine-v3-group').filter({has:page.locator('summary',{hasText:/^Shop by Type$/})}).first();if(!(await typeGroup.getAttribute('open')))await typeGroup.locator('summary').click();
+                  const option=typeGroup.locator('input[data-filter-name="filter.p.product_type"],input[data-sq-polish-param="filter.p.product_type"]').first();const value=(await option.getAttribute('data-filter-value'))||(await option.getAttribute('data-sq-polish-value'));
+                  await Promise.all([page.waitForURL(u=>u.searchParams.get('filter.p.product_type')===value,{timeout:90000,waitUntil:'domcontentloaded'}),option.click({noWaitAfter:true})]);await ready(page);row.typeFilter={value,state:await state(page)};const t=row.typeFilter.state;
+                  check(row,'Type selection keeps matching collection and V3 layout',new URL(t.url).pathname==='/collections/'+handle&&new URL(t.url).searchParams.get('sq_root')==='thin-line'&&t.grids===1&&t.cards>0&&t.duplicates===0&&t.legacy===0&&t.trace.every(f=>f.legacy===0),{url:t.url,cards:t.cards,legacy:t.legacy,trace:t.trace});
+                  await page.screenshot({path:'out/screens/thin-blue-line-native-type.png',fullPage:true});
+                }
+                check(row,'No runtime exceptions',row.errors.length===0,row.errors);
+              }catch(e){row.exception=String(e);check(row,'Scenario completes',false,String(e));row.last=await state(page).catch(()=>null);await page.screenshot({path:'out/screens/'+name+'-failure.png',fullPage:true}).catch(()=>{});}
+              row.pass=row.checks.every(c=>c.ok);results.push(row);console.log(name,row.pass,JSON.stringify(row.checks));const video=page.video();await page.close();await context.close();if(video)await video.saveAs('out/videos/'+name+'.webm');
+            }
+          }finally{await browser.close();const report={checkedAt:new Date().toISOString(),sourceCommit:process.env.GITHUB_SHA,sourceMd5:crypto.createHash('md5').update(fs.readFileSync('sections/sq-thin-stabrite-type-browser.liquid')).digest('hex'),browser:'Chromium',themeId:158561894555,pass:results.length===14&&results.every(r=>r.pass),results};fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));if(!report.pass)process.exitCode=1;}
+          JS
+          cp thin-child-cert.mjs out/test-source.mjs
+          node --check thin-child-cert.mjs
+          node thin-child-cert.mjs
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thin-line-child-navigation-cert-0911
+          path: out
+          retention-days: 14
