@@ -1,0 +1,81 @@
+name: Refine V3 41 alphabetical sequential Chromium certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-41-alphabetical-sequential-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify-sequentially:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build exact 41-button visible-label alphabetical route matrix
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const f='.github/scripts/refine-v3-other40-exhaustive-cert.mjs';
+          let s=fs.readFileSync(f,'utf8');
+          const needle="const routes=[\n";
+          if(!s.includes(needle)) throw new Error('route array start not found');
+          s=s.replace(needle,needle+"['Accessories, Gifts & Collectibles','/collections/accessories-gifts-collectibles','v3'],");
+          const guard="if(routes.some(r=>r[1].includes('state-guard-series')))";
+          if(!s.includes(guard)) throw new Error('State Guard guard missing');
+          s=s.replace(guard,"routes.sort((a,b)=>a[0].localeCompare(b[0],'en',{sensitivity:'base'}));\nif(routes.length!==41) throw new Error('Expected 41 routes, got '+routes.length);\nif(routes.some(r=>r[1].includes('state-guard-series'))) throw new Error('State Guard must never enter certification');\n"+guard);
+          fs.writeFileSync(f,s);
+          NODE
+      - name: Install Chromium once
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify 01 through 41 strictly in alphabetical order
+        run: |
+          set +e
+          : > sequential-status.tsv
+          overall=0
+          for i in $(seq 0 40); do
+            export SHARD="$i"
+            export SHARDS=41
+            echo "===== START $((i+1))/41 ====="
+            node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+            rc=$?
+            report="other40-exhaustive/shard-${i}/report.json"
+            if [ -f "$report" ]; then
+              route=$(jq -r '.routes[0].name // "unknown"' "$report")
+              passed=$(jq -r '.interactionPassed // 0' "$report")
+              count=$(jq -r '.interactionCount // 0' "$report")
+              failures=$(jq -r '.failures | length' "$report")
+              pageerrors=$(jq '[.routes[] | select(.type=="v3") | .desktop.pageErrors[], .mobile.pageErrors[]] | length' "$report")
+              failedinteractions=$(jq '[.routes[] | select(.type=="v3") | .desktop.interactions.items[], .mobile.interactions.items[] | select(.pass!=true)] | length' "$report")
+              if [ "$rc" -eq 0 ] && [ "$failures" -eq 0 ] && [ "$pageerrors" -eq 0 ] && [ "$failedinteractions" -eq 0 ] && [ "$passed" -eq "$count" ]; then
+                state=PASS
+              else
+                state=FAIL
+                overall=1
+              fi
+              printf '%02d\t%s\t%s\t%s/%s\tfailures=%s\tpageErrors=%s\tfailedInteractions=%s\n' "$((i+1))" "$state" "$route" "$passed" "$count" "$failures" "$pageerrors" "$failedinteractions" | tee -a sequential-status.tsv
+            else
+              printf '%02d\tFAIL\tmissing report\n' "$((i+1))" | tee -a sequential-status.tsv
+              overall=1
+            fi
+            echo "===== END $((i+1))/41 ====="
+          done
+          cat sequential-status.tsv
+          exit "$overall"
+      - name: Upload all 41 sequential certification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alphabetical41-sequential-full-evidence
+          path: |
+            other40-exhaustive
+            sequential-status.tsv
+          if-no-files-found: error
+          retention-days: 14
