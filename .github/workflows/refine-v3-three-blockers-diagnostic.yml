@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-# Re-run after ee86b659: categories must exist on root and persist through child/type routes.
+# Real-user navigation trace: structural checkboxes navigate immediately, so click then assert destination state.
 jobs:
   diagnose:
     runs-on: ubuntu-latest
@@ -34,6 +34,14 @@ jobs:
           function group(s,title){return s.groups.find(g=>g.title.toLowerCase()===title.toLowerCase())}
           function item(g,label){return g?.items.find(i=>i.label===label)}
           function labeledInput(page,groupTitle,label){return page.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group').filter({has:page.locator('summary',{hasText:groupTitle})}).locator('label.sq-refine-v3-choice').filter({hasText:label}).locator('input[data-kind="structural"]').first()}
+          async function clickAndNavigate(page,input,predicate){
+            await Promise.all([
+              page.waitForURL(predicate,{timeout:45000}),
+              input.click({force:true})
+            ]);
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:45000});
+            await sleep(1200);
+          }
           const categories=['Ballistic Backpacks & Inserts','First Aid & Emergency Kits'];
           const devices=[['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]];
           const browser=await chromium.launch({headless:true});
@@ -45,8 +53,7 @@ jobs:
             row.checks.push(['root category exists',!!ci]);
             if(!ci)throw new Error('missing root category '+category);
             const target=ci.target;
-            await labeledInput(page,'Shop by Category',category).check({force:true});
-            await page.waitForURL(v=>v.pathname!==ROOT,{timeout:45000});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:45000});await sleep(1200);
+            await clickAndNavigate(page,labeledInput(page,'Shop by Category',category),v=>v.pathname!==ROOT);
             s=await state(page);row.afterCategory=s;cg=group(s,'Shop by Category');ci=item(cg,category);
             row.checks.push(['category path reached',new URL(s.href).pathname.startsWith(new URL(target,BASE).pathname)]);
             row.checks.push(['parent category persists',!!ci]);
@@ -60,11 +67,11 @@ jobs:
             if(ti){
               const typeInput=page.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group').filter({has:page.locator('summary',{hasText:'Shop by Type'})}).locator('input[data-kind="structural"]').first();
               const beforeType=new URL(s.href).pathname;
-              await typeInput.check({force:true});await page.waitForURL(v=>v.pathname!==beforeType,{timeout:45000});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:45000});await sleep(1200);
+              await clickAndNavigate(page,typeInput,v=>v.pathname!==beforeType);
               const t=await state(page);row.afterType=t;const pc=item(group(t,'Shop by Category'),category);const at=group(t,'Shop by Type')?.items.find(x=>x.checked);
               row.checks.push(['parent stays checked after type',!!pc?.checked]);row.checks.push(['type becomes checked',!!at]);row.checks.push(['type products visible',t.cards>0]);row.checks.push(['type no page errors',t.pageErrors.length===0]);
             }
-            await labeledInput(page,'Shop by Category',category).uncheck({force:true});await page.waitForURL(v=>v.pathname===ROOT,{timeout:45000});await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:45000});await sleep(1000);
+            await clickAndNavigate(page,labeledInput(page,'Shop by Category',category),v=>v.pathname===ROOT);
             const r=await state(page);row.afterReset=r;row.checks.push(['reset returns root',new URL(r.href).pathname===ROOT]);row.checks.push(['reset clears parent',!item(group(r,'Shop by Category'),category)?.checked]);row.checks.push(['reset no page errors',r.pageErrors.length===0]);
             await page.screenshot({path:`child-safety-${device}-${category.startsWith('Ballistic')?'ballistic':'first-aid'}.png`,fullPage:true});
           }catch(e){row.error=String(e)}row.pass=!row.error&&row.checks.every(x=>x[1]===true);report.push(row);await page.close();await sleep(1800)}}
