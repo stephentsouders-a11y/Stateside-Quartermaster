@@ -34,7 +34,7 @@ Provides a deterministic Firearm Accessories Make / Model refinement from verifi
     const groups=[...side.querySelectorAll(':scope > details.sq-refine-v3-group')];
     groups.filter(d=>/shop by (?:firearm )?make\s*\/\s*model/i.test((d.querySelector(':scope > summary')?.textContent||'').trim())).forEach(d=>d.remove());
     const group=document.createElement('details');group.className='sq-refine-v3-group';group.dataset.sqRefineV3FirearmMakeModel='verified-smart-collections';
-    const summary=document.createElement('summary');summary.textContent='Shop by Make / Model';
+    const summary=document.createElement('summary');summary.textContent='Shop by Firearm Make / Model';
     const choices=document.createElement('div');choices.className='sq-refine-v3-choices';
     models.forEach(([label,handle])=>{
       const row=document.createElement('label');row.className='sq-refine-v3-choice';
