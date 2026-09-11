@@ -1,0 +1,55 @@
+name: Patch Safety refine root routing
+on:
+  workflow_dispatch:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/patch-safety-root-leak.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+      - name: Patch Safety root sanitization
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const refinePath = 'snippets/sq-refine-v3.liquid';
+          let refine = fs.readFileSync(refinePath, 'utf8');
+          const refineOld = "var query=new URLSearchParams(location.search),rootHandle=query.get('sq_root')||currentHandle;";
+          const refineNew = "var query=new URLSearchParams(location.search);if(currentHandle==='safety-rescue-climbing'&&query.get('sq_root')==='uniforms'){query.delete('sq_root');history.replaceState(null,'',location.pathname+(query.toString()?'?'+query.toString():'')+location.hash)}var rootHandle=query.get('sq_root')||currentHandle;";
+          if (!refine.includes(refineOld)) throw new Error('Expected sq-refine-v3 root initialization not found');
+          refine = refine.replace(refineOld, refineNew);
+          fs.writeFileSync(refinePath, refine);
+
+          const colorPath = 'snippets/sq-uniform-color-pattern-core.liquid';
+          let color = fs.readFileSync(colorPath, 'utf8');
+          const navOld = "function navigate(values){var url=new URL(location.href);url.searchParams.delete(PARAM);values.forEach(function(v){url.searchParams.append(PARAM,v)});url.searchParams.delete('page');url.searchParams.set('sq_view_page','1');location.assign(url.pathname+url.search)}";
+          const navNew = "function navigate(values){var url=new URL(location.href);if(config.handle==='safety-rescue-climbing'&&url.searchParams.get('sq_root')==='uniforms')url.searchParams.delete('sq_root');url.searchParams.delete(PARAM);values.forEach(function(v){url.searchParams.append(PARAM,v)});url.searchParams.delete('page');url.searchParams.set('sq_view_page','1');location.assign(url.pathname+url.search)}";
+          if (!color.includes(navOld)) throw new Error('Expected sq_ucp navigate function not found');
+          color = color.replace(navOld, navNew);
+          const structOld = "selected.forEach(function(v){u.searchParams.append(PARAM,v)});['filter.p.vendor'";
+          const structNew = "selected.forEach(function(v){u.searchParams.append(PARAM,v)});if(config.handle==='safety-rescue-climbing'&&u.searchParams.get('sq_root')==='uniforms')u.searchParams.delete('sq_root');['filter.p.vendor'";
+          if (!color.includes(structOld)) throw new Error('Expected structural filter propagation not found');
+          color = color.replace(structOld, structNew).replace("version:'2026-09-11.2'", "version:'2026-09-11.3'");
+          fs.writeFileSync(colorPath, color);
+          NODE
+          git diff --check
+          git diff -- snippets/sq-refine-v3.liquid snippets/sq-uniform-color-pattern-core.liquid
+      - name: Commit patch
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-refine-v3.liquid snippets/sq-uniform-color-pattern-core.liquid
+          git commit -m 'Fix Safety color filter root leakage'
+          git push origin HEAD:refine-restart-v3
