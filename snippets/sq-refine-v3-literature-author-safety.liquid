@@ -1,5 +1,5 @@
 {% doc %}
-Removes unsafe Literature Author refine groups immediately when legacy V3 builders insert them. Search-derived or malformed author controls are never allowed to remain customer-interactive; the dedicated collection-local sq_author controls are preserved. Other Literature refinements remain untouched.
+Removes unsafe Literature Author refine groups immediately when legacy V3 builders insert them. Only verified native Author: / Book Author: tag controls or the transitional collection-local sq_author controls may survive. Search-derived or malformed author controls are never allowed to remain customer-interactive.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle == 'literature' %}
 <script data-sq-refine-v3-literature-author-safety>
@@ -18,8 +18,9 @@ Removes unsafe Literature Author refine groups immediately when legacy V3 builde
       var unsafe=!inputs.length||inputs.some(function(input){
         var option=(input.closest('label')&&input.closest('label').textContent||input.parentElement&&input.parentElement.textContent||'').replace(/\s+/g,' ').trim();
         var target=input.dataset.target||'';
-        var correct=input.dataset.kind==='author'&&target.indexOf('/collections/literature?')===0&&target.indexOf('sq_author=')>-1;
-        return !correct||option.length>90||/(?:description|paperback|hardcover|publisher|publication date|language|print length|isbn)/i.test(option);
+        var legacySafe=input.dataset.kind==='author'&&target.indexOf('/collections/literature?')===0&&target.indexOf('sq_author=')>-1;
+        var tagSafe=input.dataset.kind==='native'&&input.dataset.filterName==='filter.p.tag'&&/^(author|book author)\s*:\s*.+/i.test(input.dataset.filterValue||'');
+        return !(legacySafe||tagSafe)||option.length>90||/(?:description|paperback|hardcover|publisher|publication date|language|print length|isbn)/i.test(option);
       });
       if(unsafe)group.remove();
     });
