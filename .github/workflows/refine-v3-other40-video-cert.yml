@@ -27,6 +27,17 @@ jobs:
       - run: npm install playwright@1.55.0
       - run: npx playwright install --with-deps chromium
       - run: node .github/scripts/refine-v3-other40-video-cert.mjs
+      - name: Fail on any Chromium page error
+        if: always()
+        run: |
+          REPORT="other40-cert/shard-${SHARD}/report.json"
+          test -f "$REPORT"
+          COUNT=$(jq '[.routes[] | ((.desktop.pageErrors // []) + (.mobile.pageErrors // []))[]] | length' "$REPORT")
+          echo "Chromium page errors: $COUNT"
+          if [ "$COUNT" -ne 0 ]; then
+            jq -r '.routes[] | select((((.desktop.pageErrors // []) + (.mobile.pageErrors // [])) | length) > 0) | .name as $n | ((.desktop.pageErrors // []) + (.mobile.pageErrors // []))[] | "\($n): \(.)"' "$REPORT"
+            exit 1
+          fi
       - name: Upload audit artifacts
         if: always()
         uses: actions/upload-artifact@v4
