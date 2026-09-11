@@ -2,6 +2,21 @@
 Button 01 release repair for Accessories, Gifts & Collectibles. Keeps the root category tree authoritative on child routes, guarantees one visible product surface, owns Type and Availability clicks at document capture phase so sidebar replacement cannot drop the handler, and keeps 50/100/250 labels visibly readable on mobile. State Guard is unaffected.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+{% if collection.handle == 'accessories-gifts-collectibles' %}
+<style data-sq-button01-zero-flash-isolation>
+/* Accessories is V3-owned. Suppress obsolete taxonomy and Shopify facet surfaces
+   in server-rendered CSS so they cannot flash before the V3 runtime takes over. */
+#MainContent .sq-subcategory-section,
+#MainContent .sq-subcategory-card,
+#MainContent .facets-block-wrapper--horizontal .facets__filters-wrapper,
+#MainContent .facets-toggle__wrapper,
+#MainContent theme-drawer#filters-drawer{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+</style>
+{% endif %}
 <style data-sq-refine-v3-button01-fix>
 #MainContent.sq-v3-button01-root .sq-refine-v3-page-size > strong,
 #MainContent.sq-v3-button01-root .sq-refine-v3-page-size label > span{display:inline-block!important;position:static!important;width:auto!important;height:auto!important;min-width:20px!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;clip:auto!important;clip-path:none!important;white-space:nowrap!important;opacity:1!important;visibility:visible!important;color:#071d2d!important;font-size:12px!important;font-weight:900!important;line-height:1.2!important;text-indent:0!important;transform:none!important}
