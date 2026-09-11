@@ -31,7 +31,18 @@ Accessories, Gifts & Collectibles Refine Products hard repair. Ensures the nine 
   function current(){return location.pathname.match(/^\/collections\/([^/?#]+)/)?.[1]||root}
   function target(handle){var u=new URL('/collections/'+handle,location.origin);u.searchParams.set('sq_root',root);params.forEach(function(v,k){if(k.indexOf('filter.')===0||k==='sort_by'||k==='preview_theme_id')u.searchParams.append(k,v)});return u.pathname+'?'+u.searchParams.toString()}
   function filterUrl(name,value,checked){var u=new URL(location.href),vals=u.searchParams.getAll(name).filter(function(v){return v!==value});if(checked)vals.push(value);u.searchParams.delete(name);Array.from(new Set(vals)).forEach(function(v){u.searchParams.append(name,v)});u.searchParams.delete('page');u.searchParams.delete('sq_view_page');return u.pathname+(u.searchParams.toString()?'?'+u.searchParams.toString():'')}
-  function sidebar(){var s=main.querySelector('.sq-refine-v3-sidebar,.sq-global-refine-sidebar');if(s&&!s.classList.contains('sq-refine-v3-sidebar'))s.classList.add('sq-refine-v3-sidebar');return s}
+  function sidebar(){
+    var s=main.querySelector('.sq-refine-v3-sidebar,.sq-global-refine-sidebar');
+    if(s){if(!s.classList.contains('sq-refine-v3-sidebar'))s.classList.add('sq-refine-v3-sidebar');return s}
+    s=document.createElement('aside');s.className='sq-refine-v3-sidebar';s.setAttribute('aria-label','Refine Products');
+    var layout=main.querySelector('.sq-refine-v3-layout');
+    if(layout){layout.insertBefore(s,layout.firstChild);return s}
+    var results=main.querySelector('.sq-refine-v3-results');
+    if(results&&results.parentNode){results.parentNode.insertBefore(s,results);return s}
+    var grid=main.querySelector('.product-grid');
+    if(grid&&grid.parentNode){grid.parentNode.insertBefore(s,grid);return s}
+    main.insertBefore(s,main.firstChild);return s
+  }
   function groups(s){return [].slice.call(s.querySelectorAll(':scope > details.sq-refine-v3-group'))}
   function group(s,title){return groups(s).find(function(d){return key(d.querySelector(':scope > summary')?.textContent)===key(title)})||null}
   function ensureGroup(s,title){var d=group(s,title);if(d)return d;d=document.createElement('details');d.className='sq-refine-v3-group';d.innerHTML='<summary></summary><div class="sq-refine-v3-choices"></div>';d.querySelector('summary').textContent=title;s.appendChild(d);return d}
@@ -44,7 +55,7 @@ Accessories, Gifts & Collectibles Refine Products hard repair. Ensures the nine 
     main.querySelectorAll('input[name^="filter."]').forEach(function(src){if(s.contains(src))return;var title=nativeHeading(src);if(!title)return;var label=nativeLabel(src),value=clean(src.value);if(!label||!value)return;var name=src.name,k=key(title);if(!map.has(k))map.set(k,{title:title,items:[]});var a=map.get(k).items;if(!a.some(function(x){return x.name===name&&x.value===value}))a.push({name:name,value:value,label:label})});
     map.forEach(function(g){var d=ensureGroup(s,g.title),host=d.querySelector(':scope > .sq-refine-v3-choices');if(host.children.length)return;g.items.forEach(function(x){var row=document.createElement('label');row.className='sq-refine-v3-choice';var input=document.createElement('input');input.type='checkbox';input.dataset.kind='native';input.dataset.filterName=x.name;input.dataset.filterValue=x.value;input.value=x.value;input.checked=params.getAll(x.name).indexOf(x.value)>-1;var span=document.createElement('span');span.textContent=x.label;row.append(input,span);input.addEventListener('change',function(e){e.stopImmediatePropagation();location.assign(filterUrl(x.name,x.value,input.checked))},true);host.appendChild(row)});if(host.querySelector('input:checked')){d.dataset.active='true';d.open=true}})
   }
-  function repair(){var s=sidebar();if(!s)return false;ensureCategories(s);recoverNative(s);s.dataset.sqButton01Fixed='true';main.dataset.sqAccessoriesRefineRepair='true';return s.querySelectorAll('input[type="checkbox"]').length>0}
+  function repair(){var s=sidebar();ensureCategories(s);recoverNative(s);s.dataset.sqButton01Fixed='true';main.dataset.sqAccessoriesRefineRepair='true';return s.querySelectorAll('input[type="checkbox"]').length>0}
   var tries=0,t=setInterval(function(){tries++;if(repair()||tries>200)clearInterval(t)},50);[0,100,250,500,1000,2000,4000].forEach(function(ms){setTimeout(repair,ms)});
 })();
 </script>
