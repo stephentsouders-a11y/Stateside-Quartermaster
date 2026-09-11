@@ -1,0 +1,57 @@
+name: Body Armor Color Pattern Chromium Cert
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/body-armor-color-cert.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify Body Armor color pattern behavior
+        run: |
+          cat > cert.mjs <<'JS'
+          import {chromium} from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1000}});
+          const page=await context.newPage();
+          const errors=[];page.on('pageerror',e=>errors.push(e.message));
+          const base='https://www.statesideqm.com/collections/body-armor-ballistic-protection?preview_theme_id=158561894555';
+          const r=await page.goto(base,{waitUntil:'domcontentloaded',timeout:90000});
+          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:60000});
+          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqUniformColorReady==='true'&&window.__sqUniformColor?.ready===true,{timeout:90000});
+          const before=await page.evaluate(()=>{const group=document.querySelector('[data-sq-ucp-group]');return{heading:group?.querySelector('summary')?.textContent?.trim(),choices:window.__sqUniformColor?.choices||[],total:window.__sqUniformColor?.total||0,root:new URL(location.href).searchParams.get('sq_root'),ready:document.querySelector('#MainContent')?.dataset.sqUniformColorReady}});
+          const black=page.locator('[data-sq-ucp-group] label').filter({hasText:/^Black\s*\(/}).locator('input');
+          if(await black.count()!==1)throw Error('Black color choice missing or duplicated');
+          await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),black.check()]);
+          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqUniformColorReady==='true'&&document.documentElement.classList.contains('sq-ucp-filtered'),{timeout:90000});
+          const filtered=await page.evaluate(()=>({params:new URL(location.href).searchParams.getAll('sq_ucp'),root:new URL(location.href).searchParams.get('sq_root'),matches:window.__sqUniformColor?.matches||0,cards:document.querySelectorAll('[data-sq-ucp-results] .product-grid__item').length,checked:[...document.querySelectorAll('[data-sq-ucp-group] input:checked')].map(i=>i.value)}));
+          const checked=page.locator('[data-sq-ucp-group] input[value="black"]');
+          await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),checked.uncheck()]);
+          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqUniformColorReady==='true',{timeout:90000});
+          const cleared=await page.evaluate(()=>({params:new URL(location.href).searchParams.getAll('sq_ucp'),root:new URL(location.href).searchParams.get('sq_root'),filtered:document.documentElement.classList.contains('sq-ucp-filtered'),nativeCards:document.querySelectorAll('.sq-refine-v3-results collection-component .product-grid > .product-grid__item').length}));
+          const needed=['Black','Coyote','MultiCam / OCP','OD / Olive Green','Ranger Green'];
+          const labels=before.choices.map(x=>x.label);
+          const ok=r.status()===200&&errors.length===0&&before.heading==='Shop by Color / Pattern'&&before.total>0&&needed.every(x=>labels.includes(x))&&before.root===null&&filtered.params.includes('black')&&filtered.root===null&&filtered.matches>0&&filtered.cards>0&&filtered.checked.includes('black')&&cleared.params.length===0&&cleared.root===null&&!cleared.filtered&&cleared.nativeCards>0;
+          console.log('BODY_ARMOR_COLOR_CERT '+JSON.stringify({http:r.status(),errors,before,filtered,cleared,ok}));
+          await page.screenshot({path:'body-armor-color-cert.png',fullPage:true});
+          await browser.close();
+          if(!ok)process.exit(1);
+          JS
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: body-armor-color-cert
+          path: body-armor-color-cert.png
+          retention-days: 7
