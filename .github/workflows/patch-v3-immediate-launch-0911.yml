@@ -1,0 +1,32 @@
+name: Patch V3 immediate launch for performance
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-v3-immediate-launch-0911.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+      - name: Launch V3 immediately after MainContent is parsed
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('snippets/sq-refine-v3.liquid')
+          s=p.read_text()
+          old="if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',launch,{once:true});else launch();"
+          new="// MainContent is already fully parsed when this post-content snippet executes; do not hold Refine V3 behind unrelated footer/drawer scripts.\n  launch();"
+          if old not in s:
+              raise SystemExit('expected V3 launch gate not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add snippets/sq-refine-v3.liquid
+          git commit -m "Start Refine V3 immediately after MainContent"
+          git push origin HEAD:refine-restart-v3
