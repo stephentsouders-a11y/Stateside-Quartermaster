@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
 # Definitive 41-button alphabetical certification. State Guard is intentionally excluded/frozen.
+# Fresh latest-code certification trigger: storefront commit 8661612, unpublished audit theme 158561894555.
 jobs:
   certify:
     strategy:
