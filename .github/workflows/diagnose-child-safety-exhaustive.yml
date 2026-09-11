@@ -1,0 +1,47 @@
+name: Child Safety exhaustive Chromium certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/diagnose-child-safety-exhaustive.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify-child-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SHARD: 7
+      SHARDS: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify Child Safety interactions
+        run: node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: Hard gate
+        if: always()
+        run: |
+          REPORT="other40-exhaustive/shard-${SHARD}/report.json"
+          test -f "$REPORT" || { echo "Missing report"; exit 1; }
+          PAGE_ERRORS=$(jq '[.routes[] | select(.type=="v3") | .desktop.pageErrors[], .mobile.pageErrors[]] | length' "$REPORT")
+          FAILED_INTERACTIONS=$(jq '[.routes[] | select(.type=="v3") | .desktop.interactions.items[], .mobile.interactions.items[] | select(.pass!=true)] | length' "$REPORT")
+          COUNT=$(jq '.interactionCount' "$REPORT")
+          PASSED=$(jq '.interactionPassed' "$REPORT")
+          echo "pageErrors=$PAGE_ERRORS checkboxInteractions=$PASSED/$COUNT failedInteractions=$FAILED_INTERACTIONS"
+          test "$PAGE_ERRORS" -eq 0
+          test "$FAILED_INTERACTIONS" -eq 0
+          test "$COUNT" -eq "$PASSED"
+      - name: Upload Child Safety proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: child-safety-exhaustive-proof
+          path: other40-exhaustive/shard-7
+          if-no-files-found: warn
