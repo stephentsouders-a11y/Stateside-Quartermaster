@@ -56,11 +56,8 @@ jobs:
             let size100={tested:false};
             if(await pageSize100.count()){
               size100.tested=true;
-              if((await pageSize100.getAttribute('type'))==='radio'){
-                await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),pageSize100.check()]);
-              }else{
-                await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),pageSize100.click()]);
-              }
+              if((await pageSize100.getAttribute('type'))==='radio')await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),pageSize100.check()]);
+              else await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),pageSize100.click()]);
               await ready(page,true);
               size100=await page.evaluate(()=>({tested:true,param:new URL(location.href).searchParams.get('sq_per_page'),pageSize:window.__sqUniformColor?.pageSize,cards:document.querySelectorAll('[data-sq-ucp-results] .product-grid__item').length}));
             }
@@ -69,7 +66,6 @@ jobs:
             if(await structural.count()){
               await openDetails(structural);
               const target=await structural.getAttribute('data-target');
-              structuralResult.tested=true;structuralResult.target=target;
               await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),structural.check()]);
               await ready(page,true);
               const child=await page.evaluate(()=>{const u=new URL(location.href);return{path:u.pathname,root:u.searchParams.get('sq_root'),colors:u.searchParams.getAll('sq_ucp'),matches:window.__sqUniformColor?.matches||0}});
@@ -82,7 +78,6 @@ jobs:
               const returned=await page.evaluate(()=>{const u=new URL(location.href);return{path:u.pathname,root:u.searchParams.get('sq_root'),colors:u.searchParams.getAll('sq_ucp')}});
               structuralResult={tested:true,target,child,returned};
             }
-            if(!location){}
             if(new URL(page.url()).pathname!=='/collections/body-armor-ballistic-protection')await page.goto(base+'&sq_ucp=black',{waitUntil:'domcontentloaded',timeout:90000});
             await ready(page,true);
             const checked=page.locator('[data-sq-ucp-group] input[value="black"]');
@@ -91,7 +86,7 @@ jobs:
             await ready(page);
             const cleared=await page.evaluate(()=>{const u=new URL(location.href);return{params:u.searchParams.getAll('sq_ucp'),root:u.searchParams.get('sq_root'),path:u.pathname,filtered:document.documentElement.classList.contains('sq-ucp-filtered'),nativeCards:document.querySelectorAll('.sq-refine-v3-results collection-component .product-grid > .product-grid__item').length}});
             const labels=before.choices.map(x=>x.label);
-            const structuralOk=!structuralResult.tested||(structuralResult.child.path!=='/collections/uniforms'&&structuralResult.child.colors.includes('black')&&structuralResult.returned.path==='/collections/body-armor-ballistic-protection'&&structuralResult.returned.path!=='/collections/uniforms'&&structuralResult.returned.colors.includes('black')&&structuralResult.returned.root!== 'uniforms');
+            const structuralOk=!structuralResult.tested||(structuralResult.child.path!=='/collections/uniforms'&&structuralResult.child.colors.includes('black')&&structuralResult.returned.path==='/collections/body-armor-ballistic-protection'&&structuralResult.returned.path!=='/collections/uniforms'&&structuralResult.returned.colors.includes('black')&&structuralResult.returned.root!=='uniforms');
             const sizeOk=!size100.tested||(size100.param==='100'&&size100.pageSize===100&&size100.cards>0);
             const ok=r.status()===200&&pageErrors.length===0&&before.heading==='Shop by Color / Pattern'&&before.total>0&&before.nativeCards>0&&needed.every(x=>labels.includes(x))&&before.root===null&&filtered.params.includes('black')&&filtered.root===null&&filtered.path==='/collections/body-armor-ballistic-protection'&&filtered.matches>0&&filtered.cards>0&&filtered.checked.includes('black')&&sizeOk&&structuralOk&&cleared.params.length===0&&cleared.root===null&&cleared.path==='/collections/body-armor-ballistic-protection'&&!cleared.filtered&&cleared.nativeCards>0;
             const report={name,viewport,http:r.status(),pageErrors,consoleErrors,before,filtered,size100,structuralResult,cleared,ok};
