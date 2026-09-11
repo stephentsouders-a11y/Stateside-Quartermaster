@@ -33,10 +33,20 @@ html body #MainContent.sq-refine-v3-active .sq-refine-v3-results{display:block!i
 <script data-sq-refine-v3-education-visibility-runtime>
 (function(){
   var main=document.getElementById('MainContent');if(!main)return;
+  var isMsa=location.pathname==='/collections/military-schools-academies';
+  function ensureMsaTitle(side){
+    if(!isMsa||!side||side.querySelector('.sq-refine-v3-sidebar__title'))return;
+    var h=document.createElement('h2');
+    h.className='sq-refine-v3-sidebar__title';
+    h.textContent='Refine Products';
+    side.insertBefore(h,side.firstChild);
+    main.dataset.sqRefineV3MsaTitle='restored';
+  }
   function expose(){
     if(main.dataset.sqRefineV3Ready!=='true')return false;
     var layout=main.querySelector('.sq-refine-v3-layout'),side=main.querySelector('.sq-refine-v3-sidebar'),results=main.querySelector('.sq-refine-v3-results');
     if(!layout||!side||!results)return false;
+    ensureMsaTitle(side);
     [layout,side,results].forEach(function(el){
       el.hidden=false;el.removeAttribute('aria-hidden');
       el.style.setProperty('visibility','visible','important');
