@@ -45,7 +45,7 @@ jobs:
             const meta=await input.evaluate(i=>({name:i.dataset.filterName||i.dataset.sqPolishParam||'',value:i.dataset.filterValue||i.dataset.sqPolishValue||i.value||'',label:(i.closest('label')?.innerText||'').trim()}));
             report.steps.meta=meta; report.steps.before=p.url();
             await input.locator('xpath=ancestor::label[1]').click({noWaitAfter:true});
-            await p.waitForFunction(b=>location.href!==b,report.steps.before,null,{timeout:20000});
+            await p.waitForFunction(b=>location.href!==b,report.steps.before,{timeout:20000});
             await snap('afterFirstChange');
             for (const [tag,ms] of [['after250ms',250],['after1s',750],['after3s',2000]]) { await p.waitForTimeout(ms); await snap(tag); }
             if(await challenge()) throw new Error('CLOUDFLARE_CHALLENGE_AFTER_CLICK');
