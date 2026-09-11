@@ -26,7 +26,7 @@ jobs:
       - name: Diagnose Type and Availability event paths
         run: |
           node <<'NODE'
-          const { chromium } = require('playwright');
+          const { chromium } = await import('playwright');
           const BASE='https://www.statesideqm.com';
           const URL=BASE+'/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
