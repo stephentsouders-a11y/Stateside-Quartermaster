@@ -131,4 +131,43 @@
   var tries=0,t=setInterval(function(){tries++;if(stabilizeNested()){clearInterval(t);armPathStateSync()}else if(tries>80)clearInterval(t)},100);
 })();
 </script>
+<script data-sq-refine-v3-child-safety-color-pattern>
+(function(){
+  var COLORS=['Black','Blue','Camouflage','Gray','Green','Other Color / Pattern','Pink','Purple','Red','White','Yellow / Gold'];
+  var PREFIX='SQ Color/Pattern: ';
+  function side(){return document.querySelector('#MainContent .sq-refine-v3-sidebar')}
+  function esc(v){return String(v||'').replace(/[&<>"']/g,function(k){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[k]})}
+  function colorGroup(s){
+    return [].slice.call(s.querySelectorAll('.sq-refine-v3-group')).find(function(g){return /shop by color\s*\/\s*pattern/i.test(g.querySelector(':scope>summary')?.textContent||'')})||null;
+  }
+  function render(){
+    var main=document.getElementById('MainContent'),s=side();
+    if(!main||main.dataset.sqRefineV3Ready!=='true'||!s)return false;
+    var q=new URLSearchParams(location.search),selected=q.getAll('filter.p.tag'),g=colorGroup(s);
+    if(!g){
+      g=document.createElement('details');g.className='sq-refine-v3-group';g.dataset.sqChildSafetyColorPattern='true';
+      g.innerHTML='<summary>Shop by Color / Pattern</summary><div class="sq-refine-v3-choices"></div>';
+      var manufacturer=[].slice.call(s.querySelectorAll('.sq-refine-v3-group')).find(function(x){return /manufacturer/i.test(x.querySelector(':scope>summary')?.textContent||'')});
+      if(manufacturer)s.insertBefore(g,manufacturer);else s.appendChild(g);
+    }
+    var choices=g.querySelector(':scope>.sq-refine-v3-choices');
+    choices.innerHTML=COLORS.map(function(label){var value=PREFIX+label,checked=selected.indexOf(value)>-1;return '<label class="sq-refine-v3-choice"><input type="checkbox" data-sq-child-color-pattern="true" data-filter-name="filter.p.tag" data-filter-value="'+esc(value)+'"'+(checked?' checked':'')+'><span>'+esc(label)+'</span></label>'}).join('');
+    var active=selected.some(function(v){return v.indexOf(PREFIX)===0});g.dataset.active=active?'true':'false';if(active)g.open=true;
+    main.dataset.sqChildSafetyColorPattern='ready';
+    return true;
+  }
+  document.addEventListener('change',function(e){
+    var input=e.target&&e.target.closest&&e.target.closest('#MainContent .sq-refine-v3-sidebar input[data-sq-child-color-pattern="true"]');
+    if(!input)return;
+    e.stopImmediatePropagation();
+    var u=new URL(location.href),name=input.dataset.filterName,value=input.dataset.filterValue,vals=u.searchParams.getAll(name).filter(function(v){return v!==value});
+    if(input.checked)vals.push(value);
+    u.searchParams.delete(name);Array.from(new Set(vals)).forEach(function(v){u.searchParams.append(name,v)});
+    u.searchParams.delete('page');u.searchParams.delete('sq_view_page');u.searchParams.set('sq_root','child-safety-shop');
+    location.assign(u.pathname+'?'+u.searchParams.toString());
+  },true);
+  var tries=0,t=setInterval(function(){tries++;if(render()){clearInterval(t)}else if(tries>100)clearInterval(t)},100);
+  addEventListener('pageshow',render);
+})();
+</script>
 {% endif %}
