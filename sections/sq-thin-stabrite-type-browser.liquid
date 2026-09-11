@@ -51,6 +51,9 @@
   <script>
   (function(){
     if(document.documentElement.dataset.sqRefineV3ChildRoot==='thin-line'){
+      window.__sqThinLineNativeTypeOwner=true;
+      window.__sqTypeFamilyRouteAuthority=true;
+      window.__sqTypeFamilyProductsV1=true;
       var main=document.getElementById('MainContent');
       var activePath=location.pathname.replace(/\/$/,'');
       function markActiveCategory(){
