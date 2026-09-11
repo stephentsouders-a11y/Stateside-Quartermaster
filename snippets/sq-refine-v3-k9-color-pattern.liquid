@@ -60,11 +60,19 @@ K9 color and pattern refinement from current collection product options. Preserv
     return true;
   }
   async function get(url,json){
+    let last;
     for(let attempt=0;attempt<3;attempt++){
-      try{const r=await fetch(url,{credentials:'same-origin',signal:AbortSignal.timeout(45000)});if(r.ok)return json?await r.json():await r.text();if(![429,500,502,503,504].includes(r.status))throw new Error('HTTP '+r.status)}catch(e){if(attempt===2)throw e;}
-      await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));
+      let wait=2000*Math.pow(2,attempt);
+      try{
+        const r=await fetch(url,{credentials:'same-origin',signal:AbortSignal.timeout(45000)});
+        if(r.ok)return json?await r.json():await r.text();
+        last=new Error('HTTP '+r.status+' loading '+new URL(url,location.origin).pathname);
+        if(![429,500,502,503,504].includes(r.status)){last.noRetry=true;throw last;}
+        wait=Math.max(wait,Math.min(15000,(Number(r.headers.get('Retry-After'))||0)*1000));
+      }catch(e){last=e;if(e.noRetry)throw e;}
+      if(attempt<2)await new Promise(resolve=>setTimeout(resolve,wait));
     }
-    throw new Error('Collection request failed');
+    throw last||new Error('Collection request failed');
   }
   async function catalog(){
     const out=[],seen=new Set();
@@ -110,6 +118,25 @@ K9 color and pattern refinement from current collection product options. Preserv
     card.querySelectorAll('a[href*="/products/"]').forEach(a=>{const u=new URL(a.href,location.origin);u.searchParams.set('variant',String(v.id));a.href=u.pathname+u.search});
     const image=v.featured_image&&v.featured_image.src;if(image){const img=card.querySelector('img');if(img){img.src=image;img.srcset='';}}
   }
+  function revealGrid(){
+    const layout=side.closest('.sq-refine-v3-layout');
+    const activeResults=layout&&layout.querySelector(':scope > .sq-refine-v3-results');
+    if(activeResults&&activeResults!==results){
+      const controls=results.querySelector('.sq-refine-v3-page-size');
+      if(controls&&!activeResults.querySelector('.sq-refine-v3-page-size'))activeResults.prepend(controls);
+      activeResults.prepend(status);results=activeResults;
+    }
+    if(!results.contains(grid))results.appendChild(grid);
+    for(let node=grid;node&&node!==results;node=node.parentElement){
+      node.hidden=false;node.removeAttribute('aria-hidden');
+      node.style.setProperty('display',node===grid?'grid':'block','important');
+      if(node===grid)node.style.removeProperty('visibility');else node.style.setProperty('visibility','visible','important');
+      node.style.setProperty('min-width','0','important');node.style.setProperty('max-width','100%','important');
+    }
+    main.querySelectorAll('.product-grid').forEach(other=>{
+      if(other!==grid){other.hidden=true;other.setAttribute('aria-hidden','true');other.style.setProperty('display','none','important');other.style.setProperty('visibility','hidden','important');}
+    });
+  }
   async function render(){
     const turn=++version,wanted=selected();sync();main.dataset.sqK9ColorReady='false';main.dataset.sqK9ColorError='';
     if(!wanted.length&&!ownsGrid){main.dataset.sqK9ColorReady='true';return;}
@@ -120,7 +147,7 @@ K9 color and pattern refinement from current collection product options. Preserv
       const q=new URL(location.href).searchParams,n=Number(q.get('sq_per_page')),size=[50,100,250].includes(n)?n:50,total=filtered.length,pages=Math.max(1,Math.ceil(total/size)),requested=Math.max(1,Number(q.get('sq_view_page'))||1),page=Math.min(requested,pages);
       if(page!==requested)history.replaceState({},'',pageUrl(page));
       const fragment=document.createDocumentFragment();filtered.slice((page-1)*size,page*size).forEach(c=>{const clone=document.importNode(c,true);updateCard(clone,byHandle.get(cardHandle(c)),wanted);fragment.appendChild(clone)});
-      grid.replaceChildren(fragment);
+      grid.replaceChildren(fragment);revealGrid();
       results.querySelectorAll('.sq-refine-v3-pager,pagination-component,.pagination').forEach(p=>{p.hidden=true;p.style.setProperty('display','none','important')});
       let pager=results.querySelector('[data-sq-k9-pager]');if(!pager){pager=document.createElement('nav');pager.className='sq-refine-v3-pager';pager.dataset.sqK9Pager='true';pager.setAttribute('aria-label','Product pages');results.appendChild(pager)}
       pager.hidden=false;pager.style.removeProperty('display');pager.replaceChildren();
@@ -154,8 +181,16 @@ K9 color and pattern refinement from current collection product options. Preserv
     window.addEventListener('popstate',render);
     await render();return true;
   }
-  let tries=0;const timer=setInterval(()=>{
-    if(main.dataset.sqRefineV3Ready==='true'){clearInterval(timer);launch().catch(e=>{main.dataset.sqK9ColorError=clean(e.message);main.dataset.sqK9ColorBusy='false';if(status){status.hidden=false;status.textContent='Color filters could not load. Please reload this page.'}})}else if(++tries>360)clearInterval(timer);
+  let tries=0,starting=false;const timer=setInterval(()=>{
+    if(starting)return;
+    if(++tries>360){clearInterval(timer);main.dataset.sqK9ColorBusy='false';main.dataset.sqK9ColorError='Refine Products did not finish initializing';return;}
+    if(main.dataset.sqRefineV3Ready==='true'){
+      starting=true;
+      launch().then(done=>{if(done)clearInterval(timer);else starting=false;}).catch(e=>{
+        clearInterval(timer);main.dataset.sqK9ColorError=clean(e.message);main.dataset.sqK9ColorBusy='false';
+        if(status){status.hidden=false;status.textContent='Color filters could not load. Please reload this page.';}
+      });
+    }
   },250);
 })();
 </script>
