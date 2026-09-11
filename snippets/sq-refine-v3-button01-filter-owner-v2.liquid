@@ -1,7 +1,19 @@
 {% doc %}
-Owns Accessories, Gifts & Collectibles Type and Availability checkbox navigation before legacy/global V3 click handlers can convert Type into an intermediate sq_type_family URL. Uses pointerdown capture for real customer mouse/touch interaction and click capture as keyboard/programmatic fallback, always resolving the live MainContent/sidebar at event time. State Guard is excluded.
+Owns Accessories, Gifts & Collectibles Type and Availability checkbox navigation before legacy/global V3 click handlers can convert Type into an intermediate sq_type_family URL. Uses pointerdown capture for real customer mouse/touch interaction and click capture as keyboard/programmatic fallback, always resolving the live MainContent/sidebar at event time. Also hardens customer-visible mobile 50/100/250 labels. State Guard is excluded.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<style data-sq-button01-mobile-page-size-proof>
+@media (max-width:900px){
+#MainContent.sq-v3-button01-root .sq-refine-v3-page-size{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:7px!important;flex-wrap:wrap!important;color:#071d2d!important}
+#MainContent.sq-v3-button01-root .sq-refine-v3-page-size:before{content:'Products per page';display:block!important;flex:0 0 100%!important;width:100%!important;color:#071d2d!important;font-size:12px!important;font-weight:900!important;line-height:1.2!important;visibility:visible!important;opacity:1!important}
+#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:5px!important;min-width:58px!important;min-height:34px!important;padding:7px 9px!important;color:#071d2d!important;font-size:12px!important;font-weight:900!important;line-height:1.2!important;overflow:visible!important;visibility:visible!important;opacity:1!important}
+#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label:after{display:inline-block!important;color:#071d2d!important;font-size:12px!important;font-weight:900!important;line-height:1.2!important;visibility:visible!important;opacity:1!important}
+#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label:has(input[value='50']):after{content:'50'}
+#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label:has(input[value='100']):after{content:'100'}
+#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label:has(input[value='250']):after{content:'250'}
+#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label>span{display:none!important}
+}
+</style>
 <script data-sq-refine-v3-button01-filter-owner-v2>
 (function(){
   var params=new URLSearchParams(location.search),current={{ collection.handle | json }},root=params.get('sq_root')||current;
