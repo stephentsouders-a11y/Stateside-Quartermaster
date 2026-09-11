@@ -7,7 +7,21 @@ logical view instead of trusting a missing native pagination marker. It applies 
 Refine V3 root and child route and leaves State Guard Series untouched.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
-<script data-sq-refine-v3-pagination-repair data-revision="logical-sentinel-probe-20260911-v2">
+<style data-sq-refine-v3-pagination-button-style>
+#MainContent .sq-refine-v3-pager a,
+#MainContent .sq-refine-v3-pager span{
+  background:#0b3a63!important;
+  color:#fff!important;
+  border-color:#0b3a63!important;
+}
+#MainContent .sq-refine-v3-pager a:hover,
+#MainContent .sq-refine-v3-pager a:focus-visible{
+  background:#071d2d!important;
+  border-color:#071d2d!important;
+  color:#fff!important;
+}
+</style>
+<script data-sq-refine-v3-pagination-repair data-revision="logical-sentinel-probe-20260911-v3-blue-buttons">
 (function(){
   if(window.__sqRefineV3PaginationRepair)return;
   window.__sqRefineV3PaginationRepair=true;
