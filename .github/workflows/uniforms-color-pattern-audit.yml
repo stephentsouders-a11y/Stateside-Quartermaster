@@ -1,0 +1,42 @@
+name: Uniforms color pattern audit
+on:
+  push:
+    paths:
+      - '.github/workflows/uniforms-color-pattern-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Capture relevant source
+        run: |
+          mkdir -p out/source
+          cp -R snippets layout templates .github out/source/
+      - name: Install Chromium audit tools
+        run: |
+          npm install --no-save agent-browser playwright >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Browser snapshot
+        run: |
+          export AGENT_BROWSER_EXECUTABLE_PATH="$(node -e 'console.log(require("playwright").chromium.executablePath())')"
+          npx agent-browser open https://www.statesideqm.com/collections/uniforms
+          npx agent-browser wait '.sq-refine-v3-sidebar'
+          npx agent-browser snapshot -i > out/uniforms-before-snapshot.txt
+          npx agent-browser screenshot out/uniforms-before.png
+          npx agent-browser eval 'JSON.stringify({theme:window.Shopify?.theme,sidebars:[...document.querySelectorAll("aside")].map(x=>({class:x.className,text:x.innerText.slice(0,16000)})),filterInputs:[...document.querySelectorAll("input[name^=\"filter.\"]")].map(x=>({name:x.name,value:x.value,checked:x.checked})),scripts:[...document.scripts].map(x=>({src:x.src,attrs:x.getAttributeNames().filter(a=>a.startsWith("data-")).join(" ")})).filter(x=>x.attrs||/refine|facet/.test(x.src))})' > out/diagnostic.json
+          npx agent-browser eval 'document.documentElement.outerHTML' > out/uniforms-before.html.json
+          npx agent-browser close
+          cat out/diagnostic.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uniforms-color-pattern-audit
+          path: out
+          retention-days: 7
