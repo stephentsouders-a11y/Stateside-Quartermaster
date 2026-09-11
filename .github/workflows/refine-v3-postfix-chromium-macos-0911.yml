@@ -23,7 +23,7 @@ jobs:
           npx playwright install chromium >/dev/null 2>&1
       - name: Chromium structural proof
         run: |
-          cat > /tmp/proof.mjs <<'EOF'
+          cat > proof.mjs <<'EOF'
           import { chromium } from 'playwright';
           const BASE='https://www.statesideqm.com',THEME='158561894555';
           const routes=[['Flags','/collections/flags-patriotic-decor'],['Airsoft','/collections/airsoft-milsim'],['Child Safety','/collections/child-safety-shop'],['First Aid','/collections/first-aid-medical-ifak'],['Outdoor','/collections/outdoor-preparedness-gear'],['Firearm','/collections/firearm-accessories'],['Morale','/collections/morale-patches-tactical-id'],['Uniforms','/collections/uniforms'],['Body Armor','/collections/body-armor-ballistic-protection'],['Flashlights','/collections/flashlights-lighting'],['Safety Rescue','/collections/safety-rescue-climbing'],['Books','/collections/literature'],['Footwear','/collections/footwear-gloves-eyewear'],['DIVE','/collections/dive-scuba'],['Knives','/collections/knives-axes-cutlery'],['Army','/collections/products-built-for-the-line-u-s-army'],['Marines','/collections/products-built-for-the-line-u-s-marine-corps'],['JROTC','/collections/jrotc-series'],['ROTC','/collections/rotc-series'],['Coast Guard','/collections/products-built-for-the-line-u-s-coast-guard'],['Thin Line','/collections/thin-line']];
@@ -35,4 +35,4 @@ jobs:
           }
           await browser.close();console.log(`MACOS_PROOF failures=${failures} checks=${routes.length*2}`);if(failures)process.exit(2);
           EOF
-          node /tmp/proof.mjs
+          node proof.mjs
