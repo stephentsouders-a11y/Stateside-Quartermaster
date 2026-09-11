@@ -1,0 +1,61 @@
+{% doc %}
+Provides a deterministic Firearm Accessories Make / Model refinement from verified automated compatibility collections. Each target collection requires both the SQ Verified Firearm Accessory tag and a compatible firearm model in the product title, so the choices cannot be populated by unrelated product types. The group persists on compatibility subcollections and keeps the Firearm Accessories root context.
+{% enddoc %}
+{% assign sq_firearm_model_route = false %}
+{% if request.page_type == 'collection' %}
+  {% if collection.handle == 'firearm-accessories' or collection.handle == 'firearm-platform-glock' or collection.handle == 'firearm-platform-ar15' or collection.handle == 'firearm-platform-1911' or collection.handle == 'firearm-platform-sig-p320' or collection.handle == 'firearm-platform-sig-p365' or collection.handle == 'firearm-platform-beretta-apx' %}
+    {% assign sq_firearm_model_route = true %}
+  {% endif %}
+{% endif %}
+{% if sq_firearm_model_route %}
+<script data-sq-refine-v3-firearm-make-model>
+(function(){
+  const main=document.getElementById('MainContent');
+  if(!main)return;
+  const current={{ collection.handle | json }};
+  const models=[
+    ['Glock','firearm-platform-glock'],
+    ['AR15','firearm-platform-ar15'],
+    ['1911','firearm-platform-1911'],
+    ['SIG P320','firearm-platform-sig-p320'],
+    ['SIG P365','firearm-platform-sig-p365'],
+    ['Beretta APX','firearm-platform-beretta-apx']
+  ];
+  function targetFor(handle){
+    const u=new URL('/collections/'+handle,location.origin);
+    u.searchParams.set('sq_root','firearm-accessories');
+    const preview=new URLSearchParams(location.search).get('preview_theme_id');
+    if(preview)u.searchParams.set('preview_theme_id',preview);
+    return u.pathname+'?'+u.searchParams.toString();
+  }
+  function install(){
+    if(main.dataset.sqRefineV3Ready!=='true')return false;
+    const side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;
+    const groups=[...side.querySelectorAll(':scope > details.sq-refine-v3-group')];
+    groups.filter(d=>/shop by (?:firearm )?make\s*\/\s*model/i.test((d.querySelector(':scope > summary')?.textContent||'').trim())).forEach(d=>d.remove());
+    const group=document.createElement('details');group.className='sq-refine-v3-group';group.dataset.sqRefineV3FirearmMakeModel='verified-smart-collections';
+    const summary=document.createElement('summary');summary.textContent='Shop by Firearm Make / Model';
+    const choices=document.createElement('div');choices.className='sq-refine-v3-choices';
+    models.forEach(([label,handle])=>{
+      const row=document.createElement('label');row.className='sq-refine-v3-choice';
+      const input=document.createElement('input');input.type='checkbox';input.dataset.kind='structural';input.dataset.target=targetFor(handle);input.checked=current===handle;
+      const span=document.createElement('span');span.textContent=label;row.append(input,span);choices.appendChild(row);
+      input.addEventListener('change',()=>{
+        if(input.checked)location.assign(input.dataset.target);
+        else {
+          const u=new URL('/collections/firearm-accessories',location.origin);u.searchParams.set('sq_root','firearm-accessories');
+          const preview=new URLSearchParams(location.search).get('preview_theme_id');if(preview)u.searchParams.set('preview_theme_id',preview);
+          location.assign(u.pathname+'?'+u.searchParams.toString());
+        }
+      });
+    });
+    group.append(summary,choices);
+    const fresh=[...side.querySelectorAll(':scope > details.sq-refine-v3-group')];
+    const typeGroup=fresh.find(d=>/^shop by type$/i.test((d.querySelector(':scope > summary')?.textContent||'').trim()));
+    if(typeGroup&&typeGroup.nextSibling)side.insertBefore(group,typeGroup.nextSibling);else side.appendChild(group);
+    return true;
+  }
+  if(install())return;let n=0,t=setInterval(()=>{if(install()||++n>180)clearInterval(t)},250);
+})();
+</script>
+{% endif %}

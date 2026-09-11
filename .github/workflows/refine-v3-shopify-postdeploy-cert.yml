@@ -1,0 +1,131 @@
+name: Refine V3 Shopify Post-Deploy Chromium Certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-shopify-postdeploy-cert.yml'
+      - 'snippets/sq-refine-v3-single-grid-guard.liquid'
+      - 'snippets/sq-refine-v3-footwear-color-pattern.liquid'
+      - 'snippets/sq-refine-v3-sidebar-header-edge-fix.liquid'
+      - 'snippets/sq-refine-v3-pagination-repair.liquid'
+      - 'snippets/sq-refine-v3.liquid'
+      - 'layout/theme.liquid'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify deployed Shopify draft theme
+        run: |
+          cat > postdeploy.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const theme='158561894555';
+          const base='https://www.statesideqm.com/collections/';
+          const roots=[
+            'accessories-gifts-collectibles','airsoft-milsim','apparel','armed-forces-gear','art','body-armor-ballistic-protection','literature','child-safety-shop','dive-scuba','firearm-accessories','first-aid-medical-ifak','flags-patriotic-decor','flashlights-lighting','footwear-gloves-eyewear','k9-dog-gear','knives-axes-cutlery','morale-patches-tactical-id','outdoor-preparedness-gear','patriotic-american-heritage','safety-rescue-climbing','sta-brite-insignia','tactical-gear','thin-line','uniforms','watches','zippos-lighters-torches','stateside-quartermaster-logo-merch','army-national-guard-series','air-national-guard-series','products-built-for-the-line-u-s-army','products-built-for-the-line-u-s-navy','products-built-for-the-line-u-s-air-force','products-built-for-the-line-u-s-marine-corps','products-built-for-the-line-u-s-coast-guard','products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series','military-schools-academies','law-enforcement-corrections','firefighting-ems-search-rescue'
+          ];
+          const report={theme,checkedAt:new Date().toISOString(),routes:[],failures:[]};
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1000}});
+          function benign(text,url=''){
+            return text.includes("Refused to frame 'https://shop.app/'") ||
+              (text.includes('Failed to load resource') && /shop\.app|monorail|analytics|shopifycloud/i.test(url));
+          }
+          for(const handle of roots){
+            const page=await context.newPage();
+            const errors=[];
+            page.on('pageerror',e=>errors.push(`pageerror: ${String(e)}`));
+            page.on('console',m=>{if(m.type()==='error'){const t=m.text(),u=m.location()?.url||'';if(!benign(t,u))errors.push(`console: ${t}${u?` @ ${u}`:''}`)}});
+            const url=new URL(`${base}${handle}`);
+            url.searchParams.set('preview_theme_id',theme);
+            url.searchParams.set('sq_per_page','50');
+            url.searchParams.set('sq_view_page','1');
+            let navError=null;
+            try{
+              await page.goto(url.href,{waitUntil:'domcontentloaded',timeout:90000});
+              await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:30000}).catch(()=>{});
+              await page.waitForTimeout(handle==='footwear-gloves-eyewear'?5000:1800);
+            }catch(e){navError=String(e)}
+            const audit=await page.evaluate(()=>{
+              const main=document.querySelector('#MainContent');
+              const visible=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0};
+              const side=main?.querySelector('.sq-refine-v3-sidebar');
+              const results=main?.querySelector('.sq-refine-v3-results');
+              const grids=[...(main?.querySelectorAll('.product-grid')||[])].filter(visible);
+              const cards=[...(results?.querySelectorAll('.product-grid > *')||[])].filter(visible);
+              const summaries=[...(side?.querySelectorAll(':scope > details > summary')||[])].map(s=>s.textContent.replace(/\s+/g,' ').trim());
+              const next=results?.querySelector('.sq-refine-v3-pager a[href*="sq_view_page=2"]');
+              return {
+                ready:main?.dataset.sqRefineV3Ready||null,
+                singleGridMarker:main?.dataset.sqRefineV3SingleGridCertified||null,
+                paginationCertified:main?.dataset.sqRefineV3PaginationCertified||null,
+                paginationError:main?.dataset.sqRefineV3PaginationRepairError||null,
+                footwearReady:main?.dataset.sqFootwearColorReady||null,
+                footwearError:main?.dataset.sqFootwearColorError||null,
+                hasSide:!!side,hasResults:!!results,visibleGrids:grids.length,products:cards.length,summaries,
+                nextHref:next?.href||null
+              };
+            });
+            const row={handle,url:page.url(),navError,audit,errors};report.routes.push(row);
+            const fail=m=>report.failures.push(`${handle}: ${m}`);
+            if(navError)fail(`navigation failed: ${navError}`);
+            if(audit.ready!=='true')fail(`V3 not ready (${audit.ready})`);
+            if(!audit.hasSide)fail('sidebar missing');
+            if(!audit.hasResults)fail('results missing');
+            if(audit.products<1)fail('no visible products');
+            if(audit.visibleGrids!==1)fail(`expected one visible product grid, got ${audit.visibleGrids}`);
+            if(audit.singleGridMarker!=='true')fail(`single-grid guard did not certify (${audit.singleGridMarker})`);
+            if(audit.paginationError)fail(`pagination repair error: ${audit.paginationError}`);
+            if(handle==='footwear-gloves-eyewear'){
+              if(!audit.summaries.some(x=>/^Shop by Color \/ Pattern$/i.test(x)))fail(`Shop by Color / Pattern missing; groups=${audit.summaries.join(' | ')}`);
+              if(audit.footwearError)fail(`Footwear Color/Pattern error: ${audit.footwearError}`);
+            }
+            if(handle==='armed-forces-gear'){
+              const got=audit.summaries.map(x=>x.toLowerCase().replace(/^shop by\s+/,''));
+              const allowed=['branch','availability','type'];
+              if(got.length!==3||!allowed.every(x=>got.includes(x)))fail(`AFG filter policy wrong: ${audit.summaries.join(' | ')}`);
+            }
+            if(errors.length)fail(`${errors.length} browser error(s): ${errors.join(' || ')}`);
+            if(handle==='flashlights-lighting'){
+              const alt=new URL(`${base}${handle}`);alt.searchParams.set('preview_theme_id',theme);alt.searchParams.set('view','sq-refine-v3-products');alt.searchParams.set('page','2');
+              const altPage=await context.newPage();
+              await altPage.goto(alt.href,{waitUntil:'domcontentloaded',timeout:90000}).catch(()=>{});
+              await altPage.waitForTimeout(700);
+              const altCount=await altPage.locator('a[href*="/products/"]').evaluateAll(as=>new Set(as.map(a=>{try{return new URL(a.href).pathname}catch{return a.getAttribute('href')}})).size).catch(()=>0);
+              await altPage.close();
+              row.flashlightsAlternatePage2Products=altCount;
+              if(altCount>0&&!audit.nextHref)fail(`Shopify page 2 has ${altCount} products but V3 Next is missing`);
+              if(altCount===0&&audit.nextHref)fail('V3 Next exists but Shopify alternate page 2 is empty');
+              if(altCount>0&&audit.nextHref){
+                const p2=await context.newPage();await p2.goto(audit.nextHref,{waitUntil:'domcontentloaded',timeout:90000}).catch(()=>{});await p2.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:30000}).catch(()=>{});await p2.waitForTimeout(1200);
+                const p2audit=await p2.evaluate(()=>{const r=document.querySelector('.sq-refine-v3-results');const links=[...(r?.querySelectorAll('a[href*="/products/"]')||[])].map(a=>new URL(a.href,location.origin).pathname);return{count:new Set(links).size,previous:!!r?.querySelector('.sq-refine-v3-pager a[href*="sq_view_page=1"]'),url:location.href}});row.flashlightsPage2=p2audit;if(p2audit.count<1)fail('V3 Page 2 has no products');if(!p2audit.previous)fail('V3 Page 2 Previous link missing');await p2.close();
+              }
+            }
+            if(report.failures.some(f=>f.startsWith(`${handle}:`))||handle==='flashlights-lighting'||handle==='footwear-gloves-eyewear')await page.screenshot({path:`out/${handle}.png`,fullPage:true});
+            await page.close();
+          }
+          await context.close();await browser.close();
+          fs.writeFileSync('out/postdeploy-report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          if(report.failures.length)process.exitCode=2;
+          EOF
+          node postdeploy.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine-v3-shopify-postdeploy-cert
+          path: out
+          retention-days: 14

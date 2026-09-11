@@ -1,0 +1,43 @@
+name: Accessories V3 page-size certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/accessories-v3-page-size-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  page-sizes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify exact 100 and 250 product loads
+        run: |
+          cat > sizes.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          let failed=false;
+          async function check(target){
+            const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+            const u=`https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555&sq_per_page=${target}&sq_view_page=1`;
+            let r;for(let i=0;i<5;i++){r=await page.goto(u,{waitUntil:'domcontentloaded',timeout:90000});if(r?.status()===200)break;if(![429,500,502,503,504].includes(r?.status()||0))break;await sleep([5000,10000,15000,22000,30000][i])}
+            try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:45000})}catch{}
+            await page.waitForTimeout(target===250?8000:5000);
+            const d=await page.evaluate(target=>{const main=document.querySelector('#MainContent'),grid=main?.querySelector('.sq-refine-v3-results .product-grid'),side=main?.querySelector('.sq-refine-v3-sidebar');const cards=grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(x=>!!x.querySelector('a[href*="/products/"]')):[];const visible=cards.filter(el=>{const s=getComputedStyle(el),b=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&b.width>0&&b.height>0});return{ready:main?.dataset.sqRefineV3Ready==='true',error:main?.dataset.sqRefineV3Error||'',cards:cards.length,visibleCards:visible.length,checked:!!document.querySelector(`.sq-refine-v3-page-size input[value="${target}"]:checked`),sizes:[...document.querySelectorAll('.sq-refine-v3-page-size input')].map(i=>i.value),sidebarSticky:side?getComputedStyle(side).position:''}},target);
+            const ok=r?.status()===200&&errors.length===0&&d.ready&&!d.error&&d.cards===target&&d.visibleCards===target&&d.checked&&d.sizes.join(',')==='50,100,250'&&d.sidebarSticky==='sticky';
+            console.log('PAGE_SIZE_EXACT '+JSON.stringify({target,http:r?.status()||0,errors,d,ok}));if(!ok)failed=true;await page.close();
+          }
+          await check(100);await sleep(12000);await check(250);
+          await browser.close();if(failed)process.exit(1);
+          EOF
+          node sizes.mjs
+# focused rerun 2026-09-10

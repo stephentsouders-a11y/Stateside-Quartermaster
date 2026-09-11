@@ -1,0 +1,48 @@
+name: Refine V3 core interactions diagnostic
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-core-interactions-diagnostic.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  interaction:
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [native, pagesize, structural, mobile]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Run focused interaction
+        env:
+          CASE: ${{ matrix.case }}
+        run: |
+          cat > interaction.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const B='https://www.statesideqm.com',T='158561894555',K=process.env.CASE,sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const makeUrl=(path,extra={})=>{const u=new URL(path,B);u.searchParams.set('preview_theme_id',T);for(const[k,v] of Object.entries(extra))u.searchParams.set(k,String(v));return u.toString()};
+          const browser=await chromium.launch({headless:true});
+          async function ready(p,path,extra={}){let r;for(let a=0;a<4;a++){r=await p.goto(makeUrl(path,extra),{waitUntil:'domcontentloaded',timeout:70000}).catch(()=>null);if(r?.status()===200)break;await sleep(3500*(a+1))}if(r?.status()!==200)throw new Error('HTTP '+r?.status());await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});await p.waitForFunction(()=>[...document.querySelectorAll('.sq-refine-v3-results .product-grid')].some(g=>{const r=g.getBoundingClientRect(),s=getComputedStyle(g);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&g.querySelector('.product-grid__item a[href*="/products/"]')}),null,{timeout:12000}).catch(()=>{});await sleep(1200)}
+          if(K==='native'){
+            const c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage();await ready(p,'/collections/apparel');
+            const groups=p.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group');let input=null;
+            for(let i=0;i<await groups.count();i++){const g=groups.nth(i),label=(await g.locator(':scope > summary').innerText()).trim();if(/Shop by (Type|Manufacturers?)/i.test(label)){const q=g.locator('input[data-kind=native][data-filter-name][data-filter-value]:not(:checked)').first();if(await q.count()){if(await g.getAttribute('open')===null)await g.locator(':scope > summary').click();input=q;break}}}
+            if(!input)throw new Error('native filter missing');const d=await input.evaluate(i=>({name:i.dataset.filterName,value:i.dataset.filterValue,text:(i.closest('label')?.textContent||'').trim()}));const before=p.url();await input.evaluate(i=>i.click());await p.waitForFunction(b=>location.href!==b,before,{timeout:30000});await p.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});const q=new URL(p.url());if(!q.searchParams.getAll(d.name).includes(d.value))throw new Error('filter URL missing '+JSON.stringify(d)+' '+p.url());const checked=await p.locator(`.sq-refine-v3-sidebar input[data-kind=native][data-filter-name="${d.name}"][data-filter-value="${d.value}"]`).first().isChecked().catch(()=>false);if(!checked)throw new Error('filter did not persist');console.log('NATIVE PASS',JSON.stringify(d),p.url());await c.close();
+          } else if(K==='pagesize'){
+            const c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage();for(const n of [50,100,250]){await ready(p,'/collections/accessories-gifts-collectibles',{sq_per_page:n,sq_view_page:1});await sleep(n===250?3500:1500);const count=await p.locator('.sq-refine-v3-results .product-grid:visible .product-grid__item:visible').count();const checked=await p.locator(`.sq-refine-v3-page-size input[value="${n}"]`).isChecked();console.log('SIZE',n,count,checked);if(count!==n||!checked)throw new Error(`size ${n} count=${count} checked=${checked}`);await sleep(3000)}await c.close();
+          } else if(K==='structural'){
+            const c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage();await ready(p,'/collections/accessories-gifts-collectibles');const input=p.locator('.sq-refine-v3-sidebar input[data-kind=structural][data-target^="/collections/"]').first();if(!await input.count())throw new Error('structural missing');const g=input.locator('xpath=ancestor::details[1]');if(await g.getAttribute('open')===null)await g.locator(':scope > summary').click();const target=await input.getAttribute('data-target');const tu=new URL(target,B);if(tu.searchParams.get('sq_root')!=='accessories-gifts-collectibles')throw new Error('root missing '+target);const before=p.url();await input.evaluate(i=>i.click());await p.waitForFunction(b=>location.href!==b,before,{timeout:30000});await p.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});if(!p.url().includes('/collections/')||new URL(p.url()).searchParams.get('sq_root')!=='accessories-gifts-collectibles')throw new Error('bad structural destination '+p.url());await p.goBack({waitUntil:'domcontentloaded',timeout:70000});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});console.log('STRUCTURAL PASS',target);await c.close();
+          } else if(K==='mobile'){
+            const c=await browser.newContext({viewport:{width:390,height:844}}),p=await c.newPage();for(const path of ['/collections/accessories-gifts-collectibles','/collections/literature','/collections/products-built-for-the-line-u-s-navy']){await ready(p,path);const d=await p.evaluate(()=>{const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'};const s=[...document.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis),g=[...document.querySelectorAll('.sq-refine-v3-results .product-grid')].find(vis),cs=g?[...g.querySelectorAll(':scope > .product-grid__item')].filter(x=>vis(x)&&x.querySelector('a[href*="/products/"]')).slice(0,6):[],rs=cs.map(x=>x.getBoundingClientRect()),row=rs.length?rs.filter(x=>Math.abs(x.y-rs[0].y)<4).length:0;return{side:s.length,pos:s[0]?getComputedStyle(s[0]).position:'',cards:cs.length,row}});console.log('MOBILE',path,JSON.stringify(d));if(d.side!==1||d.pos==='sticky'||d.row!==2)throw new Error(path+' '+JSON.stringify(d));await sleep(2500)}await c.close();
+          }
+          await browser.close();
+          EOF
+          node interaction.mjs

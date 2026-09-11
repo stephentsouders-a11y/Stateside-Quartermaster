@@ -1,0 +1,88 @@
+name: Dive Scuba exhaustive Refine Chromium audit
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/dive-scuba-refine-exhaustive-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium Playwright
+        run: |
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Click every Dive Scuba Refine choice and audit results
+        run: |
+          mkdir -p out
+          cat > /tmp/dive-audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const BASE='https://www.statesideqm.com';
+          const THEME='158561894555';
+          const ROOT='/collections/dive-scuba';
+          const rootUrl=()=>`${BASE}${ROOT}?preview_theme_id=${THEME}&sq_per_page=250`;
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1000},recordVideo:{dir:'out/video',size:{width:1280,height:720}}});
+          const page=await ctx.newPage();
+          const pageErrors=[]; page.on('pageerror',e=>pageErrors.push(String(e)));
+          async function settle(){
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:45000});
+            await page.waitForFunction(()=>{const m=document.querySelector('#MainContent'); const s=m?.querySelector('.sq-refine-v3-sidebar'); if(!s)return false; const g=[...m.querySelectorAll('.sq-refine-v3-results .product-grid')].find(x=>getComputedStyle(x).display!=='none'); return !!g;},{},{timeout:45000});
+            await page.waitForTimeout(900);
+          }
+          async function goRoot(){await page.goto(rootUrl(),{waitUntil:'domcontentloaded',timeout:90000}); await settle();}
+          function clean(s){return String(s||'').replace(/\s+/g,' ').trim()}
+          async function snapshot(){return page.evaluate(()=>{const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0}; const m=document.querySelector('#MainContent'); const side=[...m.querySelectorAll('.sq-refine-v3-sidebar')].find(vis); const groups=side?[...side.querySelectorAll(':scope > details.sq-refine-v3-group')].map((d,gi)=>({groupIndex:gi,label:(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),choices:[...d.querySelectorAll('input[type=checkbox]')].map((i,ci)=>({choiceIndex:ci,label:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),kind:i.dataset.kind||'',target:i.dataset.target||'',filterName:i.dataset.filterName||i.name||'',filterValue:i.dataset.filterValue||i.value||''}))})):[]; const grids=[...m.querySelectorAll('.sq-refine-v3-results .product-grid')].filter(vis); const grid=grids.find(g=>g.classList.contains('sq-v3-authoritative-grid'))||grids[0]; const cards=grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(vis).map(c=>{const a=c.querySelector('a[href*="/products/"]'); const title=(c.querySelector('.card__heading,.card-information__text,h3,h2')?.textContent||a?.textContent||'').replace(/\s+/g,' ').trim(); return {title,href:a?.href||''}}).filter(x=>x.href):[]; const text=(m?.innerText||''); return {ready:m?.dataset.sqRefineV3Ready||'',error:m?.dataset.sqRefineV3Error||'',groups,visibleGrids:grids.length,cards,hasStateGuard:/state guard uniform builder|pt uniform checklist/i.test(text),url:location.href,title:document.title};});}
+          await goRoot();
+          const baseline=await snapshot();
+          fs.writeFileSync('out/baseline.json',JSON.stringify(baseline,null,2));
+          await page.screenshot({path:'out/baseline.png',fullPage:true});
+          const choices=[]; for(const g of baseline.groups)for(const c of g.choices)choices.push({...c,group:g.label,groupIndex:g.groupIndex});
+          const results=[];
+          for(let n=0;n<choices.length;n++){
+            const spec=choices[n]; let error=null,clicked=false;
+            try{
+              await goRoot();
+              const d=page.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group').nth(spec.groupIndex); await d.evaluate(el=>el.open=true);
+              const input=d.locator('input[type=checkbox]').nth(spec.choiceIndex); await input.scrollIntoViewIfNeeded();
+              const before=page.url();
+              await input.click({timeout:15000}); clicked=true;
+              await page.waitForTimeout(1200);
+              try{await settle()}catch{}
+              if(page.url()===before) await page.waitForTimeout(900);
+            }catch(e){error=String(e)}
+            let snap={}; try{snap=await snapshot()}catch(e){error=(error?error+' | ':'')+String(e)}
+            const selectedPath=(()=>{try{return new URL(snap.url||page.url()).pathname}catch{return''}})();
+            let targetPath=''; try{targetPath=spec.target?new URL(spec.target,BASE).pathname:''}catch{}
+            const errors=[]; if(error)errors.push(error); if(!clicked)errors.push('not clicked'); if(snap.error)errors.push('runtime '+snap.error); if(snap.visibleGrids!==1)errors.push('visible grids '+snap.visibleGrids); if(!snap.cards?.length)errors.push('no visible products'); if(snap.hasStateGuard)errors.push('State Guard contamination visible'); if(spec.kind==='structural'&&targetPath&&selectedPath!==targetPath)errors.push(`structural target mismatch ${selectedPath} != ${targetPath}`);
+            const row={index:n+1,total:choices.length,group:spec.group,label:spec.label,kind:spec.kind,target:spec.target,filterName:spec.filterName,filterValue:spec.filterValue,url:snap.url||page.url(),productCountVisible:snap.cards?.length||0,products:snap.cards||[],errors};
+            results.push(row); console.log(`${errors.length?'FAIL':'PASS'} ${n+1}/${choices.length} ${spec.group} > ${spec.label} products=${row.productCountVisible}${errors.length?' :: '+errors.join(' | '):''}`);
+            if(errors.length)try{await page.screenshot({path:`out/fail-${String(n+1).padStart(3,'0')}.png`,fullPage:true})}catch{}
+          }
+          const structural=results.filter(r=>r.kind==='structural');
+          const native=results.filter(r=>r.kind!=='structural');
+          const failures=results.filter(r=>r.errors.length);
+          const report={root:ROOT,theme:THEME,baseline:{groups:baseline.groups,hasStateGuard:baseline.hasStateGuard,visibleGrids:baseline.visibleGrids,cards:baseline.cards.length},choiceCount:choices.length,structuralCount:structural.length,nativeCount:native.length,pageErrors,failures:failures.map(x=>({index:x.index,group:x.group,label:x.label,errors:x.errors})),results};
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          fs.writeFileSync('out/summary.txt',`choices ${choices.length}\nstructural ${structural.length}\nnative ${native.length}\nbaseline_products ${baseline.cards.length}\nbaseline_state_guard_contamination ${baseline.hasStateGuard}\nfailures ${failures.length}\npage_errors ${pageErrors.length}\n`);
+          await ctx.close(); await browser.close();
+          if(failures.length||pageErrors.length)process.exitCode=2;
+          EOF
+          node /tmp/dive-audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dive-scuba-refine-exhaustive-0911
+          path: out
+          retention-days: 14

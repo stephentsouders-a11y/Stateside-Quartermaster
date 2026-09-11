@@ -1,0 +1,107 @@
+{% doc %}
+Keeps exactly one customer-visible Refine V3 product grid authoritative. Legacy-heavy roots can expose additional product surfaces after V3 is ready, including secondary grids inside the V3 results container. Some PBTL roots also retain hidden product-card state even after the authoritative grid itself is exposed. This guard copies cards only when needed, makes the authoritative V3 cards visible, and hides every other product-bearing grid. State Guard remains untouched.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<script data-sq-refine-v3-visible-grid-rescue>
+(function(){
+  const main=document.getElementById('MainContent');
+  if(!main)return;
+  const refineQuery=new URLSearchParams(location.search);
+  if((refineQuery.get('sq_root')||{{ collection.handle | json }})==='tactical-gear'&&refineQuery.has('sq_tactical_color'))return;
+  let scheduled=false;
+  function visible(el){
+    if(!el||!el.isConnected)return false;
+    const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+    return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0;
+  }
+  function cards(grid){
+    return grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(function(item){return item.querySelector('a[href*="/products/"]')}):[];
+  }
+  function productPaths(grid){
+    return new Set(cards(grid).map(function(card){
+      const a=card.querySelector('a[href*="/products/"]');
+      try{return new URL(a.href,location.href).pathname}catch(_){return a&&a.getAttribute('href')||''}
+    }).filter(Boolean));
+  }
+  function expose(node,stop){
+    for(let el=node;el&&el!==stop;el=el.parentElement){
+      el.hidden=false;
+      el.removeAttribute('aria-hidden');
+      if(el.classList&&el.classList.contains('product-grid'))el.style.setProperty('display','grid','important');
+      else el.style.setProperty('display','block','important');
+      el.style.setProperty('visibility','visible','important');
+      el.style.setProperty('opacity','1','important');
+    }
+  }
+  function exposeCards(grid){
+    cards(grid).forEach(function(card){
+      card.hidden=false;
+      card.removeAttribute('aria-hidden');
+      card.style.setProperty('display','block','important');
+      card.style.setProperty('visibility','visible','important');
+      card.style.setProperty('opacity','1','important');
+    });
+  }
+  function hideGrid(grid,authoritative){
+    if(!grid||grid===authoritative||authoritative.contains(grid)||grid.contains(authoritative))return;
+    if(!cards(grid).length)return;
+    const host=grid.closest('collection-component');
+    const authoritativeHost=authoritative.closest('collection-component');
+    let target=grid;
+    if(host&&main.contains(host)&&host!==authoritativeHost&&!host.contains(authoritative))target=host;
+    target.hidden=true;
+    target.setAttribute('aria-hidden','true');
+    target.setAttribute('data-sq-refine-v3-duplicate-surface','true');
+    target.style.setProperty('display','none','important');
+    target.style.setProperty('visibility','hidden','important');
+    target.style.setProperty('pointer-events','none','important');
+  }
+  function repair(){
+    scheduled=false;
+    if(main.dataset.sqK9ColorBusy==='true'||main.dataset.sqK9Surface==='true')return true;
+    if(main.dataset.sqRefineV3Ready!=='true')return false;
+    const results=main.querySelector('.sq-refine-v3-results');
+    if(!results)return false;
+    const resultGrids=[...results.querySelectorAll('.product-grid')];
+    let authoritative=resultGrids.find(function(g){return cards(g).some(visible)})||resultGrids.find(function(g){return cards(g).length>0})||null;
+    if(!authoritative){
+      const source=[...main.querySelectorAll('.product-grid')].find(function(g){return !results.contains(g)&&cards(g).length>0});
+      if(!source)return false;
+      authoritative=resultGrids[0];
+      if(!authoritative){
+        authoritative=document.createElement(source.tagName&&source.tagName.toLowerCase()==='ol'?'ol':'ul');
+        authoritative.className=source.className||'product-grid';
+        const control=results.querySelector('.sq-refine-v3-page-size');
+        if(control&&control.nextSibling)results.insertBefore(authoritative,control.nextSibling);else results.appendChild(authoritative);
+      }
+      const frag=document.createDocumentFragment();
+      cards(source).forEach(function(card){frag.appendChild(card.cloneNode(true))});
+      authoritative.replaceChildren(frag);
+    }
+    authoritative.classList.add('product-grid','sq-v3-authoritative-grid');
+    expose(authoritative,results);
+    exposeCards(authoritative);
+    [...main.querySelectorAll('.product-grid')].forEach(function(grid){hideGrid(grid,authoritative)});
+    main.dataset.sqRefineV3VisibleGridRescued='true';
+    main.dataset.sqRefineV3SingleProductSurface='true';
+    return visible(authoritative)&&cards(authoritative).some(visible);
+  }
+  function schedule(){if(scheduled)return;scheduled=true;requestAnimationFrame(repair)}
+  const observer=new MutationObserver(function(records){
+    for(const record of records){
+      if(record.type==='childList'&&record.addedNodes&&record.addedNodes.length){schedule();return}
+      if(record.type==='attributes'){
+        const target=record.target;
+        if(target&&target.nodeType===1&&target.closest&&target.closest('.sq-refine-v3-results,.product-grid,collection-component')){schedule();return}
+        if(record.attributeName==='data-sq-refine-v3-ready'){schedule();return}
+      }
+    }
+  });
+  observer.observe(main,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden','data-sq-refine-v3-ready']});
+  schedule();
+  document.addEventListener('DOMContentLoaded',schedule,{once:true});
+  window.addEventListener('load',schedule,{once:true});
+  [100,250,500,750,1000,1500,2000,3000,5000].forEach(function(ms){setTimeout(schedule,ms)});
+})();
+</script>
+{% endif %}

@@ -1,0 +1,89 @@
+{
+  "status": "FAIL",
+  "theme": "158561894555",
+  "publication": "UNPUBLISHED",
+  "sourceCommit": "9ed47d9e52357f9357adfb72d118d92b66baf143",
+  "started": "2026-09-11T20:09:45.142Z",
+  "checks": [],
+  "pageErrors": [],
+  "tests": [],
+  "browserVersion": "140.0.7339.16",
+  "groups": [
+    "Shop by Category",
+    "Shop by Type",
+    "Shop by Color / Pattern",
+    "Shop by Manufacturers",
+    "Availability"
+  ],
+  "mode": "tags-v3-native",
+  "options": [
+    {
+      "label": "Black",
+      "tag": "SQ Color/Pattern: Black",
+      "handle": "sq-color-pattern-black"
+    },
+    {
+      "label": "Blue",
+      "tag": "SQ Color/Pattern: Blue",
+      "handle": "sq-color-pattern-blue"
+    },
+    {
+      "label": "Brown / Tan",
+      "tag": "SQ Color/Pattern: Brown / Tan",
+      "handle": "sq-color-pattern-brown-tan"
+    },
+    {
+      "label": "Camouflage",
+      "tag": "SQ Color/Pattern: Camouflage",
+      "handle": "sq-color-pattern-camouflage"
+    },
+    {
+      "label": "Gray",
+      "tag": "SQ Color/Pattern: Gray",
+      "handle": "sq-color-pattern-gray"
+    },
+    {
+      "label": "Green",
+      "tag": "SQ Color/Pattern: Green",
+      "handle": "sq-color-pattern-green"
+    },
+    {
+      "label": "Orange",
+      "tag": "SQ Color/Pattern: Orange",
+      "handle": "sq-color-pattern-orange"
+    },
+    {
+      "label": "Other Color / Pattern",
+      "tag": "SQ Color/Pattern: Other Color / Pattern",
+      "handle": "sq-color-pattern-other-color-pattern"
+    },
+    {
+      "label": "Pink",
+      "tag": "SQ Color/Pattern: Pink",
+      "handle": "sq-color-pattern-pink"
+    },
+    {
+      "label": "Purple",
+      "tag": "SQ Color/Pattern: Purple",
+      "handle": "sq-color-pattern-purple"
+    },
+    {
+      "label": "Red",
+      "tag": "SQ Color/Pattern: Red",
+      "handle": "sq-color-pattern-red"
+    },
+    {
+      "label": "White",
+      "tag": "SQ Color/Pattern: White",
+      "handle": "sq-color-pattern-white"
+    },
+    {
+      "label": "Yellow / Gold",
+      "tag": "SQ Color/Pattern: Yellow / Gold",
+      "handle": "sq-color-pattern-yellow-gold"
+    }
+  ],
+  "failure": "AssertionError [ERR_ASSERTION]: Exact canonical options and order\n+ actual - expected\n... Skipped lines\n\n  [\n    'Black',\n    'Blue',\n    'Brown / Tan',\n    'Camouflage',\n...\n    'Orange',\n+   'Other Color / Pattern',\n    'Pink',\n+   'Purple',\n    'Red',\n    'White',\n+   'Yellow / Gold'\n  ]\n\n    at file:///tmp/morale-verify/test.mjs:50:10",
+  "failureUrl": "https://www.statesideqm.com/collections/morale-patches-tactical-id",
+  "finished": "2026-09-11T20:09:58.079Z"
+}

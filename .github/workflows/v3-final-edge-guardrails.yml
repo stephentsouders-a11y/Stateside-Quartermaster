@@ -1,0 +1,51 @@
+name: V3 final edge and guardrail certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/v3-final-edge-guardrails.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify Fire EMS SAR and frozen exceptions
+        run: |
+          cat > edge.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          async function gotoRetry(page,url){let r,attempt=0;for(let i=0;i<5;i++){attempt=i+1;r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});if(r?.status()===200)break;if(![429,500,502,503,504].includes(r?.status()||0))break;await sleep([5000,10000,15000,22000,30000][i])}return{r,attempt}}
+          async function fire(device,width,height,cols,sticky){
+            const page=await browser.newPage({viewport:{width,height}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+            const {r,attempt}=await gotoRetry(page,'https://www.statesideqm.com/collections/firefighting-ems-search-rescue?preview_theme_id=158561894555');
+            try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:45000})}catch{}
+            await page.waitForTimeout(4000);
+            const d=await page.evaluate(()=>{const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-refine-v3-sidebar'),grid=main?.querySelector('.sq-refine-v3-results .product-grid');const cards=grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(x=>!!x.querySelector('a[href*="/products/"]')):[];const rr=cards.slice(0,12).map(x=>{const r=x.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y)}}),y=rr[0]?.y,row=rr.filter(x=>Math.abs(x.y-y)<=3);return{ready:main?.dataset.sqRefineV3Ready==='true',error:main?.dataset.sqRefineV3Error||'',cards:cards.length,row:row.length,sidebar:!!side,sticky:side?getComputedStyle(side).position:'',legacyVisible:[...document.querySelectorAll('.sqbfl,.sq-refine-taxonomy-panel,.sq-collection-facet-sidebar')].filter(x=>{const s=getComputedStyle(x),r=x.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0}).length,isolation:document.querySelector('[data-sq-refine-v3-legacy-isolation]')?.getAttribute('data-sq-refine-v3-legacy-isolation')||''}});
+            const ok=r?.status()===200&&errors.length===0&&d.ready&&!d.error&&d.cards===50&&d.row===cols&&d.sidebar&&d.sticky===sticky&&d.legacyVisible===0&&d.isolation==='firefighting-ems-search-rescue';
+            console.log('FIRE_EMS_SAR '+JSON.stringify({device,http:r?.status()||0,attempt,errors,d,ok}));await page.close();return ok;
+          }
+          async function noV3(label,path){
+            const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+            const {r,attempt}=await gotoRetry(page,`https://www.statesideqm.com${path}${path.includes('?')?'&':'?'}preview_theme_id=158561894555`);await page.waitForTimeout(4000);
+            const d=await page.evaluate(()=>({v3Script:!!document.querySelector('script[data-sq-refine-v3-root],script[data-sq-refine-v3-legacy-isolation]'),sidebar:!!document.querySelector('.sq-refine-v3-sidebar'),active:document.querySelector('#MainContent')?.classList.contains('sq-refine-v3-active')||false,ready:document.querySelector('#MainContent')?.dataset.sqRefineV3Ready||'',title:document.title}));
+            const ok=r?.status()===200&&errors.length===0&&!d.v3Script&&!d.sidebar&&!d.active&&!d.ready;
+            console.log(label+' '+JSON.stringify({http:r?.status()||0,attempt,errors,d,ok}));await page.close();return ok;
+          }
+          const a=await fire('desktop',1440,1000,3,'sticky');await sleep(8000);
+          const b=await fire('mobile',390,844,2,'static');await sleep(8000);
+          const c=await noV3('STATE_GUARD_FROZEN','/collections/state-guard-series');await sleep(8000);
+          const d=await noV3('ARMORED_VEHICLES_EXCEPTION','/pages/armored-vehicles-purchase-inquiry');
+          await browser.close();if(!(a&&b&&c&&d))process.exit(1);
+          EOF
+          node edge.mjs

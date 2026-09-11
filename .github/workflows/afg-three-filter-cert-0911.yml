@@ -1,0 +1,63 @@
+name: AFG three-filter certification 0911
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/afg-three-filter-cert-0911.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Install Chromium tools
+        run: |
+          npm init -y >/dev/null
+          npm install playwright@1.55.0 agent-browser >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Strict Chromium certification
+        run: |
+          mkdir -p out
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const expected=['Shop by Branch','Availability','Type'];
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          const errors=[]; page.on('pageerror',e=>errors.push(String(e)));
+          const response=await page.goto('https://www.statesideqm.com/collections/armed-forces-gear?preview_theme_id=158561894555',{waitUntil:'domcontentloaded',timeout:90000});
+          await page.locator('.sq-refine-v3-sidebar').waitFor({timeout:60000});
+          await page.waitForFunction(()=>document.querySelector('.sq-refine-v3-sidebar')?.dataset.sqAfgThreeFilterLock==='true',{timeout:60000});
+          await page.waitForTimeout(2500);
+          const data=await page.evaluate(()=>({
+            url:location.href,
+            theme:window.Shopify?.theme,
+            ready:document.querySelector('#MainContent')?.dataset.sqRefineV3Ready,
+            lock:document.querySelector('.sq-refine-v3-sidebar')?.dataset.sqAfgThreeFilterLock,
+            groups:[...document.querySelectorAll('.sq-refine-v3-sidebar > details.sq-refine-v3-group')].map(d=>d.querySelector(':scope > summary')?.textContent.trim()),
+            choices:[...document.querySelectorAll('.sq-refine-v3-sidebar > details.sq-refine-v3-group')].map(d=>[...d.querySelectorAll('input[type="checkbox"]')].length),
+            products:document.querySelectorAll('.sq-refine-v3-results .product-grid > .product-grid__item').length,
+            extraHeadings:[...document.querySelectorAll('.sq-refine-v3-sidebar > details.sq-refine-v3-group')].map(d=>d.querySelector(':scope > summary')?.textContent.trim()).filter(x=>!['Shop by Branch','Availability','Type'].includes(x))
+          }));
+          data.status=response?.status(); data.errors=errors;
+          fs.writeFileSync('out/cert.json',JSON.stringify(data,null,2));
+          console.log('CERT_RESULT',JSON.stringify(data,null,2));
+          await page.locator('.sq-refine-v3-sidebar').screenshot({path:'out/sidebar.png'});
+          const ok=data.status===200&&JSON.stringify(data.groups)===JSON.stringify(expected)&&data.lock==='true'&&data.extraHeadings.length===0&&data.products>0&&errors.length===0;
+          await browser.close();
+          if(!ok) throw new Error('AFG strict certification failed: '+JSON.stringify(data));
+          EOF
+          node cert.mjs
+      - name: Agent-browser Chromium snapshot
+        run: |
+          CHROME=$(node -e "console.log(require('playwright').chromium.executablePath())")
+          npx agent-browser --executable-path "$CHROME" open 'https://www.statesideqm.com/collections/armed-forces-gear?preview_theme_id=158561894555'
+          npx agent-browser wait '.sq-refine-v3-sidebar'
+          npx agent-browser snapshot -s '.sq-refine-v3-sidebar' | tee out/agent-browser.txt
+          npx agent-browser close
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: afg-three-filter-cert-0911, path: out/, retention-days: 7}

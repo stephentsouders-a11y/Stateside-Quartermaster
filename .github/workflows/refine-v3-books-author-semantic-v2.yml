@@ -1,0 +1,34 @@
+name: Refine V3 Books author semantic V2
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-books-author-semantic-v2.yml']
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  books-author-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Test author result relevance
+        run: |
+          cat > test.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const base='https://www.statesideqm.com',theme='158561894555',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const browser=await chromium.launch({headless:true}),page=await browser.newPage({viewport:{width:1440,height:1000}});
+          async function open(url){let res;for(let i=0;i<5;i++){res=await page.goto(url,{waitUntil:'domcontentloaded',timeout:70000}).catch(()=>null);if(res?.status()===200)return;await sleep(2000*(i+1))}throw new Error('navigation failed '+res?.status())}
+          const root=new URL('/collections/literature',base);root.searchParams.set('preview_theme_id',theme);await open(root.toString());
+          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:60000});
+          await page.waitForFunction(()=>document.querySelectorAll('.sq-refine-v3-sidebar input[data-kind="author"]').length>0,null,{timeout:30000});
+          const authors=await page.locator('.sq-refine-v3-sidebar input[data-kind="author"]').evaluateAll(xs=>xs.slice(0,3).map(x=>({name:x.dataset.author,target:x.dataset.target})));
+          console.log('AUTHORS',JSON.stringify(authors));const failures=[];
+          for(const a of authors){const target=new URL(a.target,base);target.searchParams.set('preview_theme_id',theme);await open(target.toString());await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:60000});await sleep(3500);const state=await page.evaluate(()=>{const m=document.querySelector('#MainContent');const links=[...document.querySelectorAll('.sq-refine-v3-results .product-grid__item a[href*="/products/"]')].map(a=>a.href);return{err:m?.dataset.sqRefineV3AuthorError||'',links:[...new Set(links)].slice(0,3)}});if(state.err)failures.push(a.name+' feed '+state.err);if(!state.links.length){failures.push(a.name+' no products');continue}let matched=0;for(const href of state.links){await open(href);const text=(await page.locator('body').innerText()).toLowerCase().replace(/\s+/g,' ');if(text.includes(a.name.toLowerCase()))matched++}console.log('RESULT',a.name,matched+'/'+state.links.length);if(matched!==state.links.length)failures.push(a.name+' relevance '+matched+'/'+state.links.length)}
+          await browser.close();console.log('FAILURES',JSON.stringify(failures));if(failures.length)process.exit(1);console.log('BOOKS AUTHOR V2 GREEN');
+          EOF
+          node test.mjs

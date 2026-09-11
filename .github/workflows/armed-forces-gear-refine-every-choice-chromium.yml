@@ -1,0 +1,100 @@
+name: Armed Forces Gear Refine every-choice Chromium audit
+
+# certification revision: 20260911-afg-v4
+on:
+  push:
+    paths:
+      - '.github/workflows/armed-forces-gear-refine-every-choice-chromium.yml'
+      - 'snippets/sq-refine-v3.liquid'
+      - 'sections/sq-refine-v3-product-grid.liquid'
+      - 'snippets/sq-refine-v3-type-family-persistence.liquid'
+      - 'snippets/sq-refine-v3-sidebar-header-edge-fix.liquid'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  every-choice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify every Armed Forces Gear choice
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out/screens',{recursive:true});
+          const theme='158561894555';
+          const base=`https://www.statesideqm.com/collections/armed-forces-gear?preview_theme_id=${theme}&sq_per_page=50`;
+          const required=['Shop by Branch','Availability','Shop by Type'];
+          const report={base,startedAt:new Date().toISOString(),choices:[],failures:[],runtimeErrors:[]};
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage();
+          page.setDefaultTimeout(15000); page.setDefaultNavigationTimeout(45000);
+          page.on('pageerror',e=>report.runtimeErrors.push(String(e)));
+          const clean=s=>(s||'').replace(/\s+/g,' ').trim();
+          async function ready(){
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:20000});
+            await page.waitForFunction(()=>!location.search.includes('sq_type_family'),null,{timeout:10000}).catch(()=>{});
+            await page.waitForTimeout(500);
+          }
+          async function openBase(){
+            await page.waitForLoadState('domcontentloaded',{timeout:5000}).catch(()=>{});
+            const r=await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000});
+            if(!r||r.status()!==200)throw new Error(`Base HTTP ${r?.status()}`);
+            await ready();
+          }
+          async function state(){return page.evaluate(()=>{
+            const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-refine-v3-sidebar');
+            const clean=s=>(s||'').replace(/\s+/g,' ').trim();
+            const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};
+            const groups=[...(side?.querySelectorAll(':scope > details.sq-refine-v3-group')||[])].map(d=>clean(d.querySelector(':scope > summary')?.textContent));
+            const grids=[...main.querySelectorAll('.product-grid')].filter(vis).length;
+            const cards=[...main.querySelectorAll('.sq-refine-v3-results .product-grid > *')].filter(vis).length;
+            return {groups,grids,cards,typePersistence:main?.dataset.sqAfgTypePersistence||null,lock:side?.dataset.sqAfgThreeFilterLock||null};
+          })}
+          await openBase();
+          const initial=await state();
+          for(const g of required)if(!initial.groups.includes(g))report.failures.push(`initial missing ${g}`);
+          if(initial.groups.length!==3)report.failures.push(`initial expected 3 groups, got ${initial.groups.join(' | ')}`);
+          if(initial.grids!==1)report.failures.push(`initial visible grids ${initial.grids}`);
+          const inventory=await page.evaluate(()=>{
+            const clean=s=>(s||'').replace(/\s+/g,' ').trim(),side=document.querySelector('#MainContent .sq-refine-v3-sidebar');
+            return [...side.querySelectorAll(':scope > details.sq-refine-v3-group')].flatMap((d,gi)=>[...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>({gi,ii,group:clean(d.querySelector(':scope > summary')?.textContent),label:clean(i.closest('label')?.innerText),value:clean(i.dataset.sqPolishValue||i.dataset.filterValue||i.getAttribute('data-value')||((i.value||'').toLowerCase()==='on'?'':i.value)||i.closest('label')?.innerText),filterName:i.dataset.filterName||i.dataset.sqPolishParam||'',target:i.dataset.target||''})));
+          });
+          if(!inventory.length)report.failures.push('no choices found');
+          for(let n=0;n<inventory.length;n++){
+            const meta=inventory[n]; await openBase();
+            const d=page.locator('#MainContent details.sq-refine-v3-group').nth(meta.gi); if(!(await d.getAttribute('open')))await d.locator(':scope > summary').click();
+            const input=d.locator('input[type="checkbox"]').nth(meta.ii); const before=page.url(); let clickError=null;
+            try{await input.click({force:true});await page.waitForFunction(old=>location.href!==old,before,{timeout:7000}).catch(()=>{});await ready()}catch(e){clickError=String(e)}
+            const s=await state(); const u=new URL(page.url()); const errors=[];
+            if(clickError)errors.push(clickError); if(u.href===before)errors.push('URL did not change'); if(s.grids!==1)errors.push(`visible grids ${s.grids}`);
+            for(const g of required)if(!s.groups.includes(g))errors.push(`missing ${g}`); if(s.groups.length!==3)errors.push(`expected 3 groups, got ${s.groups.join(' | ')}`);
+            if(meta.group==='Shop by Type'&&!u.searchParams.getAll('filter.p.product_type').some(v=>clean(v)===clean(meta.value)))errors.push(`missing filter.p.product_type=${meta.value}`);
+            report.choices.push({...meta,url:u.href,state:s,errors});
+            if(errors.length){report.failures.push(`${meta.group} > ${meta.label}: ${errors.join('; ')}`);await page.screenshot({path:`out/screens/fail-${String(n+1).padStart(3,'0')}.png`,fullPage:true}).catch(()=>{})}
+            console.log(`AUDIT ${n+1}/${inventory.length} ${meta.group} > ${meta.label}: ${errors.length?'FAIL':'PASS'}`);
+          }
+          report.finishedAt=new Date().toISOString();
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          console.log('FINAL_REPORT '+JSON.stringify({choices:report.choices.length,failures:report.failures,runtimeErrors:report.runtimeErrors}));
+          await browser.close(); if(report.failures.length||report.runtimeErrors.length)process.exitCode=2;
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: armed-forces-gear-refine-every-choice-chromium
+          path: out
+          retention-days: 14

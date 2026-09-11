@@ -32,7 +32,7 @@
           {% assign sq_handle = sq_parts | last %}
           {% assign sq_collection = collections[sq_handle] %}
           {% assign sq_count = 0 %}
-          {% if sq_collection != blank %}{% assign sq_count = sq_collection.products_count %}{% endif %}
+          {% if sq_collection != blank %}{% assign sq_count = sq_collection.all_products_count %}{% endif %}
           <a class="sqhc-series-card" style="--bg:{{ p[4] }}" href="{{ p[0] }}" aria-label="Shop {{ p[1] | escape }} {{ p[2] | escape }}" data-sq-series-handle="{{ sq_handle | escape }}" data-sq-reactive-nav="true" data-sq-item-count="{{ sq_count }}">
             <span class="sqhc-series-logo"><img src="{{ p[3] }}" alt="{{ p[1] | escape }} {{ p[2] | escape }}" loading="lazy"></span>
             <span class="sqhc-series-title"><span>{{ p[1] }}</span><span>{{ p[2] }}</span></span>

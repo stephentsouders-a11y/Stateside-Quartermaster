@@ -1,0 +1,65 @@
+name: Thin Line first-paint audit
+on:
+  push:
+    paths:
+      - '.github/workflows/thin-line-first-paint-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium audit tools
+        run: |
+          npm install --no-save playwright@1.55.0 agent-browser
+          npx playwright install --with-deps chromium
+      - name: Capture source and actual first paint
+        run: |
+          mkdir -p out/source out/screens out/videos
+          cp -r snippets sections templates layout assets .github out/source/
+          npx agent-browser --session thin-line open https://www.statesideqm.com/collections/thin-line
+          npx agent-browser --session thin-line snapshot -i > out/agent-browser-snapshot.txt
+          npx agent-browser --session thin-line screenshot out/screens/agent-browser.png
+          npx agent-browser --session thin-line close
+          cat > thin-line-audit.mjs <<'JS'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          const browser=await chromium.launch({headless:true});
+          const report=[];
+          for(const [name,viewport,js] of [['desktop',{width:1440,height:1000},true],['mobile',{width:390,height:844},true],['no-js',{width:1440,height:1000},false]]){
+            const context=await browser.newContext({viewport,javaScriptEnabled:js,recordVideo:{dir:'out/videos',size:viewport}});
+            const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+            if(js)await page.addInitScript(()=>{
+              window.__firstPaint=[];let last='';
+              const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0'&&!!e.getClientRects().length};
+              function sample(){const main=document.querySelector('#MainContent');if(main){
+                const links=[...main.querySelectorAll('a[href*="/collections/"]')].filter(visible).map(e=>({text:e.textContent.trim().slice(0,100),class:e.className,parent:e.parentElement.className}));
+                const row={ready:main.dataset.sqRefineV3Ready||'',links,cards:main.querySelectorAll('.sq-refine-v3-results .product-grid__item').length,grids:[...main.querySelectorAll('.product-grid')].filter(visible).length,body:document.body.className};
+                const key=JSON.stringify(row);if(key!==last){window.__firstPaint.push({t:Math.round(performance.now()),...row});last=key;}
+              }if(performance.now()<15000)requestAnimationFrame(sample)}requestAnimationFrame(sample);
+            });
+            const response=await page.goto('https://www.statesideqm.com/collections/thin-line',{waitUntil:'domcontentloaded',timeout:90000});
+            if(name==='desktop')fs.writeFileSync('out/live-server.html',await response.text());
+            await page.screenshot({path:`out/screens/${name}-domcontentloaded.png`});
+            await page.waitForTimeout(1000);await page.screenshot({path:`out/screens/${name}-1s.png`});
+            await page.waitForTimeout(7000);await page.screenshot({path:`out/screens/${name}-final.png`,fullPage:true});
+            const state=await page.evaluate(()=>({theme:window.Shopify?.theme||null,main:document.querySelector('#MainContent')?.outerHTML,firstPaint:window.__firstPaint,groups:[...document.querySelectorAll('.sq-refine-v3-group>summary')].map(e=>e.textContent.trim()),styles:[...document.querySelectorAll('style')].filter(e=>/thin|sq-ts|refine-v3-first/.test(e.outerHTML)).map(e=>e.outerHTML)}));
+            fs.writeFileSync(`out/${name}-dom.html`,state.main||'');delete state.main;
+            report.push({name,status:response.status(),errors,...state});
+            const video=page.video();await page.close();await context.close();await video.saveAs(`out/videos/${name}.webm`);
+          }
+          await browser.close();fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report.map(({styles,...r})=>r),null,2));
+          JS
+          node thin-line-audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: thin-line-first-paint-audit
+          path: out
+          retention-days: 7

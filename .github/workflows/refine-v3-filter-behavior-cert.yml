@@ -1,0 +1,35 @@
+name: Refine V3 Type filter behavior certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-filter-behavior-cert.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  type-filter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Click and persist Shop by Type
+        run: |
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const B='https://www.statesideqm.com',T='158561894555',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const url=()=>{const u=new URL('/collections/apparel',B);u.searchParams.set('preview_theme_id',T);return u.toString()};
+          const browser=await chromium.launch({headless:true}),c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage();
+          let ready=false,r;for(let a=0;a<5;a++){r=await p.goto(url(),{waitUntil:'domcontentloaded',timeout:70000}).catch(()=>null);if(r?.status()===200){try{await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});ready=true;break}catch(_){}}console.log('RETRY ROOT',a+1,r?.status());await sleep(3000*(a+1))}if(!ready)throw new Error('Apparel root never reached V3 ready');
+          const visibleLinks=()=>p.locator('.sq-refine-v3-results .product-grid:visible .product-grid__item:visible a[href*="/products/"]').evaluateAll(as=>as.slice(0,20).map(a=>a.getAttribute('href')).filter(Boolean));
+          const beforeLinks=await visibleLinks();
+          const group=p.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group').filter({has:p.locator(':scope > summary',{hasText:/^Shop by Type$/})}).first();if(!await group.count())throw new Error('type group missing');if(await group.getAttribute('open')===null)await group.locator(':scope > summary').evaluate(e=>e.click());const input=group.locator('input[data-sq-polish-param][data-sq-polish-value]').first();if(!await input.count())throw new Error('synthetic type filter missing');const d=await input.evaluate(i=>({name:i.dataset.sqPolishParam,value:i.dataset.sqPolishValue,text:(i.closest('label')?.textContent||'').trim()}));const before=p.url();await input.evaluate(e=>e.click());await p.waitForFunction(b=>location.href!==b,before,{timeout:30000});await p.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});await sleep(1200);const q=new URL(p.url()),raw=q.searchParams.getAll(d.name).includes(d.value),family=q.searchParams.get('sq_type_family')===d.value;if(!raw&&!family)throw new Error('Type selection not represented in URL '+JSON.stringify(d)+' '+p.url());
+          const persisted=await p.locator('.sq-refine-v3-sidebar input').evaluateAll((els,x)=>els.some(i=>((i.dataset.sqPolishParam===x.name&&i.dataset.sqPolishValue===x.value)||(i.dataset.typeFamily===x.value)||(i.value===x.value&&/type/i.test(i.name||'')))&&i.checked),d);if(!persisted)throw new Error('Type selection did not persist checked '+JSON.stringify(d)+' '+p.url());
+          const afterLinks=await visibleLinks();if(!afterLinks.length)throw new Error('Type selection returned no visible products');if(beforeLinks.length&&afterLinks.length&&beforeLinks.slice(0,12).join('|')===afterLinks.slice(0,12).join('|'))throw new Error('Type selection did not change visible product set');
+          console.log('TYPE FILTER PASS',JSON.stringify(d),'mode='+(family?'family':'native'),'cards='+afterLinks.length,p.url());await c.close();await browser.close();
+          EOF
+          node cert.mjs

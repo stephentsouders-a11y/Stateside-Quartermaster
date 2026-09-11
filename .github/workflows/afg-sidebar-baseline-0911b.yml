@@ -1,0 +1,54 @@
+name: AFG sidebar baseline 0911b
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/afg-sidebar-baseline-0911b.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0 agent-browser
+          npx playwright install --with-deps chromium
+      - name: Capture live and draft sidebar
+        run: |
+          mkdir -p out
+          cat > inspect.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const browser=await chromium.launch({headless:true});
+          for(const [name,suffix] of [['live',''],['draft','?preview_theme_id=158561894555']]){
+            const context=await browser.newContext({viewport:{width:1440,height:1000}});
+            const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(String(e)));
+            try{
+              const response=await page.goto('https://www.statesideqm.com/collections/armed-forces-gear'+suffix,{waitUntil:'domcontentloaded',timeout:90000});
+              await page.waitForTimeout(6000);
+              const data=await page.evaluate(()=>({url:location.href,theme:window.Shopify?.theme,main:document.querySelector('#MainContent')?.dataset,groups:[...document.querySelectorAll('.sq-refine-v3-sidebar details')].map(d=>({title:d.querySelector('summary')?.textContent,choices:[...d.querySelectorAll('input')].map(i=>({label:i.closest('label')?.textContent,checked:i.checked,data:{...i.dataset}}))})),products:document.querySelectorAll('.sq-refine-v3-results .product-grid>.product-grid__item').length,sideHTML:document.querySelector('.sq-refine-v3-sidebar')?.outerHTML,structural:[...document.querySelectorAll('#MainContent a[href*="armed-forces-gear-u-s-"]')].map(a=>({text:a.textContent,url:a.href}))}));
+              data.status=response?.status();data.errors=errors;
+              fs.writeFileSync('out/'+name+'.json',JSON.stringify(data,null,2));
+              console.log('AFG_BASELINE_'+name,JSON.stringify(data));
+              const side=page.locator('.sq-refine-v3-sidebar');if(await side.count())await side.scrollIntoViewIfNeeded();
+              await page.screenshot({path:'out/'+name+'.png'});
+            }catch(e){console.log(name,String(e));fs.writeFileSync('out/'+name+'-error.txt',String(e));throw e}
+            finally{await context.close()}
+          }
+          await browser.close();
+          EOF
+          node inspect.mjs
+      - name: Agent browser Chromium snapshot
+        run: |
+          CHROME=$(node -e "console.log(require('playwright').chromium.executablePath())")
+          npx agent-browser --executable-path "$CHROME" open 'https://www.statesideqm.com/collections/armed-forces-gear?preview_theme_id=158561894555'
+          npx agent-browser wait '.sq-refine-v3-sidebar'
+          npx agent-browser snapshot -s '.sq-refine-v3-sidebar' | tee out/agent-browser.txt
+          npx agent-browser close
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: afg-sidebar-baseline-0911b, path: out/, retention-days: 7}

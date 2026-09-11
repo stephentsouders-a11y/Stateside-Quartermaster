@@ -1,0 +1,27 @@
+{% doc %}
+Literature-only cleanup after all V3 refinement builders run: keep exactly one Publisher disclosure, normalize Manufacturer/Publisher headings to singular, and remove duplicate identical refinement groups without changing their targets.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle == 'literature' %}
+<script data-sq-refine-v3-literature-dedupe>
+(function(){
+  var main=document.getElementById('MainContent');if(!main)return;
+  function clean(v){return String(v||'').replace(/\s+/g,' ').trim()}
+  function fix(){
+    var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;
+    var seen={};
+    [].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')).forEach(function(g){
+      var s=g.querySelector(':scope > summary');if(!s)return;
+      var label=clean(s.textContent);
+      if(/^Shop by Manufacturers$/i.test(label)){s.textContent='Shop by Manufacturer';label='Shop by Manufacturer'}
+      if(/^Shop by Publishers$/i.test(label)){s.textContent='Shop by Publisher';label='Shop by Publisher'}
+      if(label==='Shop by Publisher'){
+        if(seen.publisher){g.remove();return}
+        seen.publisher=g;
+      }
+    });
+    return true;
+  }
+  fix();setTimeout(fix,600);setTimeout(fix,1500);setTimeout(fix,3000);setTimeout(fix,5200);
+})();
+</script>
+{% endif %}

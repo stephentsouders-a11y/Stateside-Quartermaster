@@ -1,0 +1,79 @@
+name: Literature loop repair build
+on:
+  push:
+    paths: ['.github/workflows/literature-loop-repair-build.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Repair recursive Literature taxonomy and suppress legacy book grid
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('snippets/sq-refine-v3-release-taxonomy-cleanup.liquid');s=p.read_text()
+          def change(old,new):
+              global s
+              assert s.count(old)==1,(old,s.count(old))
+              s=s.replace(old,new)
+          if 'literature-taxonomy-stable-20260911' not in s:
+              change('<script data-sq-refine-v3-release-taxonomy-cleanup>','<script data-sq-refine-v3-release-taxonomy-cleanup data-revision="literature-taxonomy-stable-20260911">')
+              change("if(root==='state-guard-series')return;","if(root!=='literature'&&root!=='sta-brite-insignia')return;\n  var main=document.getElementById('MainContent'),observer=null,pending=0,applying=false;if(!main)return;")
+              change("function rebuild(side,title,rows){var d=detailsBy(side,title);if(!d)","function rebuild(side,title,rows){var d=detailsBy(side,title);if(d){var existing=Array.from(d.querySelectorAll(':scope > .sq-refine-v3-choices > .sq-refine-v3-choice'));var same=existing.length===rows.length&&existing.every(function(row,index){var input=row.querySelector('input'),span=row.querySelector('span');return input&&span&&clean(span.textContent)===rows[index][0]&&input.dataset.target===target(rows[index][1])});if(same&&clean(d.querySelector(':scope > summary').textContent)===title)return d}if(!d)")
+              change("function apply(){var side=document.querySelector('#MainContent .sq-refine-v3-sidebar');if(!side)return false;","function apply(){if(applying||main.dataset.sqRefineV3Ready!=='true')return false;var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;applying=true;if(observer)observer.disconnect();try{")
+              change("    return true\n  }","    return true\n    }finally{applying=false;if(observer)observer.observe(main,{subtree:true,childList:true,attributes:true,attributeFilter:['data-sq-refine-v3-ready']})}\n  }")
+              change("  var n=0,t=setInterval(function(){n++;if(apply()||n>120)clearInterval(t)},50);new MutationObserver(function(){apply()}).observe(document.getElementById('MainContent')||document.documentElement,{subtree:true,childList:true});","  function schedule(){clearTimeout(pending);pending=setTimeout(apply,40)}\n  if(root==='literature')window.__sqLiteratureTaxonomy={sync:apply};\n  var n=0,t=setInterval(function(){n++;if(apply()||n>120)clearInterval(t)},100);observer=new MutationObserver(schedule);observer.observe(main,{subtree:true,childList:true,attributes:true,attributeFilter:['data-sq-refine-v3-ready']});\n  window.addEventListener('pagehide',function(){clearInterval(t);clearTimeout(pending);observer.disconnect()});window.addEventListener('pageshow',schedule);")
+              p.write_text(s)
+          p=Path('snippets/sq-refine-v3-literature-author-filter.liquid');s=p.read_text()
+          if 'if(window.__sqLiteratureTaxonomy)' not in s:
+              assert s.count('function buildLiteratureNav(side){')==1
+              s=s.replace('function buildLiteratureNav(side){','function buildLiteratureNav(side){if(window.__sqLiteratureTaxonomy){window.__sqLiteratureTaxonomy.sync();return}')
+              p.write_text(s)
+          p=Path('snippets/sq-refine-v3-legacy-isolation.liquid');s=p.read_text()
+          if 'data-sq-literature-v3-prepaint' not in s:
+              s+='\n{% if request.page_type == \'collection\' and collection.handle == \'literature\' %}\n<style data-sq-literature-v3-prepaint>\n#MainContent .sq-books-tree{display:none!important;visibility:hidden!important}\n</style>\n{% endif %}\n'
+              p.write_text(s)
+          PY
+      - name: Validate changed JavaScript and create checksums
+        run: |
+          mkdir -p out
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,subprocess,json,hashlib
+          files=['sq-refine-v3-release-taxonomy-cleanup.liquid','sq-refine-v3-literature-author-filter.liquid','sq-refine-v3-legacy-isolation.liquid'];results=[]
+          for f in files:
+              p=Path('snippets')/f;s=p.read_text()
+              for i,js in enumerate(re.findall(r'<script[^>]*>(.*?)</script>',s,re.S)):
+                  q=Path('out')/(f+str(i)+'.js');q.write_text(js)
+                  result=subprocess.run(['node','--check',str(q)],capture_output=True,text=True)
+                  assert result.returncode==0,result.stderr
+              results.append({'filename':str(p),'md5':hashlib.md5(p.read_bytes()).hexdigest(),'javascriptSyntax':'passed'})
+              (Path('out')/f).write_text(s)
+          Path('out/validation.json').write_text(json.dumps(results,indent=2));print(json.dumps(results))
+          PY
+      - name: Commit only the three repaired theme files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-refine-v3-release-taxonomy-cleanup.liquid snippets/sq-refine-v3-literature-author-filter.liquid snippets/sq-refine-v3-legacy-isolation.liquid
+          if ! git diff --cached --quiet; then
+            git commit -m 'Fix Literature infinite taxonomy observer loop and hide obsolete book grid before paint'
+            git pull --rebase origin refine-restart-v3
+            git push origin HEAD:refine-restart-v3
+          fi
+          git rev-parse HEAD | tee out/source-commit.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: literature-loop-repair-source
+          path: out
+          retention-days: 7

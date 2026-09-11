@@ -1,0 +1,50 @@
+name: Patch Refine V3 first-page fast path
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/patch-refine-v3-fastpath.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+      - name: Patch current V3 without dropping ANG parity logic
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const f='snippets/sq-refine-v3.liquid';
+          let s=fs.readFileSync(f,'utf8');
+          if(!s.includes("function productSourcePath(){return currentHandle==='air-national-guard-series'?'/collections/products-built-for-the-line-u-s-air-force':location.pathname}")) throw new Error('current Air National Guard parity source logic missing; refusing overwrite');
+          const a="need=offset+target+1,cards=[],p=startPage;while(cards.length<need&&p<startPage+8){";
+          const b="need=offset+target+1,cards=[],p=startPage,nativeNext=!!productHost.querySelector('a[rel=\"next\"],pagination-component a[href*=\"page=2\"],.pagination a[href*=\"page=2\"],.pagination__item--next a');if(!(target===50&&view===1&&offset===0&&live.cards.length)){while(cards.length<need&&p<startPage+8){";
+          if(!s.includes(a)) throw new Error('assembleProducts start signature not found');
+          s=s.replace(a,b);
+          const c="p++}var sliced=cards.slice(offset,offset+target),hasNext=cards.length>offset+target;";
+          const d="p++}}else{cards=live.cards.slice();}var sliced=cards.slice(offset,offset+target),hasNext=(target===50&&view===1&&offset===0)?nativeNext:cards.length>offset+target;";
+          if(!s.includes(c)) throw new Error('assembleProducts end signature not found');
+          s=s.replace(c,d);
+          const e="try{return new DOMParser().parseFromString(await fetchText(u.pathname+'?'+u.searchParams.toString(),3),'text/html')}catch(_){return document}";
+          const g="return new DOMParser().parseFromString(await fetchText(u.pathname+'?'+u.searchParams.toString(),5),'text/html')";
+          if(!s.includes(e)) throw new Error('rootDocument fallback signature not found');
+          s=s.replace(e,g);
+          fs.writeFileSync(f,s);
+          NODE
+          grep -q "function productSourcePath(){return currentHandle==='air-national-guard-series'?'/collections/products-built-for-the-line-u-s-air-force':location.pathname}" snippets/sq-refine-v3.liquid
+          grep -q "target===50&&view===1&&offset===0" snippets/sq-refine-v3.liquid
+          grep -q "fetchText(u.pathname+'?'+u.searchParams.toString(),5)" snippets/sq-refine-v3.liquid
+      - name: Commit storefront source patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-refine-v3.liquid
+          git commit -m 'speed first 50 and harden nested taxonomy fetch'
+          git push origin HEAD:refine-restart-v3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patched-refine-v3-snippet
+          path: snippets/sq-refine-v3.liquid
+          retention-days: 2

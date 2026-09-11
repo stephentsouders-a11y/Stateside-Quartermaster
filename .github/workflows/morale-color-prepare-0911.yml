@@ -1,0 +1,65 @@
+name: Prepare morale color filter
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/morale-color-prepare-0911.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Search Shopify Liquid documentation
+        run: |
+          mkdir -p /tmp/morale-tools out
+          curl -fsSL https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/search_docs.mjs -o /tmp/morale-tools/search_docs.mjs
+          curl -fsSL https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/validate.mjs -o /tmp/morale-tools/validate.mjs
+          test "$(git hash-object /tmp/morale-tools/search_docs.mjs)" = 0ead0defd6d82a3bbb2cdee32296ad1f0a9a05a2
+          test "$(git hash-object /tmp/morale-tools/validate.mjs)" = 8f4a334f10093be5e8e05cb75864c00d3f6ac26b
+          node /tmp/morale-tools/search_docs.mjs 'collection all_tags storefront filtering product tags' --model gpt-6-astra-pro --client-name ChatGPT --client-version '2026-09-11' > out/docs-search.txt
+      - name: Validate new Liquid snippet
+        run: |
+          cd /tmp/morale-tools
+          npm init -y >/dev/null
+          npm install @shopify/theme-check-common @shopify/theme-check-docs-updater @shopify/theme-check-node >/dev/null
+          cd "$GITHUB_WORKSPACE"
+          node /tmp/morale-tools/validate.mjs --filename sq-refine-v3-morale-color-pattern.liquid --filetype snippets --file snippets/sq-refine-v3-morale-color-pattern.liquid --model gpt-6-astra-pro --client-name ChatGPT --client-version '2026-09-11' --artifact-id morale-color-pattern-0911 --revision 1 --json > out/validation.json
+      - name: Connect filter with deployment checksum protection
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),vm=require('vm');
+          const file='snippets/sq-refine-v3-sidebar-polish.liquid';
+          let text=fs.readFileSync(file,'utf8');
+          const md5=s=>crypto.createHash('md5').update(s).digest('hex');
+          const before=md5(text);
+          if(before!=='8eb78232efa028ba6f8c1b52bb176069')throw new Error('GitHub source does not match inspected Shopify draft; refusing stale replacement: '+before);
+          const render="{% render 'sq-refine-v3-morale-color-pattern' %}";
+          if(!text.includes(render))text+='\n'+render+'\n';
+          fs.writeFileSync(file,text);
+          const snippet=fs.readFileSync('snippets/sq-refine-v3-morale-color-pattern.liquid','utf8');
+          for(const m of snippet.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)){if(!m[1].includes('application/json'))new vm.Script(m[2]);}
+          const result={status:'PASS',theme:'158561894555',role:'UNPUBLISHED',sourceChecksumBefore:before,sourceChecksumAfter:md5(text),snippetChecksum:md5(snippet),javascriptParse:true,liquidValidation:JSON.parse(fs.readFileSync('out/validation.json','utf8')),timestamp:new Date().toISOString()};
+          fs.mkdirSync('.github/audits',{recursive:true});
+          fs.writeFileSync('.github/audits/morale-color-build.json',JSON.stringify(result,null,2));
+          console.log(JSON.stringify(result,null,2));
+          NODE
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-refine-v3-sidebar-polish.liquid .github/audits/morale-color-build.json
+          git commit -m 'Connect validated morale color filter to existing sidebar entrypoint'
+          git pull --rebase origin refine-restart-v3
+          git push origin HEAD:refine-restart-v3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: morale-color-preparation
+          path: out
+          retention-days: 7

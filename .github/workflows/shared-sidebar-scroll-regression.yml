@@ -1,0 +1,119 @@
+name: Shared sidebar scroll regression
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/shared-sidebar-scroll-regression.yml'
+      - 'snippets/sq-refine-v3-sidebar-header-edge-fix.liquid'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shared-sidebar-scroll-regression
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Install Chromium tools
+        run: |
+          npm install --no-save playwright@1.55.0 pngjs@7.0.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Check all shared sidebars without modifying storefront data
+        run: |
+          mkdir -p out
+          cat > shared-sidebar-audit.mjs <<'EOF'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          import {chromium} from 'playwright';
+          import {PNG} from 'pngjs';
+          const theme=158561894555;
+          const source=fs.readFileSync('snippets/sq-refine-v3-sidebar-header-edge-fix.liquid','utf8');
+          const sourceChecks={whiteScrollport:/background-color:#fff!important/.test(source),removedOverlay:/content:none!important;\s*display:none!important/.test(source),sharedCollectionScope:source.includes("request.page_type == 'collection' and collection.handle != 'state-guard-series'"),completeLiquid:source.startsWith('{% doc %}')&&source.trimEnd().endsWith('{% endif %}'),md5:crypto.createHash('md5').update(source).digest('hex')};
+          const roots=['accessories-gifts-collectibles','airsoft-milsim','apparel','armed-forces-gear','art','body-armor-ballistic-protection','literature','child-safety-shop','dive-scuba','firearm-accessories','first-aid-medical-ifak','flags-patriotic-decor','flashlights-lighting','footwear-gloves-eyewear','k9-dog-gear','knives-axes-cutlery','morale-patches-tactical-id','outdoor-preparedness-gear','patriotic-american-heritage','safety-rescue-climbing','sta-brite-insignia','tactical-gear','thin-line','uniforms','watches','zippos-lighters-torches','stateside-quartermaster-logo-merch','army-national-guard-series','air-national-guard-series','products-built-for-the-line-u-s-army','products-built-for-the-line-u-s-navy','products-built-for-the-line-u-s-air-force','products-built-for-the-line-u-s-marine-corps','products-built-for-the-line-u-s-coast-guard','products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series','military-schools-academies','law-enforcement-corrections','firefighting-ems-search-rescue'];
+          const mobile=['flags-patriotic-decor','accessories-gifts-collectibles','literature','tactical-gear','products-built-for-the-line-u-s-navy','firearm-accessories','uniforms','thin-line'];
+          const jobs=[...roots.map(handle=>({handle,width:1366,height:768})),...mobile.map(handle=>({handle,width:390,height:844})),{handle:'flags-patriotic-decor',width:1440,height:1000}];
+          const report={timestamp:new Date().toISOString(),commit:process.env.GITHUB_SHA,theme,sourceChecks,disclosureInteraction:'Keyboard Enter on focused native summary; avoids Shopify preview-toolbar pointer interception without hiding storefront elements',results:[],controls:[]};
+          const browser=await chromium.launch({headless:true});
+          report.browser=browser.version();
+          function writeReport(){fs.writeFileSync('out/report.json',JSON.stringify(report,null,2))}
+          async function nav(p,u){let failure;for(let i=0;i<3;i++){try{const res=await p.goto(u,{waitUntil:'domcontentloaded',timeout:60000});if(res?.status()===200)return 200;failure=new Error('HTTP '+res?.status());if(![429,500,502,503,504].includes(res?.status()))throw failure;}catch(e){failure=e;}await p.waitForTimeout(2000*(i+1));}throw failure}
+          async function check(job){
+            const tag=job.handle+'-'+job.width;
+            const video=job.handle==='flags-patriotic-decor';
+            const ctx=await browser.newContext({viewport:{width:job.width,height:job.height},...(video?{recordVideo:{dir:'out/videos',size:{width:job.width,height:job.height}}}:{})});
+            const p=await ctx.newPage();p.setDefaultTimeout(12000);
+            const r={...job,states:[],errors:[],passed:false};
+            p.on('pageerror',e=>r.errors.push(String(e)));
+            try{
+              r.status=await nav(p,`https://www.statesideqm.com/collections/${job.handle}?preview_theme_id=${theme}`);
+              await p.locator('#MainContent .sq-refine-v3-sidebar').waitFor({state:'visible',timeout:45000});
+              await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});
+              await p.waitForTimeout(1200);
+              r.actualTheme=await p.evaluate(()=>window.Shopify?.theme);
+              if(r.actualTheme?.id!==theme)throw new Error('Wrong theme');
+              r.finalUrl=p.url();
+              const side=p.locator('#MainContent .sq-refine-v3-sidebar');
+              if(await side.count()!==1)throw new Error('Expected exactly one V3 sidebar');
+              await side.scrollIntoViewIfNeeded();
+              async function snap(label){
+                const s=await side.evaluate(e=>{const c=getComputedStyle(e),b=getComputedStyle(e,'::before'),r=e.getBoundingClientRect(),t=e.querySelector('.sq-refine-v3-sidebar__title'),tr=t?.getBoundingClientRect();return {scrollTop:e.scrollTop,maxScroll:e.scrollHeight-e.clientHeight,pageY:window.scrollY,background:c.backgroundColor,before:b.content,position:c.position,rect:{x:r.x,y:r.y,width:r.width,height:r.height},title:tr?{text:t.textContent.trim(),background:getComputedStyle(t).backgroundColor,x:tr.x,y:tr.y,width:tr.width,height:tr.height}:null};});
+                s.label=label;
+                const png=PNG.sync.read(await p.screenshot({path:`out/${tag}-${label}.png`}));
+                const left=Math.ceil(s.rect.x+4),right=Math.floor(s.rect.x+s.rect.width-5);
+                const lo=Math.ceil(Math.max(0,s.rect.y+52)),hi=Math.floor(Math.min(png.height-1,s.rect.y+s.rect.height-10));
+                s.bodyPixels=[];
+                if(hi>lo){for(const x of [left,right]){for(const ratio of [.2,.5,.8]){const y=Math.round(lo+(hi-lo)*ratio),i=(y*png.width+x)*4;if(x>=0&&x<png.width)s.bodyPixels.push({x,y,rgb:Array.from(png.data.subarray(i,i+3))});}}}
+                s.colorsPass=s.background==='rgb(255, 255, 255)'&&s.before==='none'&&s.title?.background==='rgb(8, 40, 63)'&&Math.abs(s.title.width-(s.rect.width-2))<=3&&s.bodyPixels.length===6&&s.bodyPixels.every(v=>v.rgb.every(c=>c===255));
+                r.states.push(s);
+              }
+              await snap('collapsed');
+              const groups=side.locator(':scope > details');
+              r.groups=await groups.locator(':scope > summary').allTextContents();
+              for(let i=0;i<await groups.count();i++){
+                const d=groups.nth(i);if(!await d.isVisible())continue;
+                if(!await d.evaluate(e=>e.open)){
+                  await d.locator(':scope > summary').focus();
+                  await p.keyboard.press('Enter');
+                  await p.waitForTimeout(80);
+                  if(!await d.evaluate(e=>e.open))throw new Error('Disclosure did not open via keyboard: '+await d.locator(':scope > summary').textContent());
+                }
+              }
+              await p.waitForTimeout(350);
+              async function move(ratio){await side.evaluate((e,arg)=>{if(arg.desktop)e.scrollTop=(e.scrollHeight-e.clientHeight)*arg.ratio;else{const r=e.getBoundingClientRect();window.scrollBy({top:r.top-18+Math.max(0,r.height-innerHeight+36)*arg.ratio,behavior:'instant'});}},{desktop:job.width>900,ratio});await p.waitForTimeout(200)}
+              if(job.width>900)await side.scrollIntoViewIfNeeded();
+              for(const [label,ratio] of [['top',0],['middle',.5],['bottom',1],['return',0]]){await move(ratio);await snap(label)}
+              r.overflowAvailable=r.states.some(s=>s.maxScroll>0);
+              r.internalScrollTested=r.states.some(s=>s.scrollTop>0);
+              r.pageScrollTested=Math.max(...r.states.map(s=>s.pageY))-Math.min(...r.states.map(s=>s.pageY))>100;
+              r.scrollingAppropriate=job.width>900?(!r.overflowAvailable||r.internalScrollTested):(r.states.some(s=>s.rect.height>job.height)?r.pageScrollTested:true);
+              r.passed=r.states.length===5&&r.states.every(s=>s.colorsPass)&&r.scrollingAppropriate;
+              if(!r.passed)r.failure='Color/width/scroll assertion failed';
+            }catch(e){r.failure=String(e);await p.screenshot({path:`out/${tag}-error.png`}).catch(()=>{});}
+            await ctx.close();report.results.push(r);writeReport();
+            console.log('SIDEBAR_CASE',JSON.stringify({handle:r.handle,width:r.width,passed:r.passed,states:r.states.length,internalScrollTested:r.internalScrollTested,pageScrollTested:r.pageScrollTested,errors:r.errors,failure:r.failure}));
+          }
+          let cursor=0;
+          await Promise.all(Array.from({length:3},async()=>{while(cursor<jobs.length){const j=jobs[cursor++];await check(j);}}));
+          for(const [name,path,preview] of [['live-flags','/collections/flags-patriotic-decor',false],['state-guard-exclusion','/collections/state-guard-series',true],['armored-vehicles-exclusion','/pages/armored-vehicles-purchase-inquiry',true]]){
+            const ctx=await browser.newContext({viewport:{width:1366,height:768}}),p=await ctx.newPage();const c={name,path};
+            try{c.status=await nav(p,'https://www.statesideqm.com'+path+(preview?'?preview_theme_id='+theme:''));await p.waitForTimeout(2000);Object.assign(c,await p.evaluate(()=>({theme:window.Shopify?.theme,v3Sidebar:!!document.querySelector('.sq-refine-v3-sidebar'),sharedStyle:!!document.querySelector('[data-sq-refine-v3-header-edge-fix]')})));await p.screenshot({path:`out/control-${name}.png`});}catch(e){c.failure=String(e)}
+            report.controls.push(c);await ctx.close();
+          }
+          await browser.close();
+          report.summary={total:report.results.length,passed:report.results.filter(r=>r.passed).length,desktopTotal:report.results.filter(r=>r.width>900).length,mobileTotal:report.results.filter(r=>r.width<=900).length,failures:report.results.filter(r=>!r.passed).map(r=>({handle:r.handle,width:r.width,failure:r.failure})),controls:report.controls};
+          writeReport();console.log('SHARED_SIDEBAR_SUMMARY',JSON.stringify(report.summary));
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'## Shared sidebar scrolling audit\n\n```json\n'+JSON.stringify(report.summary,null,2)+'\n```\n');
+          if(report.summary.failures.length||!sourceChecks.whiteScrollport||!sourceChecks.removedOverlay||!sourceChecks.sharedCollectionScope||!sourceChecks.completeLiquid)process.exitCode=1;
+          EOF
+          node shared-sidebar-audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shared-sidebar-scroll-evidence
+          path: out
+          retention-days: 14

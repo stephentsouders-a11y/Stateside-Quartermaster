@@ -1,0 +1,52 @@
+{% doc %}
+Sitewide Refine V3 product-grid guard.
+Once the V3 results surface is ready, keep exactly one visible product grid: the grid
+inside .sq-refine-v3-results. This prevents legacy/fallback collection grids from
+reappearing after V3 initialization on desktop or mobile. State Guard is excluded.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<script data-sq-refine-v3-single-grid-guard data-revision="sitewide-20260911-v1">
+(function(){
+  if(window.__sqRefineV3SingleGridGuard)return;
+  window.__sqRefineV3SingleGridGuard=true;
+  var ROOTS=new Set(['accessories-gifts-collectibles','airsoft-milsim','apparel','armed-forces-gear','art','body-armor-ballistic-protection','literature','child-safety-shop','dive-scuba','firearm-accessories','first-aid-medical-ifak','flags-patriotic-decor','flashlights-lighting','footwear-gloves-eyewear','k9-dog-gear','knives-axes-cutlery','morale-patches-tactical-id','outdoor-preparedness-gear','patriotic-american-heritage','safety-rescue-climbing','sta-brite-insignia','tactical-gear','thin-line','uniforms','watches','zippos-lighters-torches','stateside-quartermaster-logo-merch','army-national-guard-series','air-national-guard-series','products-built-for-the-line-u-s-army','products-built-for-the-line-u-s-navy','products-built-for-the-line-u-s-air-force','products-built-for-the-line-u-s-marine-corps','products-built-for-the-line-u-s-coast-guard','products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series','military-schools-academies','law-enforcement-corrections','firefighting-ems-search-rescue']);
+  var q=new URLSearchParams(location.search),current={{ collection.handle | json }},root=q.get('sq_root')||current;
+  if(!ROOTS.has(root))return;
+  var main=document.getElementById('MainContent');
+  if(!main)return;
+  function productKey(card){
+    var a=card&&card.querySelector&&card.querySelector('a[href*="/products/"]');
+    if(!a)return'';
+    try{return new URL(a.href,location.origin).pathname}catch(_){return a.getAttribute('href')||''}
+  }
+  function apply(){
+    if(main.dataset.sqRefineV3Ready!=='true')return false;
+    var results=main.querySelector('.sq-refine-v3-results');
+    var primary=results&&results.querySelector('.product-grid');
+    if(!results||!primary)return false;
+    main.querySelectorAll('.product-grid').forEach(function(grid){
+      if(grid===primary)return;
+      grid.dataset.sqRefineV3DuplicateGrid='true';
+      grid.setAttribute('aria-hidden','true');
+      grid.style.setProperty('display','none','important');
+    });
+    var seen=new Set();
+    Array.from(primary.children).forEach(function(card){
+      var key=productKey(card);if(!key)return;
+      if(seen.has(key))card.remove();else seen.add(key);
+    });
+    main.dataset.sqRefineV3SingleGridCertified='true';
+    return true;
+  }
+  var pending=false;
+  function schedule(){if(pending)return;pending=true;requestAnimationFrame(function(){pending=false;apply()})}
+  if(apply())schedule();
+  var mo=new MutationObserver(schedule);
+  mo.observe(main,{childList:true,subtree:true,attributes:true,attributeFilter:['data-sq-refine-v3-ready','class','style']});
+  [100,300,750,1500,3000,6000,10000].forEach(function(ms){setTimeout(schedule,ms)});
+  setTimeout(function(){apply();mo.disconnect()},15000);
+  window.addEventListener('pageshow',schedule);
+})();
+</script>
+{% endif %}
+{% comment %}Post-deploy Chromium certification trigger 2026-09-11.{% endcomment %}

@@ -1,0 +1,109 @@
+name: Thin Line evidence and template validation gate
+on:
+  push:
+    paths:
+      - '.github/workflows/thin-line-evidence-validation-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OPT_OUT_INSTRUMENTATION: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install official Shopify validation
+        run: |
+          mkdir -p out/validation out/source validation-tools validation-context/sections validation-context/templates
+          npm install --no-save @shopify/theme-check-common @shopify/theme-check-node @shopify/theme-check-docs-updater
+          curl --fail --retry 3 -L https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/search_docs.mjs -o validation-tools/search_docs.mjs
+          curl --fail --retry 3 -L https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/validate.mjs -o validation-tools/validate.mjs
+      - name: Search template validation requirements
+        run: node validation-tools/search_docs.mjs 'JSON template section type existing section file' --model 'GPT-6 Astra Pro' --client-name ChatGPT --client-version 1 > out/validation/documentation.txt
+      - name: Build exact section context from deployed source
+        run: |
+          cp sections/sq-thin-line-loading-space.liquid sections/sq-thin-stabrite-subcategories.liquid sections/sq-thin-stabrite-type-browser.liquid validation-context/sections/
+          cp templates/collection.thin-stabrite-parent.json validation-context/templates/
+          cat > validation-context/sections/vac-collection-manufacturers.liquid <<'LIQUID'
+          {% liquid
+            assign sq_maker_active = false
+            assign sq_maker_count = 0
+            if request.page_type == 'collection' and collection != blank
+              assign sq_maker_count = collection.all_vendors.size
+              if sq_maker_count > 0
+                assign sq_maker_active = true
+              endif
+            endif
+            assign sq_maker_path = request.path | default: collection.url
+            assign sq_makers = collection.all_vendors | sort_natural
+          %}
+          {% if sq_maker_active %}
+          <section class="sq-maker-browser" data-sq-maker-browser><div class="sq-maker-browser__wrap"><p class="sq-maker-browser__kicker">Stateside Quartermaster</p><h2>Shop by Manufacturer</h2><p class="sq-maker-browser__intro">Choose a manufacturer to narrow this collection without leaving the current category or series. Sold-out products remain included.</p><div class="sq-maker-browser__grid" data-sq-maker-grid>{% for maker in sq_makers %}{% if maker != blank %}<details class="sq-maker-browser__card" data-sq-maker-card data-maker="{{ maker | escape }}"><summary class="sq-maker-browser__summary"><span class="sq-maker-browser__name">{{ maker }}</span></summary><div class="sq-maker-browser__body"><a class="sq-maker-browser__view" href="{{ sq_maker_path }}?filter.p.vendor={{ maker | url_encode }}">View all {{ maker }} products</a></div></details>{% endif %}{% endfor %}</div></div></section>
+          {% endif %}
+          {% stylesheet %}.sq-maker-browser{padding:0 20px 48px;background:#f4f5f3;color:#071d2d}.sq-maker-browser__wrap{max-width:1280px;margin:0 auto}.sq-maker-browser__kicker{margin:0 0 6px;color:#a91827;font-size:12px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}.sq-maker-browser h2{margin:0;font-size:clamp(26px,3vw,40px)}.sq-maker-browser__intro{max-width:820px;margin:10px 0 22px;color:#41505b}.sq-maker-browser__grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.sq-maker-browser__card{border:1px solid rgba(20,20,20,.18);border-radius:10px;background:#fff;overflow:hidden}.sq-maker-browser__summary{cursor:pointer;min-height:58px;padding:0 14px;display:flex;align-items:center;font-size:13px;font-weight:850}.sq-maker-browser__body{padding:0 14px 14px}.sq-maker-browser__view{display:inline-flex;min-height:38px;align-items:center;padding:8px 12px;border-radius:7px;background:#071d2d;color:#fff;text-decoration:none;font-size:12px;font-weight:800}@media(max-width:900px){.sq-maker-browser__grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.sq-maker-browser{padding:0 14px 36px}.sq-maker-browser__grid{grid-template-columns:1fr}}{% endstylesheet %}
+          {% schema %}{"name":"Collection manufacturers","settings":[],"presets":[{"name":"Collection manufacturers"}]}{% endschema %}
+          LIQUID
+          echo 'cce8052cf70bbb014f79608a003cb6b8  validation-context/sections/vac-collection-manufacturers.liquid' | md5sum -c -
+          cp -r validation-context/sections validation-context/templates out/source/
+      - name: Validate Liquid sections and contextual JSON template
+        run: |
+          for f in sq-thin-line-loading-space.liquid sq-thin-stabrite-subcategories.liquid sq-thin-stabrite-type-browser.liquid; do
+            node validation-tools/validate.mjs --filename "$f" --filetype sections --file "sections/$f" --model 'GPT-6 Astra Pro' --client-name ChatGPT --client-version 1 --artifact-id "thin-line-context-$f" --revision 1 > "out/validation/$f.txt"
+          done
+          node validation-tools/validate.mjs --theme-path "$PWD/validation-context" --files templates/collection.thin-stabrite-parent.json --model 'GPT-6 Astra Pro' --client-name ChatGPT --client-version 1 --artifact-id thin-line-context-template --revision 2 > out/validation/template-context.txt
+      - name: Confirm category browser run is completed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            for(let i=0;i<40;i++){
+              const {data}=await github.rest.actions.getWorkflowRun({owner:context.repo.owner,repo:context.repo.repo,run_id:34643266829});
+              if(data.status==='completed'){
+                if(data.conclusion!=='success')throw new Error('Category browser certification failed: '+data.conclusion);
+                return;
+              }
+              await new Promise(resolve=>setTimeout(resolve,15000));
+            }
+            throw new Error('Category browser certification did not complete.');
+      - name: Read root browser evidence
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 34642507180
+          name: thin-line-final-loading-cert-0911
+          path: out/root
+      - name: Read category browser evidence
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 34643266829
+          name: thin-line-child-navigation-cert-0911
+          path: out/categories
+      - name: Reconcile immutable tested source and browser assertions
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          import assert from 'node:assert/strict';
+          const root=JSON.parse(fs.readFileSync('out/root/report.json','utf8'));
+          const categories=JSON.parse(fs.readFileSync('out/categories/report.json','utf8'));
+          assert.equal(root.pass,true,'Root browser report');assert.equal(categories.pass,true,'Category browser report');assert.equal(categories.results.length,14,'All category scenarios');
+          const files=JSON.parse(fs.readFileSync('out/root/deployment-manifest.json','utf8')).files;
+          files.push({filename:'sections/sq-thin-stabrite-type-browser.liquid',md5:categories.sourceMd5});
+          for(const f of files){const actual=crypto.createHash('md5').update(fs.readFileSync(f.filename)).digest('hex');assert.equal(actual,f.md5,'Tested source matches current file '+f.filename);}
+          const checks=[...root.results,...categories.results].flatMap(r=>r.checks||[]);assert(checks.length>0);assert(checks.every(c=>c.ok),'All browser assertions');
+          const report={pass:true,checkedAt:new Date().toISOString(),gateRun:process.env.GITHUB_RUN_ID,gateCommit:process.env.GITHUB_SHA,rootRun:34642507180,categoryRun:34643266829,themeId:158561894555,publication:'Unpublished working draft; no live publication performed',checksPassed:checks.length,files};
+          fs.writeFileSync('out/final-gate.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+          JS
+      - name: Upload reconciled evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thin-line-reconciled-verification
+          path: out
+          retention-days: 14

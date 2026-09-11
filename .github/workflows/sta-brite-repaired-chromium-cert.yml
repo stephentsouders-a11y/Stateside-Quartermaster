@@ -1,0 +1,124 @@
+name: Sta-Brite repaired Chromium certification
+on:
+  push:
+    paths:
+      - '.github/workflows/sta-brite-repaired-chromium-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium and Liquid validation
+        run: |
+          npm install --no-save playwright@1.55.0 agent-browser @shopify/liquid-html-parser @shopify/theme-check-node >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          mkdir -p sta-cert/videos sta-cert/screens sta-cert/frames
+      - name: Validate source Liquid and inline JavaScript
+        run: |
+          cat > validate-sta.mjs <<'EOF'
+          import fs from 'node:fs'; import vm from 'node:vm';
+          import {toLiquidHtmlAST} from '@shopify/liquid-html-parser';
+          import {themeCheckRun} from '@shopify/theme-check-node';
+          const file='sections/sq-thin-stabrite-subcategories.liquid',content=fs.readFileSync(file,'utf8');
+          toLiquidHtmlAST(content);
+          JSON.parse(content.match(/{% schema %}([\s\S]*?){% endschema %}/)[1]);
+          for(const [,script] of content.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(script);
+          const result=await themeCheckRun(process.cwd(),undefined,()=>{});
+          const offenses=result.offenses.filter(o=>o.uri.endsWith(file));
+          fs.writeFileSync('sta-cert/liquid-validation.json',JSON.stringify({file,liquidParsed:true,schemaParsed:true,javascriptParsed:true,offenses},null,2));
+          console.log(JSON.stringify({file,offenses},null,2));
+          if(offenses.some(o=>o.severity===0||o.severity==='error'))process.exitCode=1;
+          EOF
+          node validate-sta.mjs
+      - name: Chromium first-paint, reload and interaction certification
+        if: always()
+        run: |
+          cat > sta-cert.mjs <<'EOF'
+          import {chromium} from 'playwright'; import fs from 'node:fs';
+          const base='https://www.statesideqm.com/collections/sta-brite-insignia?preview_theme_id=158561894555';
+          const report={url:base,commit:process.env.GITHUB_SHA,failures:[],devices:[]};
+          const expected=['Shop All Products','U.S. Air Force','U.S. Army','U.S. Coast Guard','U.S. Marine Corps','U.S. Navy','U.S. Space Force','ROTC','JROTC','Military & Service Academies','Law Enforcement','Firefighting'];
+          const browser=await chromium.launch({headless:true});
+          async function ready(p){await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:35000});}
+          async function capture(p,name){
+            const state=await p.evaluate(()=>{
+              const m=document.querySelector('#MainContent'),visible=e=>e&&e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})&&e.getBoundingClientRect().width>1&&e.getBoundingClientRect().height>1;
+              const side=m?.querySelector('.sq-refine-v3-sidebar'),grids=[...m.querySelectorAll('.product-grid')].filter(visible),cards=[...m.querySelectorAll('.sq-refine-v3-results .product-grid__item')].filter(visible);
+              const branches=[...side.querySelectorAll('input[data-kind="structural"]')].map(i=>({label:i.closest('label').innerText.trim(),target:i.dataset.target}));
+              const ids=cards.map(c=>c.querySelector('a[href*="/products/"]')?.getAttribute('href')?.split('?')[0]);
+              const firstY=cards[0]?.getBoundingClientRect().top,columns=cards.filter(c=>Math.abs(c.getBoundingClientRect().top-firstY)<3).length;
+              return {theme:window.Shopify?.theme,ready:m.dataset.sqRefineV3Ready,layouts:m.querySelectorAll('.sq-refine-v3-layout').length,sideVisible:visible(side),grids:grids.length,cards:cards.length,columns,duplicates:ids.length-new Set(ids).size,groups:[...side.querySelectorAll('details > summary')].map(e=>e.innerText.trim()),branches,body:document.body.className,legacy:[...m.querySelectorAll('.sq-ts-match-section,.sq-ts-match-card,.sq-stabrite-browser,.sq-ptype-browser,.sq-global-refine-sidebar')].filter(visible).map(e=>e.className),overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+3,broken:cards.flatMap(c=>[...c.querySelectorAll('img')]).filter(i=>i.complete&&!i.naturalWidth).length,audit:window.__staCert,url:location.href};
+            });
+            fs.writeFileSync(`sta-cert/${name}.json`,JSON.stringify(state,null,2));
+            await p.screenshot({path:`sta-cert/screens/${name}.png`,fullPage:true,timeout:20000}).catch(()=>{});
+            return state;
+          }
+          function assertState(state,name,full=true){
+            if(state.theme?.id!==158561894555)report.failures.push(name+':wrong theme');
+            if(state.ready!=='true'||!state.sideVisible||state.layouts!==1||state.grids!==1||!state.cards||state.duplicates||state.legacy.length||state.overflow||state.broken)report.failures.push(name+':layout '+JSON.stringify({...state,audit:undefined,branches:undefined}));
+            if(full&&JSON.stringify(state.branches.map(b=>b.label))!==JSON.stringify(expected))report.failures.push(name+':branch hierarchy differs');
+            if(/sq-ts-parent|sq-ts-v2-active/.test(state.body))report.failures.push(name+':legacy owner active');
+          }
+          for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
+            const context=await browser.newContext({viewport,recordVideo:{dir:'sta-cert/videos',size:viewport}}),page=await context.newPage(),errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));page.setDefaultTimeout(15000);
+            await page.addInitScript(()=>{
+              window.__staCert={frames:0,badFrames:[],transitions:[],mutationsBySecond:{}};
+              const visible=e=>e&&e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})&&e.getBoundingClientRect().width>1&&e.getBoundingClientRect().height>1;let previous='';
+              function tick(){const m=document.querySelector('#MainContent');if(m){const old=[...m.querySelectorAll('.sq-ts-match-section,.sq-ts-match-card,.sq-stabrite-browser,.sq-ptype-browser,.sq-global-refine-sidebar')].filter(visible);const a=window.__staCert;a.frames++;if(old.length)a.badFrames.push({t:Math.round(performance.now()),classes:old.map(e=>e.className)});const state={ready:m.dataset.sqRefineV3Ready,grids:[...m.querySelectorAll('.product-grid')].filter(visible).length,sidebar:visible(m.querySelector('.sq-refine-v3-sidebar')),body:document.body.className};const k=JSON.stringify(state);if(k!==previous){a.transitions.push({t:Math.round(performance.now()),...state});previous=k;}}if(performance.now()<16000)requestAnimationFrame(tick);}
+              requestAnimationFrame(tick);document.addEventListener('DOMContentLoaded',()=>{const m=document.querySelector('#MainContent');if(m)new MutationObserver(rs=>{const a=window.__staCert.mutationsBySecond,k=Math.floor(performance.now()/1000);a[k]=(a[k]||0)+rs.length;}).observe(m,{subtree:true,childList:true,attributes:true});});
+            });
+            const result={device,errors,checks:[]};report.devices.push(result);
+            try{
+              const r=await page.goto(base,{waitUntil:'domcontentloaded',timeout:90000});
+              if(r.status()!==200)throw Error('HTTP '+r.status());
+              fs.writeFileSync(`sta-cert/${device}-source.html`,await r.text());
+              await ready(page);await page.waitForTimeout(11000);
+              const initial=await capture(page,device+'-cold');result.initial=initial;assertState(initial,device+' cold');
+              if(initial.audit.badFrames.length)report.failures.push(device+':legacy flash '+initial.audit.badFrames.length+' frames');
+              if(device==='mobile'&&initial.columns!==2)report.failures.push('mobile:expected 2 columns');
+              const late=Object.entries(initial.audit.mutationsBySecond).filter(([s])=>+s>=8).reduce((n,[,v])=>n+v,0);result.lateMutations=late;if(late>500)report.failures.push(device+':mutation churn '+late);
+              for(let i=0,n=await page.locator('.sq-refine-v3-sidebar > details > summary').count();i<n;i++){const loc=page.locator('.sq-refine-v3-sidebar > details > summary').nth(i),title=await loc.innerText(),start=await loc.evaluate(e=>e.parentElement.open);await loc.click();const after=await loc.evaluate(e=>e.parentElement.open);await loc.click();const end=await loc.evaluate(e=>e.parentElement.open);result.checks.push({title,toggle:after!==start&&end===start});}
+              if(result.checks.some(x=>!x.toggle))report.failures.push(device+':disclosure failed');
+              await page.reload({waitUntil:'domcontentloaded',timeout:90000});await ready(page);await page.waitForTimeout(2000);const reload=await capture(page,device+'-reload');assertState(reload,device+' reload');if(reload.audit.badFrames.length)report.failures.push(device+':reload legacy flash');result.reload={frames:reload.audit.frames,badFrames:reload.audit.badFrames.length};
+              if(device==='desktop'){
+                for(const per of ['100','250','50']){
+                  await page.locator('.sq-refine-v3-page-size').getByText(per,{exact:true}).click();
+                  await page.waitForURL(u=>u.searchParams.get('sq_per_page')===per,{timeout:30000});await ready(page);await page.waitForTimeout(1200);
+                  const s=await capture(page,'page-size-'+per);assertState(s,'page size '+per);result.checks.push({per,cards:s.cards});if(s.cards!==Number(per))report.failures.push('page size '+per+':'+s.cards);
+                }
+                const type=page.locator('.sq-refine-v3-sidebar input[data-sq-polish-param="filter.p.product_type"]').first();
+                await type.evaluate(e=>e.closest('details').open=true);const value=await type.getAttribute('data-sq-polish-value');await type.check();await page.waitForURL(u=>u.searchParams.get('filter.p.product_type')===value,{timeout:30000});await ready(page);await page.waitForTimeout(1000);const typeState=await capture(page,'type-filter');assertState(typeState,'type filter',false);result.checks.push({type:value,cards:typeState.cards});
+                await page.goto(base,{waitUntil:'domcontentloaded',timeout:90000});await ready(page);
+                const available=page.locator('.sq-refine-v3-sidebar input[data-filter-name="filter.v.availability"][data-filter-value="1"]');await available.evaluate(e=>e.closest('details').open=true);await available.check();await page.waitForURL(u=>u.searchParams.get('filter.v.availability')==='1',{timeout:30000});await ready(page);await page.waitForTimeout(1000);const a=await capture(page,'availability');assertState(a,'availability');result.checks.push({availability:true,cards:a.cards});
+              }
+              await page.goto(base,{waitUntil:'domcontentloaded',timeout:90000});await ready(page);
+              const branch=page.locator('.sq-refine-v3-sidebar input[data-target*="/sta-brite-army?"]');await branch.evaluate(e=>e.closest('details').open=true);await branch.check();await page.waitForURL('**/sta-brite-army?**',{timeout:30000});await ready(page);await page.waitForTimeout(1200);const child=await capture(page,device+'-army');assertState(child,device+' army branch',false);result.checks.push({branch:child.url,cards:child.cards});
+            }catch(e){result.error=String(e);report.failures.push(device+':'+e);await page.screenshot({path:`sta-cert/screens/${device}-error.png`,fullPage:true,timeout:15000}).catch(()=>{});fs.writeFileSync(`sta-cert/${device}-error.html`,await page.content().catch(()=>''));}
+            const video=page.video();await page.close();await context.close();if(video)await video.saveAs(`sta-cert/${device}.webm`);
+            if(errors.length)report.failures.push(device+':runtime errors '+JSON.stringify(errors));
+          }
+          await browser.close();fs.writeFileSync('sta-cert/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));if(report.failures.length)process.exitCode=2;
+          EOF
+          node sta-cert.mjs
+      - name: Agent-browser Chromium visual check
+        if: always()
+        run: |
+          npx agent-browser install >/dev/null 2>&1
+          npx agent-browser open 'https://www.statesideqm.com/collections/sta-brite-insignia?preview_theme_id=158561894555'
+          npx agent-browser snapshot -s '#MainContent' > sta-cert/agent-browser-snapshot.txt
+          npx agent-browser screenshot sta-cert/agent-browser.png
+          npx agent-browser close
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sta-brite-repaired-chromium-cert
+          path: sta-cert
+          retention-days: 14

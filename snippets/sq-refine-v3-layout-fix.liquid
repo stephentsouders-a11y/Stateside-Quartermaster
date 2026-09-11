@@ -1,0 +1,157 @@
+{% doc %}
+Keeps the V3 products-per-page control and product surface together in the right-hand product column. This is deliberately inactive on State Guard Series. Includes route-specific cleanup for certified collection roots.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+{% if collection.handle == 'literature' %}
+<script type="application/json" data-sq-literature-meta>
+{
+  "tags": {{ collection.all_tags | json }},
+  "vendors": {{ collection.all_vendors | json }},
+  "authors": [
+    {% for product in collection.products %}
+      {% assign sq_author_source = product.description | strip_html %}
+      {% assign sq_author = sq_author_source | split: '(Author)' | first | split: 'by ' | last | strip %}
+      {% unless forloop.first %},{% endunless %}{{ sq_author | json }}
+    {% endfor %}
+  ]
+}
+</script>
+{% endif %}
+{% if collection.handle == 'child-safety-shop' %}
+<script data-sq-refine-v3-child-safety-legacy-isolation>
+/* Child Safety is now owned by Refine V3. Prevent the later legacy collection
+   authorities from rebuilding or moving its product surface. State Guard is
+   unaffected because this script renders on Child Safety only. */
+window.__sqGlobalRefineAuthorityV2=true;
+window.__sqGlobalRefineVisibleSurfaceFix=true;
+window.__sqCategoryUniverseV5=true;
+</script>
+{% endif %}
+<style data-sq-refine-v3-layout-fix>
+#MainContent .sq-refine-v3-products{min-width:0}
+#MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size{grid-column:2;grid-row:1;margin-bottom:0}
+#MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + collection-component,
+#MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + #ResultsList,
+#MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + .product-grid{grid-column:2;grid-row:2}
+#MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:1;grid-row:1 / span 2;z-index:20}
+#MainContent.sq-refine-v3-active .sq-refine-v3-group>summary{position:relative;z-index:2;pointer-events:auto}
+html body #MainContent.sq-refine-v3-active [data-sq-refine-v3-hidden-nav='true']{display:none!important;visibility:hidden!important;pointer-events:none!important}
+html body #MainContent.sq-refine-v3-active .vac-page-size{display:none!important;visibility:hidden!important;pointer-events:none!important}
+html body #MainContent.sq-refine-v3-active .sq-refine-v3-group>summary::after{content:'+'!important}
+html body #MainContent.sq-refine-v3-active .sq-refine-v3-group[open]>summary::after{content:'−'!important}
+@media(max-width:900px){
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + collection-component,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + #ResultsList,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-page-size + .product-grid,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout>.sq-refine-v3-sidebar{grid-column:auto;grid-row:auto}
+  html body #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+</style>
+<script data-sq-refine-v3-hardening>
+(function(){
+  function enforce(){
+    var main=document.getElementById('MainContent');
+    if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
+    main.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]').forEach(function(node){
+      if(node.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results,.sq-refine-v3-page-size'))return;
+      node.hidden=true;
+      node.setAttribute('aria-hidden','true');
+      node.style.setProperty('display','none','important');
+      node.style.setProperty('visibility','hidden','important');
+      node.style.setProperty('pointer-events','none','important');
+    });
+    main.querySelectorAll('.vac-page-size').forEach(function(node){
+      node.hidden=true;
+      node.setAttribute('aria-hidden','true');
+      node.style.setProperty('display','none','important');
+      node.style.setProperty('visibility','hidden','important');
+      node.style.setProperty('pointer-events','none','important');
+    });
+    main.querySelectorAll('.sq-refine-v3-group').forEach(function(details){
+      var summary=details.querySelector(':scope>summary');
+      if(!summary)return;
+      function sync(){summary.setAttribute('aria-expanded',details.open?'true':'false')}
+      sync();
+      if(details.dataset.sqRefineV3ToggleBound==='1')return;
+      details.dataset.sqRefineV3ToggleBound='1';
+      summary.dataset.sqRefineV3ToggleBound='1';
+      details.addEventListener('toggle',sync);
+    });
+    main.dataset.sqRefineV3Hardened='true';
+    return true;
+  }
+  if(enforce())return;
+  var observer=new MutationObserver(function(){if(enforce())observer.disconnect()});
+  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['data-sq-refine-v3-ready']});
+  window.addEventListener('load',enforce,{once:true});
+})();
+</script>
+{% if collection.handle == 'armed-forces-gear' or collection.handle == 'child-safety-shop' %}
+<style data-sq-refine-v3-route-mobile-grid="{{ collection.handle | escape }}">
+@media(max-width:900px){
+  html body #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+}
+</style>
+{% endif %}
+{% if collection.handle == 'accessories-gifts-collectibles' or collection.handle == 'airsoft-milsim' or collection.handle == 'apparel' or collection.handle == 'armed-forces-gear' or collection.handle == 'art' or collection.handle == 'body-armor-ballistic-protection' or collection.handle == 'literature' or collection.handle == 'child-safety-shop' %}
+<script data-sq-refine-v3-route-fix="{{ collection.handle | escape }}">
+(function(){
+  var route='{{ collection.handle | escape }}';
+  var falseHandles=new Set(['all','stateside-quartermaster-logo-merch','air-national-guard-series','state-guard-series','rotc-series','jrotc-series','military-schools-academies','public-safety-series','army-national-guard-series']);
+  function targetHandle(raw){try{var m=new URL(raw,location.origin).pathname.match(/^\/collections\/([^/?#]+)/);return m?decodeURIComponent(m[1]):''}catch(_){return''}}
+  function norm(v){return String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
+  function esc(v){return String(v||'').replace(/[&<>"']/g,function(k){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[k]})}
+  function handleize(v){return String(v||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/&/g,' and ').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')}
+  function hasGroup(side,label){var n=norm(label);return Array.from(side.querySelectorAll('.sq-refine-v3-group>summary')).some(function(s){return norm(s.textContent).includes(n)})}
+  function unique(list){var seen=new Set();return list.filter(function(v){v=String(v||'').trim();var k=norm(v);if(!v||!k||seen.has(k))return false;seen.add(k);return true})}
+  function targetForTag(tag){var u=new URL('/collections/literature/'+handleize(tag),location.origin);u.searchParams.set('sq_root','literature');var p=new URLSearchParams(location.search).get('preview_theme_id');if(p)u.searchParams.set('preview_theme_id',p);return u.pathname+u.search}
+  function targetForVendor(vendor){var u=new URL('/collections/literature',location.origin);u.searchParams.set('filter.p.vendor',vendor);u.searchParams.set('sq_root','literature');var p=new URLSearchParams(location.search).get('preview_theme_id');if(p)u.searchParams.set('preview_theme_id',p);return u.pathname+u.search}
+  function targetForAuthor(author){var u=new URL('/search',location.origin);u.searchParams.set('q','"'+author+'"');u.searchParams.set('type','product');u.searchParams.set('options[prefix]','last');return u.pathname+u.search}
+  function addGroup(side,label,items,targetFn,note){if(!items.length||hasGroup(side,label))return;var d=document.createElement('details');d.className='sq-refine-v3-group';d.dataset.active='false';var rows=items.slice(0,80).map(function(item){var target=targetFn(item);return '<label class="sq-refine-v3-choice" title="'+esc(note||'')+'"><input type="checkbox" data-kind="structural" data-target="'+esc(target)+'"><span>'+esc(item)+(note?' <small>('+esc(note)+')</small>':'')+'</span></label>'}).join('');d.innerHTML='<summary>'+esc(label)+'</summary><div class="sq-refine-v3-choices">'+rows+'</div>';side.appendChild(d)}
+  function buildLiterature(side){
+    var node=document.querySelector('[data-sq-literature-meta]'),meta={tags:[],vendors:[],authors:[]};try{if(node)meta=JSON.parse(node.textContent||'{}')}catch(_){return}
+    var tags=unique(meta.tags||[]),authors=unique((meta.authors||[]).filter(function(a){return a&&!/report copyright infringement/i.test(a)})),vendors=unique(meta.vendors||[]);
+    var wars=tags.filter(function(t){return /(war|conflict|revolution|desert storm|vietnam|korea|afghan|iraq|gulf|civil war|world war)/i.test(t)&&!/warfare|warrior/i.test(t)});
+    var branches=tags.filter(function(t){return /^(sq branch:|service branch -)/i.test(t)||/\b(air force|army|navy|marine corps|coast guard|space force)\b/i.test(t)}).map(function(t){return t.replace(/^(SQ Branch:|Service Branch -)\s*/i,'')});
+    var generic=new Set(['books','military','literature relevant','price written on book','wars & conflicts']);
+    var topics=tags.filter(function(t){return !generic.has(norm(t))&&!wars.includes(t)&&!/^(sq |service branch -)/i.test(t)&&!branches.some(function(b){return norm(b)===norm(t)})});
+    addGroup(side,'Shop by Author',authors,targetForAuthor,'catalog search');
+    addGroup(side,'Shop by Publisher / Supplier',vendors,targetForVendor,'supplier metadata');
+    addGroup(side,'Shop by War / Conflict',wars,targetForTag,'catalog tag');
+    addGroup(side,'Shop by Branch',unique(branches),targetForTag,'catalog tag');
+    addGroup(side,'Shop by Topic',topics,targetForTag,'catalog tag');
+  }
+  function clean(){
+    var main=document.getElementById('MainContent');
+    if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
+    document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]').forEach(function(node){if(!main.contains(node))node.removeAttribute('data-sq-refine-v3-hidden-nav')});
+    if(route==='armed-forces-gear'){
+      var results=main.querySelector('.sq-refine-v3-results');
+      main.querySelectorAll('[id*="sq_afg_branch_buttons"]').forEach(function(node){
+        var host=node.querySelector('collection-component');
+        if(host&&results&&!results.contains(host))results.appendChild(host);
+        node.remove();
+      });
+    }
+    var sidebar=main.querySelector('.sq-refine-v3-sidebar');
+    if(!sidebar)return false;
+    sidebar.querySelectorAll('input[data-kind="structural"]').forEach(function(input){
+      if(falseHandles.has(targetHandle(input.dataset.target||''))){var row=input.closest('.sq-refine-v3-choice');if(row)row.remove()}
+    });
+    sidebar.querySelectorAll('.sq-refine-v3-group').forEach(function(group){if(!group.querySelector('input[type="checkbox"]'))group.remove()});
+    if(route==='literature')buildLiterature(sidebar);
+    main.dataset.sqRefineV3RouteFix=route;
+    return true;
+  }
+  if(clean())return;
+  var observer=new MutationObserver(function(){if(clean())observer.disconnect()});
+  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['data-sq-refine-v3-ready']});
+  window.addEventListener('load',clean,{once:true});
+})();
+</script>
+{% endif %}
+{% endif %}

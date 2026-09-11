@@ -1,0 +1,36 @@
+<script src="{{ 'results-list.js' | asset_url }}" type="module" fetchpriority="low"></script>
+{% render 'collection-wrapper-styles' %}
+<collection-component data-sq-refine-v3-search-host>
+  <results-list class="section product-grid-container" infinite-scroll="false">
+    <div class="collection-wrapper grid gap-style collection-wrapper--grid-full-width">
+      {% paginate search.results by 50 %}
+        {% capture children %}
+          {% for item in search.results %}
+            {% if item.object_type == 'product' %}
+              <li id="sq-search-{{ item.id }}" class="product-grid__item product-grid__item--{{ forloop.index0 }}" data-page="{{ paginate.current_page }}" data-product-id="{{ item.id }}" ref="cards[]">
+                {% content_for 'block', type: '_product-card', id: 'product-card', closest.product: item, product_view_context: 'collection' %}
+              </li>
+            {% endif %}
+          {% endfor %}
+        {% endcapture %}
+        {% render 'product-grid', section: section, children: children, products: search.results, paginate: paginate, enable_infinite_scroll: false %}
+      {% endpaginate %}
+    </div>
+  </results-list>
+</collection-component>
+{% schema %}
+{
+  "name": "V3 search product feed",
+  "enabled_on": {"templates": ["search"]},
+  "settings": [
+    {"type":"select","id":"layout_type","label":"Layout","options":[{"value":"grid","label":"Grid"}],"default":"grid"},
+    {"type":"select","id":"product_card_size","label":"Card size","options":[{"value":"medium","label":"Medium"}],"default":"medium"},
+    {"type":"select","id":"mobile_product_card_size","label":"Mobile card size","options":[{"value":"small","label":"Small"}],"default":"small"},
+    {"type":"select","id":"product_grid_width","label":"Width","options":[{"value":"full-width","label":"Full width"}],"default":"full-width"},
+    {"type":"checkbox","id":"full_width_on_mobile","label":"Full width mobile","default":true},
+    {"type":"range","id":"columns_gap_horizontal","label":"Horizontal gap","min":0,"max":50,"step":1,"unit":"px","default":16},
+    {"type":"range","id":"columns_gap_vertical","label":"Vertical gap","min":0,"max":50,"step":1,"unit":"px","default":24}
+  ],
+  "presets": []
+}
+{% endschema %}

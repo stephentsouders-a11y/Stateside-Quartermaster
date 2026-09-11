@@ -1,0 +1,37 @@
+name: REFINE V3 Button 01 Rendered Line Trace
+
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-button01-rendered-line-trace.yml'
+  workflow_dispatch:
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Print rendered source around Availability cleanup
+        run: |
+          node <<'NODE'
+          const { chromium } = await import('playwright');
+          const b=await chromium.launch({headless:true});
+          const c=await b.newContext({viewport:{width:1440,height:1000}});
+          const p=await c.newPage();
+          await p.goto('https://www.statesideqm.com/?preview_theme_id=158561894555',{waitUntil:'domcontentloaded',timeout:90000});
+          await p.goto('https://www.statesideqm.com/collections/accessories-gifts-collectibles?filter.v.availability=1',{waitUntil:'domcontentloaded',timeout:90000});
+          const html=await p.content();
+          const lines=html.split('\n');
+          console.log('LINE_COUNT',lines.length);
+          for(let i=2135;i<=2205;i++) console.log(String(i+1).padStart(5,'0')+': '+(lines[i]||''));
+          await b.close();
+          NODE

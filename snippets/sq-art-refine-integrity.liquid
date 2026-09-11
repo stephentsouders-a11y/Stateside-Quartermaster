@@ -1,0 +1,28 @@
+{% doc %}
+Art Refine V3 integrity guard.
+Prunes known non-Art product types/vendors from the Art sidebar and guarantees a single authoritative product grid after V3 initializes. State Guard and all non-Art collections are untouched.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle == 'art' %}
+<style data-sq-art-refine-integrity-style>
+#MainContent[data-sq-art-refine-integrity='true'] [data-sq-refine-v3-duplicate-grid='true']{display:none!important}
+</style>
+<script data-sq-art-refine-integrity data-revision="20260911-v1">
+(function(){
+  var main=document.getElementById('MainContent');if(!main)return;
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
+  function norm(v){return clean(v).toLowerCase().replace(/[\u2019']/g,'').replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim()}
+  var blockedTypes=new Set(['cleaning brushes','combat uniform pants','fabric cleaner']);
+  var blockedVendors=new Set(['better bushcraft','fury28']);
+  function group(label){return Array.from(main.querySelectorAll('.sq-refine-v3-sidebar > details.sq-refine-v3-group')).find(function(d){var s=d.querySelector(':scope > summary');return norm(s&&s.textContent)===norm(label)})||null}
+  function prune(label,blocked){var g=group(label);if(!g)return;g.querySelectorAll(':scope > .sq-refine-v3-choices > .sq-refine-v3-choice').forEach(function(row){if(blocked.has(norm(row.textContent)))row.remove()});if(!g.querySelector('.sq-refine-v3-choice'))g.remove()}
+  function productKey(card){var a=card&&card.querySelector&&card.querySelector('a[href*="/products/"]');if(!a)return'';try{return new URL(a.href,location.origin).pathname}catch(_){return a.getAttribute('href')||''}}
+  function singleGrid(){var results=main.querySelector('.sq-refine-v3-results'),primary=results&&results.querySelector('.product-grid');if(!primary)return false;main.querySelectorAll('.product-grid').forEach(function(grid){if(grid===primary){grid.removeAttribute('data-sq-refine-v3-duplicate-grid');grid.removeAttribute('aria-hidden');grid.style.removeProperty('display');return}grid.dataset.sqRefineV3DuplicateGrid='true';grid.setAttribute('aria-hidden','true');grid.style.setProperty('display','none','important')});var seen=new Set();Array.from(primary.children).forEach(function(card){var key=productKey(card);if(!key)return;if(seen.has(key))card.remove();else seen.add(key)});main.dataset.sqRefineV3SingleGridCertified='true';return true}
+  function apply(){if(main.dataset.sqRefineV3Ready!=='true')return false;var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;prune('Shop by Type',blockedTypes);prune('Shop by Manufacturers',blockedVendors);prune('Shop by Manufacturer',blockedVendors);singleGrid();main.dataset.sqArtRefineIntegrity='true';return true}
+  var pending=false;function schedule(){if(pending)return;pending=true;requestAnimationFrame(function(){pending=false;apply()})}
+  if(!apply()){var tries=0,t=setInterval(function(){tries++;if(apply()||tries>120)clearInterval(t)},250)}
+  var mo=new MutationObserver(schedule);mo.observe(main,{childList:true,subtree:true});
+  [100,300,750,1500,3000,6000,10000,15000].forEach(function(ms){setTimeout(schedule,ms)});
+  window.addEventListener('pageshow',schedule);
+})();
+</script>
+{% endif %}

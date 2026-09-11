@@ -1,0 +1,56 @@
+{% doc %}
+Keeps the Apparel collection under one Refine Products owner and suppresses duplicate collection grids.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle == 'apparel' %}
+<style data-sq-apparel-single-owner>
+html[data-sq-apparel-pending] #MainContent .product-grid{opacity:0!important}
+#MainContent .product-grid[data-sq-apparel-duplicate="true"]{display:none!important}
+</style>
+<script data-sq-apparel-single-owner="20260911-v3">
+(function(){
+  if(window.__sqApparelSingleOwnerV3)return;
+  window.__sqApparelSingleOwnerV3=true;
+  window.__sqCollectionFacetSidebarV1=true;
+  window.__sqZeroInventoryPreservationV1=true;
+  window.__sqSoldOutPreservationHardGate=true;
+  var html=document.documentElement;
+  html.setAttribute('data-sq-apparel-pending','');
+  var fallback=setTimeout(function(){html.removeAttribute('data-sq-apparel-pending')},20000);
+  function suppressNativeGrids(main){
+    var removed=0;
+    main.querySelectorAll('.product-grid').forEach(function(candidate){
+      if(candidate.closest('.sq-refine-v3-results'))return;
+      candidate.setAttribute('data-sq-apparel-duplicate','true');
+      candidate.hidden=true;
+      candidate.setAttribute('aria-hidden','true');
+      removed++;
+    });
+    return removed;
+  }
+  function start(){
+    var main=document.getElementById('MainContent');
+    if(!main){html.removeAttribute('data-sq-apparel-pending');return}
+    var observer;
+    function complete(){
+      if(main.dataset.sqRefineV3Ready!=='true')return;
+      var results=main.querySelector('.sq-refine-v3-results');
+      var grid=results&&results.querySelector('.product-grid');
+      if(!results||!grid)return;
+      var duplicates=suppressNativeGrids(main);
+      main.dataset.sqApparelDuplicateGrids=String(duplicates);
+      main.dataset.sqApparelRepair='single-owner-v3';
+      clearTimeout(fallback);
+      html.removeAttribute('data-sq-apparel-pending');
+      if(observer)observer.disconnect();
+      var guard=new MutationObserver(function(){suppressNativeGrids(main)});
+      guard.observe(main,{childList:true,subtree:true});
+      window.setTimeout(function(){guard.disconnect()},12000);
+    }
+    observer=new MutationObserver(complete);
+    observer.observe(main,{attributes:true,attributeFilter:['data-sq-refine-v3-ready']});
+    complete();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+})();
+</script>
+{% endif %}

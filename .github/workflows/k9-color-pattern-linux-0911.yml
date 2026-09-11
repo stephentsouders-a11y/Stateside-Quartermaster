@@ -1,0 +1,56 @@
+name: K9 independent Linux Chromium verification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/k9-color-pattern-linux-0911.yml']
+permissions:
+  contents: read
+jobs:
+  chromium-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null
+          npm install playwright@1.55.0 agent-browser @shopify/liquid-html-parser >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          npx agent-browser install >/dev/null
+      - name: Parse generated Liquid and JavaScript
+        run: |
+          mkdir -p proof/source
+          cp snippets/sq-refine-v3-k9-color-pattern.liquid snippets/sq-refine-v3-sidebar-polish.liquid proof/source/
+          node - <<'NODE'
+          const fs=require('fs'),vm=require('vm'),{toLiquidHtmlAST}=require('@shopify/liquid-html-parser');
+          const files=['snippets/sq-refine-v3-k9-color-pattern.liquid','snippets/sq-refine-v3-sidebar-polish.liquid'];
+          for(const file of files){const text=fs.readFileSync(file,'utf8');toLiquidHtmlAST(text);for(const m of text.matchAll(/<script(?![^>]*application\/json)[^>]*>([\s\S]*?)<\/script>/g)){new vm.Script(m[1]);}}
+          fs.writeFileSync('proof/syntax-validation.json',JSON.stringify({pass:true,files,commit:process.env.GITHUB_SHA},null,2));
+          console.log('PASS: Shopify Liquid and JavaScript syntax');
+          NODE
+      - name: Test actual deployed draft in Chromium
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,textwrap
+          text=Path('.github/workflows/k9-color-pattern-functional-0911.yml').read_text()
+          body=re.search("cat > verify.mjs <<'EOF'\n(.*?)\n          EOF",text,re.S).group(1)
+          Path('verify.mjs').write_text(textwrap.dedent(body))
+          PY
+          node verify.mjs
+      - name: Independent agent-browser Chromium snapshot
+        if: always()
+        run: |
+          npx agent-browser open 'https://www.statesideqm.com/collections/k9-dog-gear?preview_theme_id=158561894555&sq_k9_color=multicam'
+          npx agent-browser wait '[data-sq-k9-color-group]'
+          npx agent-browser snapshot -i > proof/k9-after-snapshot.txt
+          npx agent-browser screenshot proof/k9-agent-after.png
+          npx agent-browser close
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k9-color-pattern-linux-proof
+          path: proof
+          retention-days: 7

@@ -1,0 +1,38 @@
+name: Accessories V3 geometry certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/accessories-v3-geometry-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Inspect standard collection geometry
+        run: |
+          cat > geometry.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          const errors=[];page.on('pageerror',e=>errors.push(e.message));
+          const u='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
+          let r;for(let i=0;i<5;i++){r=await page.goto(u,{waitUntil:'domcontentloaded',timeout:60000});if(r?.status()===200)break;if(![429,500,502,503,504].includes(r?.status()||0))break;await page.waitForTimeout([4000,8000,12000,18000,24000][i])}
+          try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:30000})}catch{}
+          await page.waitForTimeout(5000);
+          const d=await page.evaluate(()=>{const main=document.querySelector('#MainContent'),grid=main?.querySelector('.sq-refine-v3-results .product-grid'),side=main?.querySelector('.sq-refine-v3-sidebar');const cards=grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(x=>!!x.querySelector('a[href*="/products/"]')):[];const rects=cards.slice(0,12).map(x=>{const r=x.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height),display:getComputedStyle(x).display,gridColumn:getComputedStyle(x).gridColumn}});const firstY=rects[0]?.y;const firstRow=rects.filter(x=>Math.abs(x.y-firstY)<=3);const gcs=grid?getComputedStyle(grid):null;return{ready:main?.dataset.sqRefineV3Ready==='true',error:main?.dataset.sqRefineV3Error||'',cards:cards.length,gridDisplay:gcs?.display||'',gridTemplate:gcs?.gridTemplateColumns||'',gridWidth:Math.round(grid?.getBoundingClientRect().width||0),firstRowCount:firstRow.length,firstRowXs:firstRow.map(x=>x.x),rects,sidebarSticky:side?getComputedStyle(side).position:'',sidebarWidth:Math.round(side?.getBoundingClientRect().width||0)};});
+          const ok=r?.status()===200&&errors.length===0&&d.ready&&!d.error&&d.cards===50&&d.firstRowCount===3&&d.sidebarSticky==='sticky';
+          console.log('ACCESSORIES_GEOMETRY '+JSON.stringify({http:r?.status()||0,errors,d,ok}));
+          await browser.close();if(!ok)process.exit(1);
+          EOF
+          node geometry.mjs

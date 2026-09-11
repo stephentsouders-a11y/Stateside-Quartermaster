@@ -1,0 +1,264 @@
+{% assign sq_v3_isolation_roots = 'accessories-gifts-collectibles,airsoft-milsim,apparel,armed-forces-gear,art,body-armor-ballistic-protection,literature,child-safety-shop,dive-scuba,firearm-accessories,first-aid-medical-ifak,flags-patriotic-decor,flashlights-lighting,footwear-gloves-eyewear,k9-dog-gear,knives-axes-cutlery,morale-patches-tactical-id,outdoor-preparedness-gear,patriotic-american-heritage,safety-rescue-climbing,sta-brite-insignia,tactical-gear,thin-line,uniforms,watches,zippos-lighters-torches,stateside-quartermaster-logo-merch,army-national-guard-series,air-national-guard-series,products-built-for-the-line-u-s-army,products-built-for-the-line-u-s-navy,products-built-for-the-line-u-s-air-force,products-built-for-the-line-u-s-marine-corps,products-built-for-the-line-u-s-coast-guard,products-built-for-the-line-u-s-space-force,rotc-series,jrotc-series,military-schools-academies,law-enforcement-corrections,firefighting-ems-search-rescue' | split: ',' %}
+{% if request.page_type == 'collection' and sq_v3_isolation_roots contains collection.handle %}
+<style data-sq-refine-v3-first-paint-isolation>
+#MainContent [class*="button-tree"],
+#MainContent [class*="root-categories"],
+#MainContent [class*="third-level"],
+#MainContent [class*="branch-grid"],
+#MainContent [class*="type-grid"],
+#MainContent [class*="program-tree"],
+#MainContent [class*="category-grid"],
+#MainContent [class*="navigation-grid"],
+#MainContent .sq-subcategory-section,
+#MainContent .sq-subcategory-card,
+#MainContent .sqbfl,
+#MainContent [data-sq-refine-v3-hidden-nav="true"],
+#MainContent .sq-maker-browser,
+#MainContent .sq-global-refine-sidebar,
+#MainContent .facets-block-wrapper--horizontal .facets__filters-wrapper,
+#MainContent .facets-toggle__wrapper,
+#MainContent theme-drawer#filters-drawer{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+</style>
+{% if collection.handle == 'accessories-gifts-collectibles' %}
+<style data-sq-refine-v3-accessories-prepaint-isolation>
+#MainContent .sq-maker-browser{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+</style>
+<script data-sq-refine-v3-accessories-prepaint-guard>
+(function(){
+  if(window.__sqAccessoriesPrepaintGuard)return;
+  window.__sqAccessoriesPrepaintGuard=true;
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim().toLowerCase()}
+  function prune(root){
+    if(!root||!root.querySelectorAll)return;
+    root.querySelectorAll('#MainContent .sq-refine-v3-sidebar > details.sq-refine-v3-group').forEach(function(d){
+      var s=d.querySelector(':scope > summary');
+      if(s&&clean(s.textContent)==='shop by branch')d.remove();
+    });
+  }
+  var observer=new MutationObserver(function(records){
+    var relevant=false;
+    for(var i=0;i<records.length&&!relevant;i++){
+      var r=records[i];
+      if(r.type==='childList'&&r.addedNodes&&r.addedNodes.length)relevant=true;
+    }
+    if(relevant)prune(document);
+  });
+  observer.observe(document.documentElement,{childList:true,subtree:true});
+  prune(document);
+  document.addEventListener('DOMContentLoaded',function(){prune(document)},{once:true});
+})();
+</script>
+{% endif %}
+<script data-sq-refine-v3-legacy-isolation="{{ collection.handle | escape }}">
+window.__sqGlobalRefineAuthorityV2=true;
+window.__sqGlobalRefineVisibleSurfaceFix=true;
+window.__sqCategoryUniverseV5=true;
+window.__sqGlobalRefineCheckboxControls=true;
+if(location.pathname==='/collections/military-schools-academies')window.__sqAcademyExclusiveTreeV6=true;
+if(location.pathname==='/collections/thin-line'){
+  window.__sqCollectionFacetSidebarV1=true;
+  window.__sqThinStaGlobalSidebarBridgeV2=true;
+  window.__sqThinStaGlobalSidebarBridge=true;
+  window.__sqThinStaLegacyParentIsolationDisabled=true;
+  window.__sqRefineTaxonomyPanelV1=true;
+  document.addEventListener('DOMContentLoaded',function(){
+    setTimeout(function(){
+      if(!document.body)return;
+      document.body.classList.remove('sq-ts-parent','sq-ts-parent-only');
+      document.querySelectorAll('[id^="shopify-section-template--"]').forEach(function(el){
+        el.classList.remove('sq-ts-keep-section');
+        el.style.removeProperty('display');
+      });
+    },0);
+  },{once:true});
+}
+(function(){
+  function lock(name,value){
+    try{Object.defineProperty(window,name,{configurable:false,enumerable:true,get:function(){return value},set:function(){}})}
+    catch(_){try{window[name]=value}catch(__){}}
+  }
+  lock('__sqBflUnifiedTree',true);
+  lock('__sqBflRecoveryRouteV4','__sq_refine_v3_disabled__');
+  lock('__sqBflServerRecoveryRouteV3','__sq_refine_v3_disabled__');
+  function installSentinel(){
+    var main=document.getElementById('MainContent');if(!main)return false;
+    if(!main.querySelector('[data-sqbfl-root]')){
+      var sentinel=document.createElement('span');
+      sentinel.hidden=true;
+      sentinel.setAttribute('aria-hidden','true');
+      sentinel.setAttribute('data-sqbfl-root','v3-watchdog-compat');
+      sentinel.setAttribute('data-sq-refine-v3-watchdog-sentinel','true');
+      main.appendChild(sentinel);
+    }
+    if(!main.__sqRefineV3WatchdogObserver){
+      main.__sqRefineV3WatchdogObserver=new MutationObserver(function(){
+        if(!main.querySelector('[data-sqbfl-root]'))installSentinel();
+      });
+      main.__sqRefineV3WatchdogObserver.observe(main,{childList:true});
+    }
+    return true;
+  }
+  if(!installSentinel())document.addEventListener('DOMContentLoaded',installSentinel,{once:true});
+})();
+(function(){
+  if(window.__sqRefineV3MainReplaceGuard||!window.Element)return;
+  window.__sqRefineV3MainReplaceGuard=true;
+  var nativeReplace=Element.prototype.replaceChildren;
+  function isLegacyTakeoverNode(n){
+    if(!n)return false;
+    if(n.nodeType===1){
+      if((n.classList&&n.classList.contains('sqbfl'))||(n.matches&&n.matches('[data-sqbfl-root]')))return true;
+      if(n.querySelector&&n.querySelector('.sqbfl,[data-sqbfl-root]'))return true;
+    }
+    if(n.nodeType===11&&n.querySelector&&n.querySelector('.sqbfl,[data-sqbfl-root]'))return true;
+    return false;
+  }
+  Element.prototype.replaceChildren=function(){
+    if(this&&this.id==='MainContent'){
+      for(var i=0;i<arguments.length;i++)if(isLegacyTakeoverNode(arguments[i]))return;
+    }
+    return nativeReplace.apply(this,arguments);
+  };
+})();
+(function(){
+  var q=new URLSearchParams(location.search),per=parseInt(q.get('sq_per_page')||'50',10),view=parseInt(q.get('sq_view_page')||'1',10);
+  if(per!==50||view!==1||window.__sqRefineV3DefaultFetchFastPath)return;
+  window.__sqRefineV3DefaultFetchFastPath=true;
+  var nativeFetch=window.fetch.bind(window),used=false;
+  window.fetch=function(input,init){
+    try{
+      var u=new URL(typeof input==='string'?input:(input&&input.url)||'',location.origin);
+      if(!used&&u.origin===location.origin&&u.pathname===location.pathname&&u.searchParams.get('view')==='sq-refine-v3-products'&&String(u.searchParams.get('page')||'1')==='1'&&document.querySelector('.product-grid .product-grid__item a[href*="/products/"]')){
+        used=true;
+        var html='<!doctype html>'+document.documentElement.outerHTML;
+        return Promise.resolve(new Response(html,{status:200,headers:{'Content-Type':'text/html'}}));
+      }
+    }catch(_){ }
+    return nativeFetch(input,init);
+  };
+})();
+(function(){
+  if(window.__sqRefineV3OriginPlacementFix)return;
+  window.__sqRefineV3OriginPlacementFix=true;
+  var marker=null,done=false;
+  function findNativeHost(main){
+    var hosts=[].slice.call(main.querySelectorAll('collection-component'));
+    for(var i=0;i<hosts.length;i++){
+      if(hosts[i].closest('.sq-refine-v3-layout'))continue;
+      if(hosts[i].querySelector('.product-grid'))return hosts[i];
+    }
+    return null;
+  }
+  function reconcile(){
+    if(done)return true;
+    var main=document.getElementById('MainContent');if(!main)return false;
+    if(!marker){
+      var host=findNativeHost(main);
+      if(host&&host.parentNode){
+        marker=document.createElement('span');
+        marker.hidden=true;
+        marker.setAttribute('aria-hidden','true');
+        marker.setAttribute('data-sq-refine-v3-origin-marker','true');
+        host.parentNode.insertBefore(marker,host);
+      }
+    }
+    var layout=main.querySelector('.sq-refine-v3-layout');
+    if(marker&&marker.isConnected&&layout&&layout!==marker.parentNode){
+      marker.parentNode.insertBefore(layout,marker);
+      marker.remove();
+      done=true;
+      main.dataset.sqRefineV3Placement='original-product-position';
+      return true;
+    }
+    return false;
+  }
+  var root=document.body||document.documentElement;
+  var observer=new MutationObserver(function(){if(reconcile()){observer.disconnect()}});
+  observer.observe(root,{childList:true,subtree:true});
+  queueMicrotask(reconcile);
+  document.addEventListener('DOMContentLoaded',function(){reconcile();setTimeout(reconcile,0);setTimeout(reconcile,500)},{once:true});
+})();
+</script>
+{% if collection.handle == 'law-enforcement-corrections' or collection.handle == 'firefighting-ems-search-rescue' %}
+<style data-sq-refine-v3-public-safety-product-visibility>
+html:has(.sq-ps-root) body #MainContent.sq-refine-v3-active .sq-refine-v3-results collection-component{
+  display:block!important;
+  visibility:visible!important;
+}
+</style>
+{% endif %}
+{% endif %}
+{% if request.page_type == 'collection' and collection.handle == 'literature' %}
+<style data-sq-literature-v3-prepaint>
+#MainContent .sq-books-tree{display:none!important;visibility:hidden!important}
+</style>
+{% endif %}
+{% if request.page_type == 'collection' and collection.handle == 'watches' %}
+<style data-sq-watches-single-surface-prepaint>
+#MainContent [class*="state-guard"],
+#MainContent [class*="state_guard"],
+#MainContent [class*="uniform-builder"],
+#MainContent [class*="uniform_builder"]{display:none!important;visibility:hidden!important}
+#MainContent.sq-refine-v3-active > collection-component:not(.sq-refine-v3-results collection-component){display:none!important}
+</style>
+<script data-sq-watches-single-surface-guard>
+(function(){
+  if(window.__sqWatchesSingleSurfaceGuard)return;
+  window.__sqWatchesSingleSurfaceGuard=true;
+  var scheduled=false;
+  function norm(v){return String(v||'').replace(/\s+/g,' ').trim().toLowerCase()}
+  function visible(el){return !!(el&&el.isConnected&&el.getClientRects().length&&getComputedStyle(el).display!=='none'&&getComputedStyle(el).visibility!=='hidden')}
+  function removeStateGuardContamination(main){
+    var headings=[].slice.call(main.querySelectorAll('h1,h2,h3,h4,h5,h6'));
+    headings.forEach(function(h){
+      var text=norm(h.textContent);
+      if(text!=='state guard uniform builder'&&text!=='build your uniform')return;
+      var target=h.closest('section,.shopify-section,[class*="section"],article,div');
+      if(!target||target===main)return;
+      var body=norm(target.textContent);
+      if(body.indexOf('state guard uniform builder')!==-1||body.indexOf('build your uniform')!==-1)target.remove();
+    });
+  }
+  function productLinks(grid){
+    return Array.from(new Set([].slice.call(grid.querySelectorAll('a[href*="/products/"]')).map(function(a){try{return new URL(a.href,location.href).pathname}catch(_){return a.getAttribute('href')||''}}).filter(Boolean)));
+  }
+  function dedupeProductSurfaces(main){
+    var grids=[].slice.call(main.querySelectorAll('.product-grid,.sq-refine-v3-grid')).filter(function(g){return productLinks(g).length>0});
+    if(grids.length<2)return;
+    var authoritative=grids.find(function(g){return g.closest('.sq-refine-v3-layout')&&visible(g)})||grids.find(visible)||grids[0];
+    var keep=new Set(productLinks(authoritative));
+    grids.forEach(function(grid){
+      if(grid===authoritative)return;
+      var links=productLinks(grid),overlap=links.some(function(href){return keep.has(href)});
+      if(!overlap)return;
+      var host=grid.closest('collection-component');
+      var target=host&&!host.contains(authoritative)?host:grid;
+      target.setAttribute('data-sq-watches-duplicate-surface','true');
+      target.hidden=true;
+      target.style.setProperty('display','none','important');
+      target.setAttribute('aria-hidden','true');
+    });
+  }
+  function reconcile(){
+    scheduled=false;
+    var main=document.getElementById('MainContent');
+    if(!main)return;
+    removeStateGuardContamination(main);
+    dedupeProductSurfaces(main);
+    main.dataset.sqWatchesSingleSurface='true';
+  }
+  function schedule(){if(scheduled)return;scheduled=true;requestAnimationFrame(reconcile)}
+  new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});
+  schedule();
+  document.addEventListener('DOMContentLoaded',function(){reconcile();setTimeout(reconcile,0);setTimeout(reconcile,750);setTimeout(reconcile,2500)},{once:true});
+})();
+</script>
+{% endif %}

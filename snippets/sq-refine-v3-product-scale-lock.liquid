@@ -1,0 +1,47 @@
+{% doc %}
+Locks V3 product-card sizing so every desktop three-column collection uses the same large visual scale as the approved Apparel & Headwear reference. It also suppresses every legacy refinement sidebar on V3 routes while preserving legacy main-content/navigation blocks at full width. V3 only; State Guard remains excluded.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<style data-sq-refine-v3-product-scale-lock>
+/* V3 is the one and only refinement surface. Keep any legacy main content, but never show its old sidebar. */
+#MainContent.sq-refine-v3-active .sq-global-refine-sidebar,
+#MainContent.sq-refine-v3-active .sq-collection-sidebar,
+#MainContent.sq-refine-v3-active .facets-block-wrapper,
+#MainContent.sq-refine-v3-active .facets-container,
+#MainContent.sq-refine-v3-active .facets-wrapper,
+#MainContent.sq-refine-v3-active [class*="filter-sidebar"]:not(.sq-refine-v3-sidebar){display:none!important;visibility:hidden!important;pointer-events:none!important}
+#MainContent.sq-refine-v3-active .sq-global-refine-layout,
+#MainContent.sq-refine-v3-active .sq-ts-v2-layout.sq-global-refine-layout{grid-template-columns:minmax(0,1fr)!important}
+#MainContent.sq-refine-v3-active .sq-global-refine-main,
+#MainContent.sq-refine-v3-active .sq-global-refine-layout>.sq-global-refine-main,
+#MainContent.sq-refine-v3-active .sq-ts-v2-layout.sq-global-refine-layout>.sq-global-refine-main{grid-column:1 / -1!important;width:100%!important;max-width:none!important;min-width:0!important;margin-inline:0!important}
+/* Once V3 is active, the product grid inside .sq-refine-v3-results is authoritative. Any native/legacy grid outside that results surface is a duplicate and must never paint, including late Shopify rerenders. */
+#MainContent.sq-refine-v3-active .product-grid:not(.sq-refine-v3-results .product-grid){display:none!important;visibility:hidden!important;pointer-events:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important}
+@media (min-width:901px){
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout{width:min(calc(100% - 32px),1440px)!important;grid-template-columns:270px minmax(0,1fr)!important;gap:22px!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results>collection-component,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .sq-collection-layout,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .sq-collection-products-column,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results results-list,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid-container,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .collection-wrapper,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results #ResultsList,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .sq-collection-layout{display:block!important;grid-template-columns:minmax(0,1fr)!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .sq-collection-layout>.sq-collection-products-column{width:100%!important;max-width:none!important;margin:0!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results results-list{padding-inline:0!important;margin-inline:0!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;justify-content:stretch!important;column-gap:28px!important;row-gap:34px!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item{min-width:0!important;width:auto!important;max-width:none!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item product-card,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item .product-card,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item .card-gallery,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item [class*="card-gallery"],
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item [class*="product-card__media"],
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item [class*="card__media"]{width:100%!important;max-width:none!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>.product-grid__item img{max-width:100%!important;object-fit:contain!important}
+}
+@media (max-width:900px){#MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+</style>
+{% endif %}
+{% render 'sq-refine-v3-visible-grid-rescue' %}

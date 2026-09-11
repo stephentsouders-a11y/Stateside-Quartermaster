@@ -1,0 +1,25 @@
+name: Accessories zero-flash proof 2
+on: [push, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Prove zero old-layout paint and record video
+        run: |
+          cat > proof.mjs <<'EOF'
+          import {chromium} from 'playwright';import fs from 'fs';fs.mkdirSync('out',{recursive:true});const U='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555',out={failures:[],devices:[]};
+          for(const [name,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){const b=await chromium.launch();const c=await b.newContext({viewport,recordVideo:{dir:'out',size:{width:name==='desktop'?1280:390,height:720}}});const p=await c.newPage();await p.addInitScript(()=>{window.__z=[];const v=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&+s.opacity!==0&&r.width>2&&r.height>2};const f=()=>{const m=document.querySelector('#MainContent');if(m){const t=Math.round(performance.now()),text=m.innerText||'';window.__z.push({t,old:[...m.querySelectorAll('.sq-subcategory-section,.sq-subcategory-card,[class*="button-tree"],[class*="category-grid"]')].some(v),native:[...m.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].some(v),stateGuard:/State Guard Uniform Builder|Build Your Uniform|PT Uniform/i.test(text),ready:m.dataset.sqRefineV3Ready||null})}if(performance.now()<6500)requestAnimationFrame(f)};requestAnimationFrame(f)});const r=await p.goto(U,{waitUntil:'domcontentloaded',timeout:90000}).catch(()=>null);for(const ms of [0,100,250,500,1000,2000]){if(ms)await p.waitForTimeout(ms-(ms===0?0:ms===100?0:ms===250?100:ms===500?250:ms===1000?500:1000));await p.screenshot({path:`out/${name}-${ms}ms.png`}).catch(()=>{})}await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:30000}).catch(()=>{});const s=await p.evaluate(()=>({samples:window.__z,ready:document.querySelector('#MainContent')?.dataset.sqRefineV3Ready||null,cards:document.querySelectorAll('#MainContent .sq-refine-v3-results .product-grid > *').length,native:[...document.querySelectorAll('#MainContent .facets-toggle__wrapper,#MainContent theme-drawer#filters-drawer')].filter(e=>getComputedStyle(e).display!=='none').length}));const bad=s.samples.filter(x=>x.old||x.native||x.stateGuard);out.devices.push({name,status:r?.status()||null,ready:s.ready,cards:s.cards,bad:bad.slice(0,20),sampleCount:s.samples.length});if(r?.status()!==200||s.ready!=='true'||s.cards<1||bad.length)out.failures.push(`${name}: status=${r?.status()} ready=${s.ready} cards=${s.cards} badFrames=${bad.length}`);const v=p.video();await p.close();await c.close();if(v){const src=await v.path();fs.copyFileSync(src,`out/${name}.webm`)}await b.close()}fs.writeFileSync('out/report.json',JSON.stringify(out,null,2));console.log(JSON.stringify(out,null,2));if(out.failures.length)process.exitCode=2;
+          EOF
+          node proof.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accessories-zero-flash-proof-2
+          path: out
+          retention-days: 14

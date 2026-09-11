@@ -1,0 +1,44 @@
+{% comment %}
+  State Guard audit overlays are collection-specific behavior.
+  Keep the wrapper inert everywhere else so ordinary collections such as
+  /collections/watches can never receive State Guard builder/navigation UI.
+{% endcomment %}
+{% if request.page_type == 'collection' and collection.handle contains 'state-guard' %}
+  {% render 'sq-state-guard-audit-overlay-pre-classification' %}
+  {% render 'sq-state-guard-final-lock' %}
+  {% render 'sq-state-guard-footwear-copy-lock' %}
+  {% render 'sq-state-guard-nj-state-guard-naval-scope-lock' %}
+  {% render 'sq-state-guard-maritime-scope-guard' %}
+  {% render 'sq-state-guard-naval-militia-uniforms' %}
+  {% render 'sq-state-guard-tactical-primary-color-preguard' %}
+  {% render 'sq-state-guard-stabrite-access-lock' %}
+  {% render 'sq-state-guard-naval-insignia-lock' %}
+  {% render 'sq-state-guard-uniform-layout-sync' %}
+  {% render 'sq-state-guard-uniform-layout-final-lock' %}
+  {% render 'sq-state-guard-uniform-layout-coverage-lock' %}
+  {% render 'sq-state-guard-uniform-layout-default-org-lock' %}
+  {% render 'sq-state-guard-uniform-layout-default-org-escape-fix' %}
+  {% render 'sq-state-guard-ri-handle-alias-preguard' %}
+  {% render 'sq-state-guard-rhode-island-uniform-lock' %}
+  {% render 'sq-state-guard-rhode-island-root-dedupe' %}
+  {% render 'sq-state-guard-propper-ocp-button-lock' %}
+  {% render 'sq-state-guard-special-ocp-coverage-lock' %}
+  {% render 'sq-state-guard-pt-button-lock' %}
+  {% render 'sq-state-guard-marlow-service-button-lock' %}
+  {% render 'sq-state-guard-ri-service-handle-repair' %}
+  {% render 'sq-state-guard-naval-pt-ninjapod-lock' %}
+  {% render 'sq-state-guard-maritime-uniform-replay-lock' %}
+  {% render 'sq-state-guard-uniform-card-dedupe' %}
+  {% render 'sq-state-guard-nj-state-guard-uniform-final-lock' %}
+  {% render 'sq-state-guard-mobile-final-lock' %}
+  {% render 'sq-state-guard-flashlight-routing-audit-wrapper' %}
+  {% render 'sq-state-guard-capitalization-final-lock' %}
+  {% render 'sq-state-guard-alaska-uniform-final-lock' %}
+  {% render 'sq-state-guard-shared-scope-labels' %}
+  {% render 'sq-state-guard-ar6701-reference' %}
+  {% render 'sq-state-guard-rank-source-correction' %}
+  {% render 'sq-state-guard-rank-group-split' %}
+  {% render 'sq-state-guard-pt-compliance-audit-wrapper' %}
+  {% render 'sq-state-guard-publish-readiness-v1' %}
+  {% render 'sq-state-guard-tactical-sidebar-audit-wrapper' %}
+{% endif %}

@@ -1,0 +1,62 @@
+{% doc %}
+Global Refine Products V3 child-route layout rescue. Structural category/type/branch choices navigate to child collection URLs carrying sq_root. Legacy/page-specific runtimes can later reorder or hide the V3 sidebar/results surface, making Refine Products appear far below the products. This guard applies to every recognized V3 root, keeps sidebar first/results second, preserves one visible V3 product surface, and excludes State Guard.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<style data-sq-refine-v3-child-route-rescue>
+html[data-sq-refine-v3-child-isolation="true"] #MainContent.sq-refine-v3-active .sq-refine-v3-layout{display:grid!important;grid-template-columns:minmax(240px,1fr) minmax(0,3fr)!important;align-items:start!important}
+html[data-sq-refine-v3-child-isolation="true"] #MainContent .sq-refine-v3-sidebar{grid-column:1!important;grid-row:1!important;align-self:start!important;display:block!important;visibility:visible!important;opacity:1!important;min-width:0!important}
+html[data-sq-refine-v3-child-isolation="true"] #MainContent .sq-refine-v3-results{grid-column:2!important;grid-row:1!important;min-width:0!important;width:100%!important;display:block!important;visibility:visible!important;opacity:1!important}
+html[data-sq-refine-v3-child-isolation="true"] #MainContent .sq-refine-v3-results collection-component,
+html[data-sq-refine-v3-child-isolation="true"] #MainContent .sq-refine-v3-results results-list,
+html[data-sq-refine-v3-child-isolation="true"] #MainContent .sq-refine-v3-results .product-grid-container{display:block!important;visibility:visible!important;opacity:1!important;min-width:0!important;width:100%!important}
+html[data-sq-refine-v3-child-isolation="true"] #MainContent .sq-refine-v3-results .product-grid{display:grid!important;visibility:visible!important;opacity:1!important;grid-template-columns:repeat(3,minmax(0,1fr))!important}
+@media (max-width:900px){
+html[data-sq-refine-v3-child-isolation="true"] #MainContent.sq-refine-v3-active .sq-refine-v3-layout{display:block!important}
+html[data-sq-refine-v3-child-isolation="true"] #MainContent .sq-refine-v3-sidebar,
+html[data-sq-refine-v3-child-isolation="true"] #MainContent .sq-refine-v3-results{display:block!important;width:100%!important}
+html[data-sq-refine-v3-child-isolation="true"] #MainContent .sq-refine-v3-results .product-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+</style>
+<script data-sq-refine-v3-child-route-rescue>
+(function(){
+  var current={{ collection.handle | json }};
+  var params=new URLSearchParams(location.search),root=params.get('sq_root')||'';
+  var ROOTS=new Set([
+    'accessories-gifts-collectibles','airsoft-milsim','apparel','armed-forces-gear','art',
+    'body-armor-ballistic-protection','literature','child-safety-shop','dive-scuba',
+    'firearm-accessories','first-aid-medical-ifak','flags-patriotic-decor',
+    'flashlights-lighting','footwear-gloves-eyewear','k9-dog-gear','knives-axes-cutlery',
+    'morale-patches-tactical-id','outdoor-preparedness-gear','patriotic-american-heritage',
+    'safety-rescue-climbing','sta-brite-insignia','tactical-gear','thin-line','uniforms',
+    'watches','zippos-lighters-torches','stateside-quartermaster-logo-merch',
+    'army-national-guard-series','air-national-guard-series','products-built-for-the-line-u-s-army',
+    'products-built-for-the-line-u-s-navy','products-built-for-the-line-u-s-air-force',
+    'products-built-for-the-line-u-s-marine-corps','products-built-for-the-line-u-s-coast-guard',
+    'products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series',
+    'military-schools-academies','law-enforcement-corrections','firefighting-ems-search-rescue'
+  ]);
+  if(!root||!ROOTS.has(root)||current===root||current==='state-guard-series'||root==='state-guard-series')return;
+  var main=document.getElementById('MainContent');if(!main)return;
+  function rescue(){
+    var layout=main.querySelector('.sq-refine-v3-layout'),side=main.querySelector('.sq-refine-v3-sidebar'),results=main.querySelector('.sq-refine-v3-results');
+    if(!layout||!side||!results)return false;
+    main.classList.add('sq-refine-v3-active');
+    document.documentElement.dataset.sqRefineV3ChildIsolation='true';
+    document.documentElement.dataset.sqRefineV3ChildRoot=root;
+    if(side.parentElement!==layout)layout.insertBefore(side,layout.firstChild);
+    else if(layout.firstElementChild!==side)layout.insertBefore(side,layout.firstElementChild);
+    if(results.parentElement!==layout)layout.appendChild(results);
+    else if(side.nextElementSibling!==results)layout.insertBefore(results,side.nextSibling);
+    [layout,side,results].forEach(function(el){el.style.removeProperty('display');el.style.removeProperty('visibility');el.style.removeProperty('opacity')});
+    results.querySelectorAll('collection-component,results-list,.product-grid-container,.product-grid').forEach(function(el){el.style.removeProperty('display');el.style.removeProperty('visibility');el.style.removeProperty('opacity')});
+    layout.dataset.sqRefineV3ChildRescued='true';
+    layout.dataset.sqRefineV3ChildRoot=root;
+    return true;
+  }
+  var tries=0,t=setInterval(function(){tries++;if(rescue()||tries>180)clearInterval(t)},100);
+  [0,100,250,500,900,1500,2500,4000,6500,9000].forEach(function(ms){setTimeout(rescue,ms)});
+  if(!main.__sqRefineV3ChildLayoutGuard){main.__sqRefineV3ChildLayoutGuard=new MutationObserver(rescue);main.__sqRefineV3ChildLayoutGuard.observe(main,{childList:true,subtree:true})}
+})();
+</script>
+{% endif %}
+{%- comment -%} 2026-09-11: nonfunctional touch to trigger exhaustive Child Safety Chromium certification. {%- endcomment -%}

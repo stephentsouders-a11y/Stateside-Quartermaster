@@ -1,0 +1,63 @@
+{% doc %}
+Accessories, Gifts & Collectibles Refine Products hard repair. Ensures the nine canonical page-specific categories always render as checkbox choices and recovers Shopify native Type, Manufacturer and Availability facets even when the V3 product host does not contain the native facet controls.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+{% assign sq_accessories_root = request.params.sq_root | default: collection.handle %}
+{% if collection.handle == 'accessories-gifts-collectibles' or sq_accessories_root == 'accessories-gifts-collectibles' %}
+<style data-sq-button01-accessories-hard-repair>
+#MainContent .sq-subcategory-section,
+#MainContent .sq-subcategory-card,
+#MainContent .facets-block-wrapper--horizontal .facets__filters-wrapper,
+#MainContent .facets-toggle__wrapper,
+#MainContent theme-drawer#filters-drawer{display:none!important;visibility:hidden!important;pointer-events:none!important}
+</style>
+<script data-sq-button01-accessories-hard-repair>
+(function(){
+  var main=document.getElementById('MainContent');if(!main)return;
+  var params=new URLSearchParams(location.search),root='accessories-gifts-collectibles';
+  var CATS=[
+    ['Challenge Coins & Displays','challenge-coins-display-holders'],
+    ['Collectibles & Cards','collectibles-cards'],
+    ['Drinkware','drinkware-gifts'],
+    ['Keychains & Lanyards','keychains-lanyards'],
+    ['Memorial & Personalized Gifts','personalized-displays-memorials'],
+    ['Military Surplus & Collectibles','military-surplus-field-gear-collectibles'],
+    ['Pins, Buttons & Small Insignia','pins-buttons-small-insignia'],
+    ['Sword & Knife Display Cases','sword-knife-display-cases'],
+    ['Wallets & Pocket Gifts','wallets-pocket-gifts']
+  ];
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
+  function key(v){return clean(v).toLowerCase().replace(/[\u2019']/g,'').replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim()}
+  function current(){return location.pathname.match(/^\/collections\/([^/?#]+)/)?.[1]||root}
+  function target(handle){var u=new URL('/collections/'+handle,location.origin);u.searchParams.set('sq_root',root);params.forEach(function(v,k){if(k.indexOf('filter.')===0||k==='sort_by'||k==='preview_theme_id')u.searchParams.append(k,v)});return u.pathname+'?'+u.searchParams.toString()}
+  function filterUrl(name,value,checked){var u=new URL(location.href),vals=u.searchParams.getAll(name).filter(function(v){return v!==value});if(checked)vals.push(value);u.searchParams.delete(name);Array.from(new Set(vals)).forEach(function(v){u.searchParams.append(name,v)});u.searchParams.delete('page');u.searchParams.delete('sq_view_page');return u.pathname+(u.searchParams.toString()?'?'+u.searchParams.toString():'')}
+  function sidebar(){
+    var s=main.querySelector('.sq-refine-v3-sidebar,.sq-global-refine-sidebar');
+    if(s){if(!s.classList.contains('sq-refine-v3-sidebar'))s.classList.add('sq-refine-v3-sidebar');return s}
+    s=document.createElement('aside');s.className='sq-refine-v3-sidebar';s.setAttribute('aria-label','Refine Products');
+    var layout=main.querySelector('.sq-refine-v3-layout');
+    if(layout){layout.insertBefore(s,layout.firstChild);return s}
+    var results=main.querySelector('.sq-refine-v3-results');
+    if(results&&results.parentNode){results.parentNode.insertBefore(s,results);return s}
+    var grid=main.querySelector('.product-grid');
+    if(grid&&grid.parentNode){grid.parentNode.insertBefore(s,grid);return s}
+    main.insertBefore(s,main.firstChild);return s
+  }
+  function groups(s){return [].slice.call(s.querySelectorAll(':scope > details.sq-refine-v3-group'))}
+  function group(s,title){return groups(s).find(function(d){return key(d.querySelector(':scope > summary')?.textContent)===key(title)})||null}
+  function ensureGroup(s,title){var d=group(s,title);if(d)return d;d=document.createElement('details');d.className='sq-refine-v3-group';d.innerHTML='<summary></summary><div class="sq-refine-v3-choices"></div>';d.querySelector('summary').textContent=title;s.appendChild(d);return d}
+  function structuralChoice(label,handle){var row=document.createElement('label');row.className='sq-refine-v3-choice';var input=document.createElement('input');input.type='checkbox';input.dataset.kind='structural';input.dataset.target=target(handle);input.checked=current()===handle;var span=document.createElement('span');span.textContent=label;row.append(input,span);input.addEventListener('change',function(e){e.stopImmediatePropagation();location.assign(input.checked?input.dataset.target:target(root))},true);return row}
+  function ensureCategories(s){var d=ensureGroup(s,'Shop by Category'),host=d.querySelector(':scope > .sq-refine-v3-choices');host.replaceChildren();CATS.forEach(function(x){host.appendChild(structuralChoice(x[0],x[1]))});var active=!!host.querySelector('input:checked');d.dataset.active=active?'true':'false';if(active)d.open=true;if(d!==groups(s)[0])s.insertBefore(d,groups(s)[0]||null)}
+  function nativeHeading(input){var d=input.closest('details'),h=clean(d&&d.querySelector(':scope > summary')?.textContent);if(!h){var fs=input.closest('fieldset');h=clean(fs&&fs.querySelector('legend')?.textContent)}var n=key(h);if(/availability/.test(n)||input.name==='filter.v.availability')return'Availability';if(/vendor|manufacturer|brand/.test(n)||input.name==='filter.p.vendor')return'Shop by Manufacturers';if(/product type|type/.test(n)||input.name==='filter.p.product_type')return'Shop by Type';return''}
+  function nativeLabel(input){if(input.id){var l=document.querySelector('label[for="'+CSS.escape(input.id)+'"]');if(l)return clean(l.textContent)}return clean(input.closest('label')?.textContent)||clean(input.value)}
+  function recoverNative(s){
+    var map=new Map();
+    main.querySelectorAll('input[name^="filter."]').forEach(function(src){if(s.contains(src))return;var title=nativeHeading(src);if(!title)return;var label=nativeLabel(src),value=clean(src.value);if(!label||!value)return;var name=src.name,k=key(title);if(!map.has(k))map.set(k,{title:title,items:[]});var a=map.get(k).items;if(!a.some(function(x){return x.name===name&&x.value===value}))a.push({name:name,value:value,label:label})});
+    map.forEach(function(g){var d=ensureGroup(s,g.title),host=d.querySelector(':scope > .sq-refine-v3-choices');if(host.children.length)return;g.items.forEach(function(x){var row=document.createElement('label');row.className='sq-refine-v3-choice';var input=document.createElement('input');input.type='checkbox';input.dataset.kind='native';input.dataset.filterName=x.name;input.dataset.filterValue=x.value;input.value=x.value;input.checked=params.getAll(x.name).indexOf(x.value)>-1;var span=document.createElement('span');span.textContent=x.label;row.append(input,span);input.addEventListener('change',function(e){e.stopImmediatePropagation();location.assign(filterUrl(x.name,x.value,input.checked))},true);host.appendChild(row)});if(host.querySelector('input:checked')){d.dataset.active='true';d.open=true}})
+  }
+  function repair(){var s=sidebar();ensureCategories(s);recoverNative(s);s.dataset.sqButton01Fixed='true';main.dataset.sqAccessoriesRefineRepair='true';return s.querySelectorAll('input[type="checkbox"]').length>0}
+  var tries=0,t=setInterval(function(){tries++;if(repair()||tries>200)clearInterval(t)},50);[0,100,250,500,1000,2000,4000].forEach(function(ms){setTimeout(repair,ms)});
+})();
+</script>
+{% endif %}
+{% endif %}

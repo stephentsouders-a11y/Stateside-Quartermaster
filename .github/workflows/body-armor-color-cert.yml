@@ -1,0 +1,133 @@
+name: Body Armor Color Pattern Chromium Cert
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/body-armor-color-cert.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify Body Armor color pattern behavior
+        run: |
+          cat > cert.mjs <<'JS'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          const browser=await chromium.launch({headless:true});
+          const base='https://www.statesideqm.com/collections/body-armor-ballistic-protection?preview_theme_id=158561894555';
+          const needed=['Black','Coyote','MultiCam / OCP','OD / Olive Green','Ranger Green'];
+          const reports=[];
+          async function ready(page,filtered=false){
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:60000});
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqUniformColorReady==='true'&&window.__sqUniformColor?.ready===true,{timeout:90000});
+            if(filtered)await page.waitForFunction(()=>document.documentElement.classList.contains('sq-ucp-filtered'),{timeout:30000});
+          }
+          async function openDetails(locator){
+            const tag=await locator.evaluate(el=>el.tagName).catch(()=>null);
+            const details=tag==='DETAILS'?locator:locator.locator('xpath=ancestor::details[1]');
+            if(await details.count() && !(await details.evaluate(el=>el.open)))await details.locator(':scope > summary').click();
+          }
+          async function gridColumns(page,selector){
+            return page.locator(selector).evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(/\s+/).filter(Boolean).length).catch(()=>0);
+          }
+          async function certify(name,viewport){
+            const context=await browser.newContext({viewport});
+            const page=await context.newPage();
+            const pageErrors=[],consoleErrors=[];
+            page.on('pageerror',e=>pageErrors.push(e.message));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            const r=await page.goto(base,{waitUntil:'domcontentloaded',timeout:90000});
+            await ready(page);
+            const before=await page.evaluate(()=>{const g=document.querySelector('[data-sq-ucp-group]'),u=new URL(location.href);return{heading:g?.querySelector('summary')?.textContent?.trim(),choices:window.__sqUniformColor?.choices||[],total:window.__sqUniformColor?.total||0,root:u.searchParams.get('sq_root'),path:u.pathname,nativeCards:document.querySelectorAll('.sq-refine-v3-results collection-component .product-grid > .product-grid__item').length,pageSizes:[...document.querySelectorAll('.sq-refine-v3-page-size input')].map(i=>i.value)}});
+            before.nativeColumns=await gridColumns(page,'.sq-refine-v3-results collection-component .product-grid');
+            const colorGroup=page.locator('[data-sq-ucp-group]');
+            await openDetails(colorGroup);
+            const black=colorGroup.locator('label').filter({hasText:/^Black\s*\(/}).locator('input');
+            if(await black.count()!==1)throw Error(name+': Black choice missing or duplicated');
+            await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),black.check()]);
+            await ready(page,true);
+            const filtered=await page.evaluate(()=>{const u=new URL(location.href);const cards=[...document.querySelectorAll('[data-sq-ucp-results] .product-grid__item')];return{params:u.searchParams.getAll('sq_ucp'),root:u.searchParams.get('sq_root'),path:u.pathname,matches:window.__sqUniformColor?.matches||0,cards:cards.length,uniqueProducts:new Set(cards.map(x=>x.querySelector('[data-sq-ucp-product]')?.dataset.sqUcpProduct||x.dataset.productId||x.textContent)).size,checked:[...document.querySelectorAll('[data-sq-ucp-group] input:checked')].map(i=>i.value),pageSize:window.__sqUniformColor?.pageSize,pager:document.querySelector('[data-sq-ucp-results] .sq-refine-v3-pager')?.textContent?.replace(/\s+/g,' ').trim()||''}});
+            filtered.columns=await gridColumns(page,'[data-sq-ucp-results] .product-grid');
+            const pageSizeInputs=page.locator('.sq-refine-v3-page-size input');
+            if(await pageSizeInputs.count()<3)throw Error(name+': 50/100/250 page-size controls missing');
+            const pageSize100=page.locator('.sq-refine-v3-page-size input[value="100"]').first();
+            if(await pageSize100.count()!==1)throw Error(name+': 100 page-size control missing or duplicated');
+            await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),pageSize100.check()]);
+            await ready(page,true);
+            const size100=await page.evaluate(()=>({param:new URL(location.href).searchParams.get('sq_per_page'),pageSize:window.__sqUniformColor?.pageSize,cards:document.querySelectorAll('[data-sq-ucp-results] .product-grid__item').length,pager:document.querySelector('[data-sq-ucp-results] .sq-refine-v3-pager')?.textContent?.replace(/\s+/g,' ').trim()||''}));
+            const next=page.locator('[data-sq-ucp-results] .sq-refine-v3-pager a').filter({hasText:'Next'}).first();
+            let pagination={tested:false};
+            if(await next.count()){
+              pagination.tested=true;
+              await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),next.click()]);
+              await ready(page,true);
+              pagination=await page.evaluate(()=>({tested:true,viewPage:new URL(location.href).searchParams.get('sq_view_page'),cards:document.querySelectorAll('[data-sq-ucp-results] .product-grid__item').length,pager:document.querySelector('[data-sq-ucp-results] .sq-refine-v3-pager')?.textContent?.replace(/\s+/g,' ').trim()||''}));
+              await page.goto(base+'&sq_ucp=black&sq_per_page=100',{waitUntil:'domcontentloaded',timeout:90000});
+              await ready(page,true);
+            }
+            const structural=page.locator('.sq-refine-v3-sidebar input[data-kind="structural"][data-target]').first();
+            if(await structural.count()!==1)throw Error(name+': structural Refine checkbox missing');
+            await openDetails(structural);
+            const target=await structural.getAttribute('data-target');
+            await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),structural.check()]);
+            await ready(page,true);
+            const child=await page.evaluate(()=>{const u=new URL(location.href);return{path:u.pathname,root:u.searchParams.get('sq_root'),colors:u.searchParams.getAll('sq_ucp'),matches:window.__sqUniformColor?.matches||0}});
+            const selectedStructural=page.locator('.sq-refine-v3-sidebar input[data-kind="structural"]:checked').first();
+            if(await selectedStructural.count()!==1)throw Error(name+': structural checkbox did not remain selected after navigation');
+            await openDetails(selectedStructural);
+            await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),selectedStructural.evaluate(el=>el.click())]);
+            await ready(page,true);
+            const returned=await page.evaluate(()=>{const u=new URL(location.href);return{path:u.pathname,root:u.searchParams.get('sq_root'),colors:u.searchParams.getAll('sq_ucp')}});
+            const structuralResult={target,child,returned};
+            if(new URL(page.url()).pathname!=='/collections/body-armor-ballistic-protection')await page.goto(base+'&sq_ucp=black',{waitUntil:'domcontentloaded',timeout:90000});
+            await ready(page,true);
+            const checked=page.locator('[data-sq-ucp-group] input[value="black"]');
+            await openDetails(checked);
+            await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),checked.evaluate(el=>el.click())]);
+            await ready(page);
+            const cleared=await page.evaluate(()=>{const u=new URL(location.href);return{params:u.searchParams.getAll('sq_ucp'),root:u.searchParams.get('sq_root'),path:u.pathname,filtered:document.documentElement.classList.contains('sq-ucp-filtered'),nativeCards:document.querySelectorAll('.sq-refine-v3-results collection-component .product-grid > .product-grid__item').length}});
+            cleared.columns=await gridColumns(page,'.sq-refine-v3-results collection-component .product-grid');
+            const labels=before.choices.map(x=>x.label);
+            const expectedColumns=name==='desktop'?3:2;
+            const structuralOk=structuralResult.child.path!=='/collections/uniforms'&&structuralResult.child.colors.includes('black')&&structuralResult.returned.path==='/collections/body-armor-ballistic-protection'&&structuralResult.returned.path!=='/collections/uniforms'&&structuralResult.returned.colors.includes('black')&&structuralResult.returned.root!=='uniforms';
+            const sizeOk=size100.param==='100'&&size100.pageSize===100&&size100.cards>0&&size100.cards<=100&&size100.pager.length>0;
+            const paginationOk=!pagination.tested||(pagination.viewPage==='2'&&pagination.cards>0&&pagination.cards<=100);
+            const layoutOk=before.nativeColumns===expectedColumns&&filtered.columns===expectedColumns&&cleared.columns===expectedColumns;
+            const controlsOk=['50','100','250'].every(v=>before.pageSizes.includes(v));
+            const ok=r.status()===200&&pageErrors.length===0&&consoleErrors.length===0&&before.heading==='Shop by Color / Pattern'&&before.total>0&&before.nativeCards>0&&needed.every(x=>labels.includes(x))&&before.root===null&&controlsOk&&filtered.params.includes('black')&&filtered.root===null&&filtered.path==='/collections/body-armor-ballistic-protection'&&filtered.matches>0&&filtered.cards>0&&filtered.cards<=filtered.pageSize&&filtered.uniqueProducts===filtered.cards&&filtered.checked.includes('black')&&filtered.pager.length>0&&sizeOk&&paginationOk&&structuralOk&&layoutOk&&cleared.params.length===0&&cleared.root===null&&cleared.path==='/collections/body-armor-ballistic-protection'&&!cleared.filtered&&cleared.nativeCards>0;
+            const report={name,viewport,http:r.status(),pageErrors,consoleErrors,before,filtered,size100,pagination,structuralResult,cleared,controlsOk,layoutOk,ok};
+            reports.push(report);
+            await page.screenshot({path:`body-armor-color-${name}.png`,fullPage:true});
+            await context.close();
+          }
+          try{
+            await certify('desktop',{width:1440,height:1000});
+            await certify('mobile',{width:390,height:844});
+          }catch(e){reports.push({fatal:String(e?.stack||e),ok:false})}
+          const ok=reports.length===2&&reports.every(r=>r.ok);
+          fs.writeFileSync('body-armor-color-report.json',JSON.stringify({ok,reports},null,2));
+          console.log('BODY_ARMOR_COLOR_CERT '+JSON.stringify({ok,reports}));
+          await browser.close();
+          if(!ok)process.exit(1);
+          JS
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: body-armor-color-cert
+          path: |
+            body-armor-color-report.json
+            body-armor-color-desktop.png
+            body-armor-color-mobile.png
+          if-no-files-found: ignore
+          retention-days: 7

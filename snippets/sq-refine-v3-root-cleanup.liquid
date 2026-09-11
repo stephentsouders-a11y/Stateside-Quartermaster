@@ -1,0 +1,44 @@
+{% assign sq_v3_cleanup_roots = 'accessories-gifts-collectibles,airsoft-milsim,apparel,armed-forces-gear,art,body-armor-ballistic-protection,literature,child-safety-shop,dive-scuba,firearm-accessories,first-aid-medical-ifak,flags-patriotic-decor,flashlights-lighting,footwear-gloves-eyewear,k9-dog-gear,knives-axes-cutlery,morale-patches-tactical-id,outdoor-preparedness-gear,patriotic-american-heritage,safety-rescue-climbing,sta-brite-insignia,tactical-gear,thin-line,uniforms,watches,zippos-lighters-torches,stateside-quartermaster-logo-merch,army-national-guard-series,air-national-guard-series,products-built-for-the-line-u-s-army,products-built-for-the-line-u-s-navy,products-built-for-the-line-u-s-air-force,products-built-for-the-line-u-s-marine-corps,products-built-for-the-line-u-s-coast-guard,products-built-for-the-line-u-s-space-force,rotc-series,jrotc-series,military-schools-academies,law-enforcement-corrections,firefighting-ems-search-rescue' | split: ',' %}
+{% if request.page_type == 'collection' and sq_v3_cleanup_roots contains collection.handle %}
+<script data-sq-refine-v3-root-cleanup="{{ collection.handle | escape }}">
+(function(){
+  var route='{{ collection.handle | escape }}';
+  var falseHandles=new Set(['all','stateside-quartermaster-logo-merch','air-national-guard-series','state-guard-series','rotc-series','jrotc-series','military-schools-academies','public-safety-series','army-national-guard-series']);
+  var timer=null;
+  function h(raw){try{var m=new URL(raw,location.origin).pathname.match(/^\/collections\/([^/?#]+)/);return m?decodeURIComponent(m[1]):''}catch(_){return''}}
+  function hide(node){if(!node)return;node.hidden=true;node.setAttribute('aria-hidden','true');node.style.setProperty('display','none','important');node.style.setProperty('visibility','hidden','important');node.style.setProperty('pointer-events','none','important')}
+  function hasProducts(node){return !!(node&&node.querySelector('.product-grid .product-grid__item a[href*="/products/"]'))}
+  function clean(){
+    var main=document.getElementById('MainContent');
+    if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
+    document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]').forEach(function(node){
+      if(node.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results,.sq-refine-v3-page-size'))return;
+      hide(node);
+    });
+    var side=main.querySelector('.sq-refine-v3-sidebar'),results=main.querySelector('.sq-refine-v3-results');if(!side||!results)return false;
+    side.querySelectorAll('input[data-kind="structural"][data-target]').forEach(function(input){
+      var target=h(input.dataset.target||'');
+      if(falseHandles.has(target)&&target!==route){var row=input.closest('.sq-refine-v3-choice');if(row)row.remove()}
+      else if((input.dataset.target||'').includes('filter.v.availability=1')){try{var u=new URL(input.dataset.target,location.origin);u.searchParams.delete('filter.v.availability');input.dataset.target=u.pathname+(u.search?'?'+u.searchParams.toString():'')}catch(_){}}
+    });
+    side.querySelectorAll('.sq-refine-v3-group:not([data-sq-tactical-colors])').forEach(function(group){if(!group.querySelector('input[type="checkbox"]'))group.remove()});
+    if(!hasProducts(results)){
+      var candidates=[].slice.call(main.querySelectorAll('collection-component')).filter(function(node){
+        return !node.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results')&&hasProducts(node);
+      });
+      var chosen=candidates.find(function(node){return !!node.closest('.sq-collection-products-column')})||candidates[0];
+      if(chosen){
+        var host=chosen.closest('.sq-collection-products-column')||chosen;
+        if(host!==results&&!host.contains(results))results.appendChild(host);
+      }
+    }
+    main.dataset.sqRefineV3RootCleanup='true';
+    return true;
+  }
+  function queue(){clearTimeout(timer);timer=setTimeout(clean,30)}
+  clean();
+  var observer=new MutationObserver(queue);observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['data-sq-refine-v3-hidden-nav','data-sq-refine-v3-ready']});
+  [100,300,700,1500,3000,6000,10000,15000].forEach(function(ms){setTimeout(clean,ms)});
+})();
+</script>
+{% endif %}

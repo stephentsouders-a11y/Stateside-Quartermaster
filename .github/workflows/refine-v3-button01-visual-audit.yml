@@ -1,0 +1,50 @@
+name: REFINE V3 Button 01 Forensic Visual Audit
+
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/scripts/refine-v3-button01-final-cert-v5.mjs'
+      - '.github/workflows/refine-v3-button01-visual-audit.yml'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium audit dependencies
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Build v7 customer-click harness
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('.github/scripts/refine-v3-button01-final-cert-v5.mjs').read_text()
+          old="await inp.click({force:true,noWaitAfter:true});r.after=await waitUrlChange(p,r.before);"
+          new="await inp.locator('xpath=ancestor::label[1]').click({noWaitAfter:true});r.after=await waitUrlChange(p,r.before);"
+          if old not in src:
+              raise SystemExit('filter click pattern not found')
+          src=src.replace(old,new,1)
+          Path('.github/scripts/refine-v3-button01-final-cert-v7-runtime.mjs').write_text(src)
+          PY
+      - name: Run final button 01 Chromium certification v7
+        run: node .github/scripts/refine-v3-button01-final-cert-v7-runtime.mjs
+      - name: Upload final visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: button-01-final-v7
+          path: audit-evidence/button-01/final-v5
+          if-no-files-found: warn
+          retention-days: 14
+
+# Button 01 must pass automated and manual Chromium review before button 02 begins.

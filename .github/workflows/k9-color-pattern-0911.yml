@@ -1,0 +1,65 @@
+name: K9 color pattern diagnosis
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/k9-color-pattern-0911.yml']
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null
+          npm install playwright@1.55.0 agent-browser >/dev/null
+          npx playwright install chromium >/dev/null
+          npx agent-browser install >/dev/null
+      - name: Inspect K9 native color filtering
+        run: |
+          mkdir -p proof
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1000}});
+          const page=await context.newPage();
+          const errors=[];page.on('pageerror',e=>errors.push(e.message));
+          const base='https://www.statesideqm.com/collections/k9-dog-gear';
+          await page.goto(base+'?preview_theme_id=158561894555',{waitUntil:'domcontentloaded',timeout:90000});
+          await page.waitForSelector('.sq-refine-v3-sidebar',{timeout:60000});
+          await page.waitForTimeout(2500);
+          const state=await page.evaluate(()=>({theme:window.Shopify?.theme,ready:document.querySelector('#MainContent')?.dataset,groups:[...document.querySelectorAll('.sq-refine-v3-sidebar details')].map(d=>({title:d.querySelector('summary')?.textContent,inputs:[...d.querySelectorAll('input')].map(i=>({name:i.name,value:i.value,label:i.closest('label')?.textContent,data:{...i.dataset}}))})),native:[...document.querySelectorAll('input[name^="filter."]')].map(i=>({name:i.name,value:i.value})),grids:[...document.querySelectorAll('#MainContent .product-grid')].map(g=>({count:g.querySelectorAll(':scope>.product-grid__item').length,visible:!!g.getBoundingClientRect().width}))}));
+          console.log('K9_STATE '+JSON.stringify({errors,state}));
+          fs.writeFileSync('proof/k9-state.json',JSON.stringify(state,null,2));
+          const raw=await context.request.get(base+'/products.json?limit=250');
+          const products=(await raw.json()).products;
+          fs.writeFileSync('proof/k9-products.json',JSON.stringify(products,null,2));
+          console.log('K9_PRODUCT_COUNT '+products.length);
+          for(const f of ['', '&filter.v.option.color=Black','&filter.v.option.color=Multicam','&filter.p.tag='+encodeURIComponent('SQ Color/Pattern: Black')]){
+            const url=base+'?view=sq-refine-v3-products&preview_theme_id=158561894555'+f;
+            const r=await context.request.get(url);const html=await r.text();
+            const s=await page.evaluate(html=>{const d=new DOMParser().parseFromString(html,'text/html');return{count:d.querySelectorAll('.product-grid>.product-grid__item').length,handles:[...d.querySelectorAll('.product-grid>.product-grid__item')].map(x=>x.querySelector('a[href*="/products/"]')?.getAttribute('href')),native:[...d.querySelectorAll('input[name^="filter."]')].map(i=>({name:i.name,value:i.value,checked:i.checked}))}},html);
+            console.log('K9_NATIVE_TEST '+JSON.stringify({f,http:r.status(),state:s}));
+            fs.writeFileSync('proof/native-'+(f?encodeURIComponent(f).slice(0,80):'base')+'.html',html);
+          }
+          await page.locator('.sq-refine-v3-sidebar').scrollIntoViewIfNeeded();
+          await page.screenshot({path:'proof/k9-before.png'});await browser.close();
+          EOF
+          node audit.mjs
+      - name: Chromium agent-browser baseline
+        run: |
+          npx agent-browser open 'https://www.statesideqm.com/collections/k9-dog-gear?preview_theme_id=158561894555'
+          npx agent-browser wait '.sq-refine-v3-sidebar'
+          npx agent-browser snapshot -i > proof/k9-before-snapshot.txt
+          npx agent-browser screenshot proof/k9-agent-before.png
+          npx agent-browser close
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k9-color-pattern-diagnosis
+          path: proof
+          retention-days: 7

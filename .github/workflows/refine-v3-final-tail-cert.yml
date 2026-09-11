@@ -1,0 +1,49 @@
+name: Refine V3 final tail certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-final-tail-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify-tail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify final tail
+        run: |
+          cat > tail.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const BASE='https://www.statesideqm.com';
+          const THEME='158561894555';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const browser=await chromium.launch({headless:true});
+          let failed=false;
+          function url(path,extra={}){const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);for(const[k,v]of Object.entries(extra))u.searchParams.set(k,String(v));return u.toString()}
+          async function nav(page,target){let r;for(let i=0;i<4;i++){r=await page.goto(target,{waitUntil:'domcontentloaded',timeout:60000});if((r?.status()||0)===200)return r;if(![429,500,502,503,504].includes(r?.status()||0))return r;await sleep([2500,5000,9000,14000][i])}return r}
+          async function certifyPublic(root,device,viewport,desired){
+            const ctx=await browser.newContext({viewport});const page=await ctx.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+            const r=await nav(page,url('/collections/'+root));
+            try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:25000})}catch{}
+            await sleep(3500);
+            const d=await page.evaluate(({root,desired})=>{const main=document.querySelector('#MainContent'),side=main?.querySelector('.sq-refine-v3-sidebar'),results=main?.querySelector('.sq-refine-v3-results'),grid=results?.querySelector('.product-grid');const cards=grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(el=>{const s=getComputedStyle(el),b=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&b.width>0&&b.height>0&&!!el.querySelector('a[href*="/products/"]')}):[];const sizes=[...document.querySelectorAll('.sq-refine-v3-page-size input')].map(x=>x.value);const groups=[...(side?.querySelectorAll('details.sq-refine-v3-group')||[])];const tpl=grid?getComputedStyle(grid).gridTemplateColumns:'';const cols=tpl&&tpl!=='none'?tpl.trim().split(/\s+/).length:0;const structural=[...(side?.querySelectorAll('input[data-kind="structural"][data-target]')||[])];const native=[...(side?.querySelectorAll('input[data-kind="native"]')||[])];return{path:location.pathname==='/collections/'+root,ready:main?.dataset.sqRefineV3Ready==='true',error:main?.dataset.sqRefineV3Error||'',cleanup:main?.dataset.sqRefineV3RootCleanup==='true',isolation:document.querySelector('script[data-sq-refine-v3-legacy-isolation]')?.dataset.sqRefineV3LegacyIsolation||'',sidebar:!!side&&getComputedStyle(side).display!=='none',title:(side?.textContent||'').includes('Refine Products'),sizes,default50:!!document.querySelector('.sq-refine-v3-page-size input[value="50"]:checked'),groups:groups.length,inactiveClosed:groups.filter(g=>g.dataset.active!=='true').every(g=>!g.open),activeOpen:groups.filter(g=>g.dataset.active==='true').every(g=>g.open),cards:cards.length,cols,nativeColumn:!!results?.querySelector('.sq-collection-products-column'),sticky:side?getComputedStyle(side).position:'',legacyVisible:[...document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]')].filter(el=>{const s=getComputedStyle(el),b=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&b.width>0&&b.height>0}).length,structural:structural.length,native:native.length,badStructural:structural.filter(x=>(x.dataset.target||'').includes('filter.v.availability=1')||/\/collections\/(?:all|state-guard-series|public-safety-series)(?:[/?]|$)/.test(x.dataset.target||'')).length,badNative:native.filter(x=>!String(x.dataset.filterName||'').startsWith('filter.')).length,desired};},{root,desired});
+            const stickyOk=device==='mobile'?d.sticky!=='sticky':d.sticky==='sticky';const ok=(r?.status()===200&&errors.length===0&&d.path&&d.ready&&!d.error&&d.cleanup&&d.isolation===root&&d.sidebar&&d.title&&['50','100','250'].every(v=>d.sizes.includes(v))&&d.default50&&d.groups>0&&d.inactiveClosed&&d.activeOpen&&d.cards>0&&d.cards<=50&&d.cols===desired&&d.nativeColumn&&stickyOk&&d.legacyVisible===0&&d.badStructural===0&&d.badNative===0);
+            console.log('PUBLIC_TAIL '+JSON.stringify({root,device,http:r?.status()||0,errors,d,ok}));if(!ok)failed=true;await ctx.close();
+          }
+          for(const root of ['law-enforcement-corrections','firefighting-ems-search-rescue']){await certifyPublic(root,'desktop',{width:1440,height:1000},3);await sleep(2500);await certifyPublic(root,'mobile',{width:390,height:844},2);await sleep(3500)}
+          async function pageGuard(path,label,expectV3){const ctx=await browser.newContext({viewport:{width:1440,height:1000}}),page=await ctx.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));const r=await nav(page,url(path));await sleep(2500);const d=await page.evaluate(()=>({v3:!!document.querySelector('[data-sq-refine-v3]'),sidebar:!!document.querySelector('.sq-refine-v3-sidebar'),h1:(document.querySelector('h1')?.textContent||'').trim()}));const ok=r?.status()===200&&errors.length===0&&(expectV3?(d.v3&&d.sidebar):(!d.v3&&!d.sidebar));console.log('PAGE_GUARD '+JSON.stringify({label,http:r?.status()||0,errors,d,ok}));if(!ok)failed=true;await ctx.close()}
+          await pageGuard('/collections/state-guard-series','State Guard freeze',false);await sleep(3500);await pageGuard('/pages/armored-vehicles-purchase-inquiry','Armored Vehicles',false);await sleep(3500);
+          async function sizeCheck(target){const ctx=await browser.newContext({viewport:{width:1440,height:1000}}),page=await ctx.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));const r=await nav(page,url('/collections/accessories-gifts-collectibles',{sq_per_page:target,sq_view_page:1}));try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:25000})}catch{}await sleep(target===250?6000:3500);const d=await page.evaluate(target=>{const grid=document.querySelector('.sq-refine-v3-results .product-grid');const cards=grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(el=>!!el.querySelector('a[href*="/products/"]')).length:0;return{cards,checked:!!document.querySelector(`.sq-refine-v3-page-size input[value="${target}"]:checked`),error:document.querySelector('#MainContent')?.dataset.sqRefineV3Error||''}},target);const ok=r?.status()===200&&errors.length===0&&!d.error&&d.cards===target&&d.checked;console.log('SIZE_TAIL '+JSON.stringify({target,http:r?.status()||0,errors,d,ok}));if(!ok)failed=true;await ctx.close()}
+          await sizeCheck(100);await sleep(5000);await sizeCheck(250);
+          await browser.close();if(failed)process.exit(1);
+          EOF
+          node tail.mjs

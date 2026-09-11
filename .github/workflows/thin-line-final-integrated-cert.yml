@@ -1,0 +1,98 @@
+name: Thin Line final integrated Chromium certification
+on:
+  push:
+    paths:
+      - '.github/workflows/thin-line-final-integrated-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OPT_OUT_INSTRUMENTATION: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium and official Shopify validation
+        run: |
+          mkdir -p out/screens out/videos out/source out/validation validation-tools validation-context/sections validation-context/templates validation-context/locales
+          npm install --no-save playwright@1.55.0 agent-browser yaml @shopify/theme-check-common @shopify/theme-check-node @shopify/theme-check-docs-updater
+          npx playwright install --with-deps chromium
+          curl --fail --retry 3 -L https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/search_docs.mjs -o validation-tools/search_docs.mjs
+          curl --fail --retry 3 -L https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/validate.mjs -o validation-tools/validate.mjs
+      - name: Validate all four changed theme files with real section context
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          import YAML from 'yaml';
+          const workflow=YAML.parse(fs.readFileSync('.github/workflows/thin-line-evidence-validation-gate.yml','utf8'));
+          for(const name of ['Search template validation requirements','Build exact section context from deployed source','Validate Liquid sections and contextual JSON template']){
+            const step=workflow.jobs.validate.steps.find(s=>s.name===name);
+            if(!step?.run)throw new Error('Missing validation step '+name);
+            execFileSync('bash',['-e','-c',step.run],{stdio:'inherit'});
+          }
+          JS
+      - name: Agent browser inspect Thin Line category
+        run: |
+          npx agent-browser --session thin-final-integrated open 'https://www.statesideqm.com/collections/thin-line-shop-thin-blue-line?sq_root=thin-line&preview_theme_id=158561894555'
+          npx agent-browser --session thin-final-integrated snapshot -i > out/agent-browser-snapshot.txt
+          npx agent-browser --session thin-final-integrated screenshot out/screens/agent-browser.png
+          npx agent-browser --session thin-final-integrated close
+      - name: Repeat all 14 category scenarios with HTTP diagnostics
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          import YAML from 'yaml';
+          const workflow=YAML.parse(fs.readFileSync('.github/workflows/thin-line-child-navigation-cert-0911.yml','utf8'));
+          const run=workflow.jobs.certify.steps.find(s=>s.name==='Test all Thin Line category routes and native type selection')?.run;
+          if(!run)throw new Error('Missing original category suite');
+          const command=run.replace(/\nnode thin-child-cert\.mjs\s*$/,'');
+          if(command===run)throw new Error('Cannot separate category test source');
+          execFileSync('bash',['-e','-c',command],{stdio:'inherit'});
+          let code=fs.readFileSync('thin-child-cert.mjs','utf8');
+          function replaceOnce(from,to){if(!code.includes(from))throw new Error('Test source changed: '+from);code=code.replace(from,to);}
+          replaceOnce('const row={name,checks:[],errors:[]};','const row={name,checks:[],errors:[],documents:[]};');
+          replaceOnce("page.on('pageerror',e=>row.errors.push(String(e)));", "page.on('pageerror',e=>row.errors.push(String(e)));page.on('response',response=>{try{const request=response.request();if(request.isNavigationRequest()&&request.frame()===page.mainFrame())row.documents.push({url:response.url(),status:response.status()});}catch(_){}});");
+          replaceOnce('row.last=await state(page).catch(()=>null);',"row.last=await state(page).catch(()=>null);row.lastDocument={url:page.url(),title:await page.title().catch(()=>''),bodyText:(await page.locator('body').innerText().catch(()=>'')).slice(0,3000)};");
+          replaceOnce("check(row,'No runtime exceptions',row.errors.length===0,row.errors);", "check(row,'All document loads succeeded',row.documents.length>0&&row.documents.every(d=>d.status===200||[301,302,303,307,308].includes(d.status)),row.documents);check(row,'No runtime exceptions',row.errors.length===0,row.errors);");
+          fs.writeFileSync('thin-child-final-cert.mjs',code);fs.writeFileSync('out/test-source.mjs',code);
+          JS
+          node --check thin-child-final-cert.mjs
+          node thin-child-final-cert.mjs
+      - name: Read successful root browser evidence
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 34642507180
+          name: thin-line-final-loading-cert-0911
+          path: out/root
+      - name: Reconcile tested source and final results
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          import assert from 'node:assert/strict';
+          const root=JSON.parse(fs.readFileSync('out/root/report.json','utf8'));
+          const categories=JSON.parse(fs.readFileSync('out/report.json','utf8'));
+          assert.equal(root.pass,true);assert.equal(categories.pass,true);assert.equal(categories.results.length,14);
+          const files=JSON.parse(fs.readFileSync('out/root/deployment-manifest.json','utf8')).files;
+          files.push({filename:'sections/sq-thin-stabrite-type-browser.liquid',md5:categories.sourceMd5});
+          for(const f of files){const actual=crypto.createHash('md5').update(fs.readFileSync(f.filename)).digest('hex');assert.equal(actual,f.md5,'Exact tested source '+f.filename);}
+          const checks=[...root.results,...categories.results].flatMap(r=>r.checks||[]);assert(checks.every(c=>c.ok));
+          const report={pass:true,checkedAt:new Date().toISOString(),gateRun:process.env.GITHUB_RUN_ID,gateCommit:process.env.GITHUB_SHA,rootRun:34642507180,categoryRun:process.env.GITHUB_RUN_ID,themeId:158561894555,publication:'Unpublished working draft; no live publication performed',checksPassed:checks.length,files};
+          fs.writeFileSync('out/final-gate.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+          JS
+      - name: Upload all final evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thin-line-final-integrated-cert
+          path: out
+          retention-days: 14

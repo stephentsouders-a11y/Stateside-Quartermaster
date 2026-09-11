@@ -1,0 +1,72 @@
+name: REFINE V3 Button 01 Type Ready Diagnostic
+
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-button01-type-ready-diagnostic.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Inspect Type-filtered V3 state
+        run: |
+          node <<'NODE'
+          const { chromium } = await import('playwright');
+          const b=await chromium.launch({headless:true});
+          const c=await b.newContext({viewport:{width:1440,height:1000}});
+          const p=await c.newPage();
+          const errs=[];
+          p.on('pageerror',e=>errs.push('page:'+String(e)));
+          p.on('console',m=>{if(m.type()==='error')errs.push('console:'+m.text())});
+          await p.goto('https://www.statesideqm.com/?preview_theme_id=158561894555',{waitUntil:'domcontentloaded',timeout:90000});
+          await p.goto('https://www.statesideqm.com/collections/accessories-gifts-collectibles?filter.p.product_type=accessories',{waitUntil:'domcontentloaded',timeout:90000});
+          const checkpoints=[1000,5000,15000,30000,45000];
+          let last=0;
+          for(const ms of checkpoints){
+            await p.waitForTimeout(ms-last); last=ms;
+            const s=await p.evaluate(()=>{
+              const m=document.querySelector('#MainContent');
+              const side=m?.querySelector('.sq-refine-v3-sidebar');
+              const res=m?.querySelector('.sq-refine-v3-results');
+              const grid=res?.querySelector('.product-grid');
+              const ps=m?.querySelector('.sq-refine-v3-page-size');
+              return {
+                url:location.href,
+                ready:m?.dataset.sqRefineV3Ready||null,
+                error:m?.dataset.sqRefineV3Error||null,
+                active:m?.classList.contains('sq-refine-v3-active')||false,
+                sidebar:!!side,
+                results:!!res,
+                grid:!!grid,
+                cards:grid?.querySelectorAll('a[href*="/products/"]').length||0,
+                pageSize:!!ps,
+                checked:[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar input:checked')].map(i=>({name:i.dataset.filterName||i.dataset.sqPolishParam||'',value:i.dataset.filterValue||i.dataset.sqPolishValue||i.value||''})),
+                text:(m?.innerText||'').slice(0,1000)
+              };
+            });
+            console.log('CHECKPOINT',ms,JSON.stringify(s));
+            await p.screenshot({path:`type-ready-${ms}.png`,fullPage:false});
+          }
+          console.log('ERRORS',JSON.stringify(errs));
+          await b.close();
+          NODE
+      - name: Upload diagnostic screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: button01-type-ready-diagnostic
+          path: type-ready-*.png
+          if-no-files-found: warn
+          retention-days: 7

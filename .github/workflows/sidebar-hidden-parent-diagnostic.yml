@@ -1,0 +1,49 @@
+name: Sidebar hidden parent diagnostic
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/sidebar-hidden-parent-diagnostic.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Observe failed sidebar mounts
+        run: |
+          mkdir -p out
+          cat > diagnose.mjs <<'EOF'
+          import fs from 'node:fs';
+          import {chromium} from 'playwright';
+          const b=await chromium.launch(),report=[];
+          const cases=[['products-built-for-the-line-u-s-marine-corps',1366,768],['products-built-for-the-line-u-s-coast-guard',1366,768],['products-built-for-the-line-u-s-navy',390,844],['thin-line',390,844]];
+          for(const [handle,width,height] of cases){
+            const c=await b.newContext({viewport:{width,height}}),p=await c.newPage(),r={handle,width,pageErrors:[]};
+            p.on('pageerror',e=>r.pageErrors.push(String(e)));
+            try{
+              r.status=(await p.goto(`https://www.statesideqm.com/collections/${handle}?preview_theme_id=158561894555`,{waitUntil:'domcontentloaded',timeout:60000}))?.status();
+              await p.waitForTimeout(12000);
+              r.dom=await p.evaluate(()=>{
+                const main=document.querySelector('#MainContent'),s=main?.querySelector('.sq-refine-v3-sidebar'),layout=main?.querySelector('.sq-refine-v3-layout');
+                function detail(e){const cs=getComputedStyle(e),r=e.getBoundingClientRect();return{tag:e.tagName,id:e.id,cls:e.className,attrs:Object.fromEntries(Array.from(e.attributes).map(a=>[a.name,a.value])),display:cs.display,visibility:cs.visibility,opacity:cs.opacity,height:r.height,width:r.width};}
+                const ancestors=[];for(let e=s;e;e=e.parentElement)ancestors.push(detail(e));
+                return{theme:window.Shopify?.theme,main:main?detail(main):null,bodyClass:document.body.className,sidebar:!!s,layout:!!layout,ancestors,mainChildren:main?Array.from(main.children).map(detail):[],v3scripts:Array.from(document.querySelectorAll('script[data-sq-refine-v3]')).map(e=>e.dataset),controller:window.__sqRefineV3,styles:Array.from(document.querySelectorAll('style')).map(e=>e.textContent).filter(x=>x.includes('sq-refine-v3')||x.includes('sq-ts-parent'))};
+              });
+              fs.writeFileSync(`out/${handle}-${width}.html`,await p.content());
+              await p.screenshot({path:`out/${handle}-${width}.png`});
+            }catch(e){r.failure=String(e)}
+            report.push(r);await c.close();
+          }
+          await b.close();fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));console.log('HIDDEN_PARENT_SUMMARY',JSON.stringify(report.map(({handle,width,dom,pageErrors,failure})=>({handle,width,main:dom?.main,ancestors:dom?.ancestors,pageErrors,failure}))));
+          EOF
+          node diagnose.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: sidebar-hidden-parent-evidence, path: out, retention-days: 14}

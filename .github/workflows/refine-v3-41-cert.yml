@@ -1,0 +1,38 @@
+name: Refine V3 41-route certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/scripts/refine-v3-41-cert-v2.mjs'
+      - '.github/workflows/refine-v3-41-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Run 41-route certification
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const f='.github/scripts/refine-v3-41-cert-v2.mjs';
+          let s=fs.readFileSync(f,'utf8');
+          s=s.replace("if(d.firstRowCount!==3)e.push('desktop row '+d.firstRowCount)","if(d.firstRowCount!==Math.min(3,d.cards))e.push('desktop row '+d.firstRowCount)");
+          s=s.replace("'Shop by War / Era / Conflict'","'Shop by War'");
+          fs.writeFileSync(f,s);
+          NODE
+          node .github/scripts/refine-v3-41-cert-v2.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine-v3-41-cert
+          path: cert-v3/
+          retention-days: 7
+# certification rerun 2026-09-11

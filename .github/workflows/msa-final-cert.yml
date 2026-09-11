@@ -1,6 +1,8 @@
 name: MSA final certification
+# Fresh focused rerun after MSA Refine Products title restoration.
 on:
   push:
+    branches: [refine-restart-v3]
     paths:
       - '.github/workflows/msa-final-cert.yml'
 permissions:
@@ -10,38 +12,54 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: {node-version: '20'}
+        with: {node-version: '24'}
       - run: |
-          npm init -y
-          npm install playwright@1.55.0
-          npx playwright install --with-deps chromium
-      - name: Certify MSA draft desktop and mobile
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify MSA V3 draft desktop and mobile
         run: |
           cat > msa.mjs <<'EOF'
           import { chromium } from 'playwright';
-          import fs from 'fs';
-          fs.mkdirSync('out',{recursive:true});
           const base='https://www.statesideqm.com/collections/military-schools-academies?preview_theme_id=158561894555';
           const browser=await chromium.launch({headless:true});
-          const results=[];
-          for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
-            await new Promise(r=>setTimeout(r,2500));
-            const ctx=await browser.newContext({viewport}); const page=await ctx.newPage();
-            const start=Date.now(); let status=null,error=null;
-            try{const r=await page.goto(base,{waitUntil:'domcontentloaded',timeout:30000});status=r?.status()??null}catch(e){error=String(e)}
-            let usable=null;
-            if(status===200&&!error){for(let i=0;i<25;i++){const s=await page.evaluate(()=>{const m=document.querySelector('#MainContent');const t=(m?.innerText||'').replace(/\s+/g,' ').trim();const visible=[...(m?.querySelectorAll('a,.sqaca-card,.sqaca-all,.collection-card,.card')||[])].some(e=>{const r=e.getBoundingClientRect();return r.width>30&&r.height>20});return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),loading:/loading all products|checking items|tree unavailable|building the customer-facing product tree/i.test(t),visible}});if(!s.bad&&!s.loading&&s.visible){usable=Date.now()-start;break}await page.waitForTimeout(200)}}
-            const d=await page.evaluate(()=>{const m=document.querySelector('#MainContent');const t=(m?.innerText||'').replace(/\s+/g,' ').trim();return{bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),availability:[...(m?.querySelectorAll('a[href*="filter.v.availability"]')||[])].length,broken:[...(m?.querySelectorAll('img')||[])].filter(x=>x.complete&&x.naturalWidth===0).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}});
-            const failed=status!==200||!!error||d.bad||usable===null||usable>5000||d.availability>0||d.broken>0||d.overflow;
-            await page.screenshot({path:`out/msa-${device}.png`,fullPage:true});
-            results.push({device,status,error,usableMs:usable,failed,...d}); console.log(JSON.stringify(results.at(-1)));
+          let failed=false;
+          for(const [device,viewport,desired] of [['desktop',{width:1440,height:1100},3],['mobile',{width:390,height:844},2]]){
+            const ctx=await browser.newContext({viewport});
+            const page=await ctx.newPage();
+            const errors=[]; page.on('pageerror',e=>errors.push(e.message));
+            let response=null;
+            for(let attempt=0;attempt<3;attempt++){
+              response=await page.goto(base,{waitUntil:'domcontentloaded',timeout:45000});
+              if((response?.status()||0)<500) break;
+              await page.waitForTimeout(1500*(attempt+1));
+            }
+            try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:25000})}catch{}
+            await page.waitForTimeout(12000);
+            const d=await page.evaluate(({desired})=>{
+              const main=document.querySelector('#MainContent');
+              const side=main?.querySelector('.sq-refine-v3-sidebar');
+              const results=main?.querySelector('.sq-refine-v3-results');
+              const grid=results?.querySelector('.product-grid');
+              const cards=grid?[...grid.querySelectorAll(':scope > .product-grid__item')].filter(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!!el.querySelector('a[href*="/products/"]')}):[];
+              const template=grid?getComputedStyle(grid).gridTemplateColumns:'';
+              const gridCols=template&&template!=='none'?template.trim().split(/\s+/).length:0;
+              const posCols=cards.length?new Set(cards.slice(0,8).map(el=>Math.round(el.getBoundingClientRect().left))).size:0;
+              const sizes=[...document.querySelectorAll('.sq-refine-v3-page-size input')].map(x=>x.value);
+              const groups=[...(side?.querySelectorAll('details.sq-refine-v3-group')||[])];
+              const sticky=side?getComputedStyle(side).position:'';
+              return {path:location.pathname==='/collections/military-schools-academies',ready:main?.dataset.sqRefineV3Ready==='true',error:main?.dataset.sqRefineV3Error||'',cleanup:main?.dataset.sqRefineV3RootCleanup==='true',isolation:document.querySelector('script[data-sq-refine-v3-legacy-isolation]')?.dataset.sqRefineV3LegacyIsolation||'',dedicated:main?.dataset.sqV3DedicatedGrid==='server-rendered',dedicatedRoot:main?.dataset.sqV3DedicatedGridRoot||'',layout:main?.querySelectorAll('.sq-refine-v3-layout').length||0,sidebar:!!side&&getComputedStyle(side).display!=='none',title:(side?.textContent||'').includes('Refine Products'),pageSizes:['50','100','250'].every(v=>sizes.includes(v)),default50:!!document.querySelector('.sq-refine-v3-page-size input[value="50"]:checked'),groups:groups.length,inactiveClosed:groups.filter(g=>g.dataset.active!=='true').every(g=>!g.open),activeOpen:groups.filter(g=>g.dataset.active==='true').every(g=>g.open),results:!!results,cards:cards.length,columns:gridCols===desired||(cards.length>=desired&&posCols===desired),gridCols,posCols,nativeColumn:!!results?.querySelector('.sq-collection-products-column'),sticky,sqaca:main?.querySelectorAll('.sqaca').length||0,academyGuard:window.__sqAcademyExclusiveTreeV6===true,legacyVisible:[...document.querySelectorAll('[data-sq-refine-v3-hidden-nav="true"]')].filter(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0}).length};
+            },{desired});
+            const stickyOk=device==='mobile'?d.sticky!=='sticky':d.sticky==='sticky';
+            const ok=(response?.status()===200&&errors.length===0&&d.path&&d.ready&&!d.error&&d.cleanup&&d.isolation==='military-schools-academies'&&d.dedicated&&d.dedicatedRoot==='military-schools-academies'&&d.layout===1&&d.sidebar&&d.title&&d.pageSizes&&d.default50&&d.groups>0&&d.inactiveClosed&&d.activeOpen&&d.results&&d.cards===50&&d.columns&&d.nativeColumn&&stickyOk&&d.sqaca===0&&d.academyGuard&&d.legacyVisible===0);
+            console.log('MSA_FINAL '+JSON.stringify({device,http:response?.status()||0,errors,d,ok}));
+            if(!ok)failed=true;
             await ctx.close();
+            await new Promise(r=>setTimeout(r,3500));
           }
-          await browser.close(); fs.writeFileSync('out/report.json',JSON.stringify(results,null,2));
-          if(results.some(x=>x.failed))process.exitCode=2;
+          await browser.close();
+          if(failed)process.exit(1);
           EOF
           node msa.mjs
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with: {name: msa-final-cert, path: out, retention-days: 7}

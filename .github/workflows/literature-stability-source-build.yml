@@ -1,0 +1,80 @@
+name: Literature stability source build
+on:
+  push:
+    paths: ['.github/workflows/literature-stability-source-build.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Make bounded Literature refreshes idempotent
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('snippets/sq-refine-v3-literature-author-filter.liquid')
+          s=p.read_text()
+          def replace(old,new):
+              global s
+              assert s.count(old)==1, (old,s.count(old))
+              s=s.replace(old,new)
+          if 'literature-stable-20260911' not in s:
+              replace('<script data-sq-refine-v3-literature-author-filter>','<script data-sq-refine-v3-literature-author-filter data-revision="literature-stable-20260911">')
+              replace("s.textContent='Shop by Publisher';pub=d", "if(s.textContent!=='Shop by Publisher')s.textContent='Shop by Publisher';pub=d")
+              replace("if(span)span.textContent=clean(span.textContent).replace(/\\s*\\(supplier metadata\\)\\s*$/i,'')", "if(span){var label=clean(span.textContent).replace(/\\s*\\(supplier metadata\\)\\s*$/i,'');if(span.textContent!==label)span.textContent=label}")
+              replace("var old=group(side,label);if(old)old.remove();var d=document.createElement('details');", "var old=group(side,label),signature=JSON.stringify(items);if(old&&old.dataset.sqLiteratureSignature===signature)return old;var wasOpen=old&&old.open;if(old)old.remove();var d=document.createElement('details');d.dataset.sqLiteratureSignature=signature;d.open=!!wasOpen;")
+              replace("[].slice.call(side.querySelectorAll('[data-sq-literature-special]')).forEach(function(d){d.remove()});", "")
+              replace("d.open=any;d.dataset.active=any?'true':'false'", "if(d.dataset.sqSelectionKey!==active){if(any)d.open=true;d.dataset.sqSelectionKey=active}d.dataset.active=any?'true':'false'")
+              replace("function buildAuthor(side){refreshState();removeAuthorGroups(side);", "function buildAuthor(side){refreshState();if(window.__sqLiteratureAuthorTags&&window.__sqLiteratureAuthorTags.available()){window.__sqLiteratureAuthorTags.sync();return side.querySelector('[data-sq-author-tag-authority]')}var prior=side.querySelector('[data-sq-author-refine]'),signature=JSON.stringify(meta().authors||[]);if(prior&&prior.dataset.sqAuthorSignature===signature){syncAuthorState(side);return prior}removeAuthorGroups(side);")
+              replace("d.setAttribute('data-sq-author-refine','true');", "d.setAttribute('data-sq-author-refine','true');d.dataset.sqAuthorSignature=signature;")
+              replace("async function apply(){", "var pendingAuthorProducts=null;function requestAuthorProducts(){if(!pendingAuthorProducts)pendingAuthorProducts=applyAuthorProducts().finally(function(){pendingAuthorProducts=null});return pendingAuthorProducts}async function apply(){")
+              replace("try{await applyAuthorProducts()}", "try{await requestAuthorProducts()}")
+              p.write_text(s)
+          p=Path('snippets/sq-refine-v3-literature-author-visible-state.liquid')
+          s=p.read_text()
+          if 'literature-stable-20260911' not in s:
+              assert 'group.open=any;' in s
+              s=s.replace('<script data-sq-refine-v3-literature-author-visible-state>','<script data-sq-refine-v3-literature-author-visible-state data-revision="literature-stable-20260911">')
+              s=s.replace('group.open=any;',"if(group.dataset.sqSelectionKey!==active){if(any)group.open=true;group.dataset.sqSelectionKey=active}")
+              p.write_text(s)
+          PY
+      - name: Validate embedded JavaScript syntax
+        run: |
+          mkdir -p out
+          python3 - <<'PY'
+          import pathlib,re,subprocess,json
+          results=[]
+          for p in pathlib.Path('snippets').glob('sq-refine-v3-literature-author-*.liquid'):
+              for i,script in enumerate(re.findall(r'<script[^>]*>(.*?)</script>',p.read_text(),re.S)):
+                  out=pathlib.Path('out')/(p.stem+str(i)+'.js');out.write_text(script)
+                  r=subprocess.run(['node','--check',str(out)],capture_output=True,text=True)
+                  results.append({'file':str(p),'success':r.returncode==0,'error':r.stderr})
+          pathlib.Path('out/syntax-validation.json').write_text(json.dumps(results,indent=2))
+          print(json.dumps(results,indent=2));assert all(r['success'] for r in results)
+          PY
+      - name: Commit only Literature repairs
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-refine-v3-literature-author-filter.liquid snippets/sq-refine-v3-literature-author-visible-state.liquid
+          if ! git diff --cached --quiet; then
+            git commit -m 'Preserve Literature disclosure state and stop repeated author/nav rebuilds'
+            git pull --rebase origin refine-restart-v3
+            git push origin HEAD:refine-restart-v3
+          fi
+          git rev-parse HEAD | tee out/source-commit.txt
+          cp snippets/sq-refine-v3-literature-author-*.liquid out/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: literature-stability-source
+          path: out
+          retention-days: 7

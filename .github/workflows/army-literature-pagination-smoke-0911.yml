@@ -1,0 +1,99 @@
+name: Army Literature Pagination Chromium Smoke
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/army-literature-pagination-smoke-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  army-literature-pagination:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify Army literature 50 100 250
+        run: |
+          cat > army-pagination.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const origin='https://www.statesideqm.com';
+          const theme='158561894555';
+          const handle='literature-u-s-army';
+          const root='literature';
+          const marker='assembly-rescue-20260911-v4';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          const failures=[];
+          const pageErrors=[];
+          page.on('pageerror',e=>pageErrors.push(String(e)));
+          const links=async()=>page.evaluate(()=>[...new Set([...document.querySelectorAll('#MainContent .sq-refine-v3-results .product-grid a[href*="/products/"]')].filter(a=>{const r=a.getBoundingClientRect();return r.width>0&&r.height>0}).map(a=>a.href.split('?')[0]))]);
+          async function ready(){
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',undefined,{timeout:110000});
+            await page.waitForTimeout(1400);
+          }
+          async function open(size,n){
+            const u=new URL(`/collections/${handle}`,origin);
+            u.searchParams.set('preview_theme_id',theme);
+            u.searchParams.set('sq_root',root);
+            u.searchParams.set('sq_per_page',String(size));
+            u.searchParams.set('sq_view_page',String(n));
+            u.searchParams.set('sq_cert',`${Date.now()}-${size}-${n}`);
+            const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:90000});
+            if(!r?.ok())throw new Error(`HTTP ${r?.status()}`);
+            await ready();
+          }
+          for(const size of [50,100,250]){
+            const key=`army-literature[${size}]`;
+            const beforeErrors=pageErrors.length;
+            await open(size,1);
+            const rev=await page.getAttribute('script[data-sq-refine-v3-pagination-repair]','data-revision');
+            if(rev!==marker) failures.push(`${key}: repair marker ${rev||'missing'}`);
+            const first=await links();
+            if(first.length===0) failures.push(`${key}: no visible products on page 1`);
+            if(first.length>size) failures.push(`${key}: ${first.length} products exceeds requested ${size}`);
+            const controls=await page.evaluate((size)=>{const box=document.querySelector('#MainContent .sq-refine-v3-page-size');const t=(box?.textContent||'').replace(/\s+/g,' ');return {exists:!!box,text:t,selected:[...box?.querySelectorAll('input:checked')||[]].map(i=>i.value),size:String(size)}},size);
+            if(!controls.exists||!(/\b50\b/.test(controls.text)&&/\b100\b/.test(controls.text)&&/\b250\b/.test(controls.text))) failures.push(`${key}: 50/100/250 controls incomplete`);
+            if(!controls.selected.includes(String(size))) failures.push(`${key}: requested ${size} is not selected`);
+            const pager=await page.evaluate(()=>{const p=document.querySelector('#MainContent .sq-refine-v3-pager');const r=p?.getBoundingClientRect();return {visible:!!p&&r.width>0&&r.height>0&&getComputedStyle(p).visibility!=='hidden',links:p?[...p.querySelectorAll('a')].map(a=>({text:a.textContent?.trim(),href:a.href})):[],text:p?.textContent||''}});
+            if(!pager.visible) failures.push(`${key}: pager is not visibly rendered`);
+            const next=pager.links.find(x=>/next/i.test(x.text||'')||new URL(x.href).searchParams.get('sq_view_page')==='2');
+            if(!next) failures.push(`${key}: Next is missing on page 1`);
+            if(next){
+              const nav=new URL(next.href);nav.searchParams.set('sq_cert_nav',String(Date.now()));
+              const r=await page.goto(nav.toString(),{waitUntil:'domcontentloaded',timeout:90000});
+              if(!r?.ok()) failures.push(`${key}: page2 HTTP ${r?.status()}`);
+              await ready();
+              const second=await links();
+              const overlap=second.filter(x=>first.includes(x));
+              if(new URL(page.url()).searchParams.get('sq_view_page')!=='2') failures.push(`${key}: Next did not land on logical page 2`);
+              if(second.length===0) failures.push(`${key}: page 2 has no visible products`);
+              if(second.length>size) failures.push(`${key}: page 2 exceeds requested ${size}`);
+              if(overlap.length) failures.push(`${key}: page 2 repeats ${overlap.length} page-1 products`);
+              const page2Pager=await page.evaluate(()=>{const p=document.querySelector('#MainContent .sq-refine-v3-pager');const r=p?.getBoundingClientRect();return {visible:!!p&&r.width>0&&r.height>0,prev:p?[...p.querySelectorAll('a')].some(a=>/previous/i.test(a.textContent||'')||new URL(a.href).searchParams.get('sq_view_page')==='1'):false}});
+              if(!page2Pager.visible||!page2Pager.prev) failures.push(`${key}: page 2 lacks visible Previous`);
+            }
+            const data=await page.$eval('#MainContent',el=>({...el.dataset})).catch(()=>({}));
+            if(data.sqRefineV3PaginationRepairError) failures.push(`${key}: pagination repair error ${data.sqRefineV3PaginationRepairError}`);
+            if(pageErrors.length>beforeErrors) failures.push(`${key}: page JS errors ${pageErrors.slice(beforeErrors).join(' | ')}`);
+            console.log(JSON.stringify({size,page1:first.length,pager,data},null,2));
+          }
+          await page.screenshot({path:'army-literature-pagination.png',fullPage:true});
+          await browser.close();
+          if(failures.length){console.error('\nFAILURES\n'+failures.join('\n'));process.exit(2)}
+          console.log('ARMY LITERATURE PAGINATION SMOKE: PASS');
+          EOF
+          node army-pagination.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: army-literature-pagination-smoke
+          path: army-literature-pagination.png
+          retention-days: 14

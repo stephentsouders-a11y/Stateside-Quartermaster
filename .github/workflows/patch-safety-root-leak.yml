@@ -1,0 +1,56 @@
+name: Patch Safety refine root routing
+on:
+  workflow_dispatch:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/patch-safety-root-leak.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+      - name: Patch Safety root sanitization
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const refinePath = 'snippets/sq-refine-v3.liquid';
+          let refine = fs.readFileSync(refinePath, 'utf8');
+          const refineOld = "var query=new URLSearchParams(location.search),rootHandle=query.get('sq_root')||currentHandle;";
+          const refineNew = "var query=new URLSearchParams(location.search);if(currentHandle==='safety-rescue-climbing'&&query.get('sq_root')==='uniforms'){query.delete('sq_root');history.replaceState(null,'',location.pathname+(query.toString()?'?'+query.toString():'')+location.hash)}var rootHandle=query.get('sq_root')||currentHandle;";
+          if (refine.includes(refineOld)) refine = refine.replace(refineOld, refineNew);
+          if (!refine.includes("currentHandle==='safety-rescue-climbing'&&query.get('sq_root')==='uniforms'")) throw new Error('Safety root sanitization missing from sq-refine-v3');
+          fs.writeFileSync(refinePath, refine);
+
+          const colorPath = 'snippets/sq-uniform-color-pattern-core.liquid';
+          let color = fs.readFileSync(colorPath, 'utf8');
+          const initOld = "var configNode=document.querySelector('[data-sq-ucp-config]'),config=JSON.parse(configNode.textContent),query=new URLSearchParams(location.search);\n  var activeRoot=query.get('sq_root')||config.handle;";
+          const initNew = "var configNode=document.querySelector('[data-sq-ucp-config]'),config=JSON.parse(configNode.textContent),query=new URLSearchParams(location.search);\n  if(config.handle==='safety-rescue-climbing'&&query.get('sq_root')==='uniforms'){query.delete('sq_root');history.replaceState(null,'',location.pathname+(query.toString()?'?'+query.toString():'')+location.hash)}\n  var activeRoot=query.get('sq_root')||config.handle;";
+          if (color.includes(initOld)) color = color.replace(initOld, initNew);
+          const selectedOld = "function selectedUrl(vals){var u=new URL(location.href);u.searchParams.delete('page');u.searchParams.delete('sq_view_page');u.searchParams.delete(PARAM);vals.forEach(function(v){u.searchParams.append(PARAM,v)});return u.pathname+'?'+u.searchParams.toString()}";
+          const selectedNew = "function selectedUrl(vals){var u=new URL(location.href);if(config.handle==='safety-rescue-climbing'&&u.searchParams.get('sq_root')==='uniforms')u.searchParams.delete('sq_root');u.searchParams.delete('page');u.searchParams.delete('sq_view_page');u.searchParams.delete(PARAM);vals.forEach(function(v){u.searchParams.append(PARAM,v)});return u.pathname+'?'+u.searchParams.toString()}";
+          if (color.includes(selectedOld)) color = color.replace(selectedOld, selectedNew);
+          if (!color.includes("if(config.handle==='safety-rescue-climbing'&&query.get('sq_root')==='uniforms')")) throw new Error('Safety startup root sanitization missing');
+          if (!color.includes("if(config.handle==='safety-rescue-climbing'&&u.searchParams.get('sq_root')==='uniforms')u.searchParams.delete('sq_root')")) throw new Error('Safety sq_ucp URL sanitization missing');
+          color = color.replace(/version:'2026-09-11(?:\.\d+)?'/, "version:'2026-09-11.4'");
+          fs.writeFileSync(colorPath, color);
+          NODE
+          git diff --check
+          git diff -- snippets/sq-refine-v3.liquid snippets/sq-uniform-color-pattern-core.liquid
+      - name: Commit patch
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-refine-v3.liquid snippets/sq-uniform-color-pattern-core.liquid
+          git commit -m 'Fix Safety color filter root leakage'
+          git push origin HEAD:refine-restart-v3

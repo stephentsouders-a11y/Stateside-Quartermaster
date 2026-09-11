@@ -1,0 +1,86 @@
+name: Uniforms color pattern Chromium verification
+on:
+  push:
+    paths:
+      - '.github/workflows/uniforms-color-pattern-chromium.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install real Chromium
+        run: |
+          mkdir -p out
+          npm install --no-save agent-browser playwright >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify deployed Uniforms color pattern feature
+        run: |
+          cat > verify.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const BASE='https://www.statesideqm.com',THEME='158561894555';
+          const report={passed:false,theme:THEME,checks:[],pageErrors:[],started:new Date().toISOString()};
+          const browser=await chromium.launch({headless:true});report.chromium=browser.version();
+          const context=await browser.newContext({viewport:{width:1440,height:1100},recordVideo:{dir:'out/video',size:{width:1280,height:900}}});
+          const page=await context.newPage();page.setDefaultTimeout(30000);page.setDefaultNavigationTimeout(90000);
+          page.on('pageerror',e=>report.pageErrors.push(String(e)));
+          const check=(name,details={})=>{report.checks.push({name,passed:true,...details});console.log('PASS',name,JSON.stringify(details))};
+          function preview(path='/collections/uniforms',params={}){const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);for(const [k,v]of Object.entries(params))u.searchParams.set(k,v);return u.href}
+          async function ready(p=page){await p.waitForFunction(()=>window.__sqUniformColor?.ready||window.__sqUniformColor?.error,{},{timeout:100000});const s=await p.evaluate(()=>({ready:window.__sqUniformColor.ready,error:window.__sqUniformColor.error,total:window.__sqUniformColor.total,matches:window.__sqUniformColor.matches,choices:window.__sqUniformColor.choices,ids:window.__sqUniformColor.resultIds,page:window.__sqUniformColor.page,pageSize:window.__sqUniformColor.pageSize,theme:String(Shopify.theme.id)}));assert(!s.error,s.error);assert.equal(s.theme,THEME);assert(s.ready);return s}
+          async function color(value,on=true,p=page){const g=p.locator('[data-sq-ucp-group]');if(!await g.evaluate(n=>n.open))await g.locator('summary').click();const box=g.locator('input[data-sq-ucp-value='+JSON.stringify(value)+']');await Promise.all([p.waitForURL(u=>u.searchParams.getAll('sq_ucp').includes(value)===on,{waitUntil:'domcontentloaded'}),on?box.check():box.uncheck()]);return ready(p)}
+          async function singleGrid(p=page){const grids=await p.locator('.sq-refine-v3-results .product-grid').evaluateAll(ns=>ns.filter(n=>{const r=n.getBoundingClientRect(),s=getComputedStyle(n);return r.width>0&&r.height>0&&s.visibility!=='hidden'}).map(n=>({count:n.querySelectorAll(':scope>.product-grid__item').length,columns:getComputedStyle(n).gridTemplateColumns.split(' ').length,ids:[...n.querySelectorAll(':scope>.product-grid__item')].map(x=>x.dataset.productId)})));assert.equal(grids.length,1,'exactly one visible grid');assert.equal(new Set(grids[0].ids).size,grids[0].ids.length,'no duplicated products');return grids[0]}
+          async function confirmProducts(colorName,p=page){const links=await p.locator('[data-sq-ucp-results] a.sq-ucp-card').evaluateAll(ns=>ns.slice(0,3).map(n=>n.href));assert(links.length>0);const evidence=[];for(const href of links){const u=new URL(href),handle=u.pathname.split('/').pop(),r=await context.request.get(BASE+'/products/'+handle+'.js');assert(r.ok());const prod=await r.json(),v=prod.variants.find(v=>String(v.id)===u.searchParams.get('variant'));assert(v,'matching variant link');const options=prod.options.map(x=>typeof x==='string'?x:x.name),ix=options.findIndex(x=>/color|colour|pattern|camo/i.test(x));const value=ix>=0?String(v['option'+(ix+1)]||''):'';const text=value||prod.title+' '+(Array.isArray(prod.tags)?prod.tags.join(' '):prod.tags);if(colorName==='black'){assert(/\bblack\b/i.test(text),text);assert(!/multicam black/i.test(value),text)}if(colorName==='multicam-ocp'){assert(/multicam|ocp|scorpion/i.test(text),text);assert(!/multicam (black|alpine|arid|tropic)/i.test(value),text)}evidence.push({title:prod.title,variantId:v.id,colorValue:value,vendor:prod.vendor,available:v.available})}return evidence}
+          let mobile;
+          try{
+            await page.goto(preview(),{waitUntil:'domcontentloaded'});
+            let state=await ready();
+            assert.equal(await page.locator('[data-sq-ucp-group]').count(),1);
+            assert.equal((await page.locator('[data-sq-ucp-group]>summary').innerText()).trim(),'Shop by Color / Pattern');
+            assert(state.total>250);assert(state.choices.length>20);assert(state.choices.every(c=>c.count>0));
+            assert(!state.choices.some(c=>/sergeant|lieutenant|captain|corporal|count/i.test(c.label)));
+            check('Uniforms sidebar contains one Shop by Color / Pattern group',{products:state.total,choices:state.choices.length});
+            await page.locator('[data-sq-ucp-group]>summary').click();
+            await page.locator('.sq-refine-v3-layout').evaluate(n=>window.scrollTo(0,n.getBoundingClientRect().top+scrollY-12));
+            await page.screenshot({path:'out/desktop-options.png'});
+            state=await color('black');const firstIds=state.ids.slice();const grid=await singleGrid();assert.equal(grid.columns,3);assert.equal(state.ids.length,50);const black=await confirmProducts('black');check('Black checkbox filters correct products',{matches:state.matches,evidence:black});
+            await page.screenshot({path:'out/desktop-black.png'});
+            await page.reload({waitUntil:'domcontentloaded'});await ready();assert(await page.locator('[data-sq-ucp-value="black"]').isChecked());check('color selection survives reload');
+            await Promise.all([page.waitForURL(u=>u.searchParams.get('sq_view_page')==='2',{waitUntil:'domcontentloaded'}),page.locator('[data-sq-ucp-results] .sq-refine-v3-pager').getByText('Next',{exact:true}).click()]);state=await ready();assert(!state.ids.some(id=>firstIds.includes(id)));await singleGrid();check('pagination has no repeated products');
+            for(const size of [100,250]){await Promise.all([page.waitForURL(u=>u.searchParams.get('sq_per_page')===String(size),{waitUntil:'domcontentloaded'}),page.locator('input[name="sq_per_page_control"][value="'+size+'"]').check()]);state=await ready();assert.equal(state.ids.length,Math.min(size,state.matches));await singleGrid();check(size+' products per page works',{rendered:state.ids.length})}
+            state=await color('multicam-ocp');assert(await page.locator('[data-sq-ucp-value="black"]').isChecked());assert(await page.locator('[data-sq-ucp-value="multicam-ocp"]').isChecked());check('multiple color selections work together',{matches:state.matches});
+            state=await color('black',false);const ocp=await confirmProducts('multicam-ocp');check('MultiCam / OCP filters correct products',{matches:state.matches,evidence:ocp});
+            await page.screenshot({path:'out/desktop-ocp.png'});
+            state=await color('multicam-ocp',false);assert(!new URL(page.url()).searchParams.has('sq_ucp'));assert.equal(await page.locator('[data-sq-ucp-results]').count(),0);await singleGrid();check('clearing color filters restores normal Uniforms grid');
+            await page.goto(preview('/collections/uniforms',{'sq_ucp':'black'}),{waitUntil:'domcontentloaded'});state=await ready();const vendor=page.locator('.sq-refine-v3-sidebar input[data-sq-polish-param="filter.p.vendor"],.sq-refine-v3-sidebar input[data-filter-name="filter.p.vendor"]').first();if(await vendor.count()){await vendor.evaluate(n=>n.closest('details').open=true);check('manufacturer filter remains present beside color filter')}const availability=page.locator('.sq-refine-v3-sidebar input[data-sq-polish-param="filter.v.availability"],.sq-refine-v3-sidebar input[data-filter-name="filter.v.availability"]').first();assert(await availability.count());check('availability filter remains present beside color filter');
+            await page.goto(preview(),{waitUntil:'domcontentloaded'});await ready();const g=page.locator('[data-sq-ucp-group]');if(!await g.evaluate(n=>n.open))await g.locator('summary').click();const keyBox=g.locator('[data-sq-ucp-value="black"]');await keyBox.focus();await Promise.all([page.waitForURL(u=>u.searchParams.getAll('sq_ucp').includes('black'),{waitUntil:'domcontentloaded'}),page.keyboard.press('Space')]);await ready();check('keyboard checkbox interaction works');
+            mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,deviceScaleFactor:1});const mp=await mobile.newPage();mp.setDefaultNavigationTimeout(90000);mp.setDefaultTimeout(30000);await mp.goto(preview('/collections/uniforms',{'sq_ucp':'multicam-ocp'}),{waitUntil:'domcontentloaded'});const ms=await ready(mp),mg=await singleGrid(mp);assert.equal(mg.columns,2);assert(!(await mp.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)));await mp.locator('[data-sq-ucp-results]').evaluate(n=>window.scrollTo(0,n.getBoundingClientRect().top+scrollY-10));await mp.screenshot({path:'out/mobile-ocp.png'});check('mobile color results render two columns without overflow',{matches:ms.matches});
+            await page.goto(preview('/collections/watches'),{waitUntil:'domcontentloaded'});assert.equal(await page.locator('[data-sq-ucp-group]').count(),0);check('feature is scoped away from Watches');
+            await page.goto(preview('/collections/state-guard-series'),{waitUntil:'domcontentloaded'});assert.equal(await page.locator('[data-sq-uniform-color-pattern]').count(),0);check('State Guard remains excluded');
+            assert.equal(report.pageErrors.length,0,'no page errors');report.passed=true;
+          }catch(e){report.failure=String(e.stack||e);console.error(report.failure);await page.screenshot({path:'out/failure.png'}).catch(()=>{});fs.writeFileSync('out/failure.html',await page.content().catch(()=>''));}
+          finally{if(mobile)await mobile.close();await context.close();await browser.close();report.finished=new Date().toISOString();fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));console.log('UNIFORMS_VERIFICATION',JSON.stringify(report));if(!report.passed)process.exitCode=1}
+          EOF
+          node verify.mjs
+      - name: Agent-browser independent snapshot
+        if: success()
+        run: |
+          export AGENT_BROWSER_EXECUTABLE_PATH="$(node -e 'console.log(require("playwright").chromium.executablePath())')"
+          npx agent-browser open 'https://www.statesideqm.com/collections/uniforms?preview_theme_id=158561894555&sq_ucp=black'
+          npx agent-browser wait '[data-sq-uniform-color-ready="true"]'
+          npx agent-browser snapshot -i > out/agent-browser-snapshot.txt
+          npx agent-browser screenshot out/agent-browser-black.png
+          npx agent-browser close
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uniforms-color-pattern-chromium
+          path: out
+          retention-days: 7

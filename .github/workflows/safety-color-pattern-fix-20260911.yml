@@ -1,0 +1,77 @@
+name: Safety Rescue Climbing Color Pattern Fix
+on:
+  push:
+    paths:
+      - '.github/workflows/safety-color-pattern-fix-20260911.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+          fetch-depth: 0
+      - name: Patch collection scope
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('snippets/sq-uniform-color-pattern.liquid')
+          s=p.read_text()
+          old="if((query.get('sq_root')||config.handle)!=='uniforms'||window.__sqUniformColor)return;"
+          new="var activeRoot=query.get('sq_root')||config.handle;if(['uniforms','safety-rescue-climbing'].indexOf(activeRoot)===-1||window.__sqUniformColor)return;"
+          if old in s:
+              p.write_text(s.replace(old,new,1))
+          elif new not in s:
+              raise SystemExit('Expected scope guard not found')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-uniform-color-pattern.liquid
+          if ! git diff --cached --quiet; then
+            git commit -m 'Enable color pattern filter for Safety Rescue Climbing'
+            git push origin refine-restart-v3
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Chromium certification
+        run: |
+          cat > verify.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1100}});
+          const errors=[]; page.on('pageerror',e=>errors.push(e.message));
+          await page.goto('https://www.statesideqm.com/collections/safety-rescue-climbing?preview_theme_id=158561894555',{waitUntil:'domcontentloaded',timeout:90000});
+          await page.waitForSelector('.sq-refine-v3-sidebar',{timeout:60000});
+          await page.waitForFunction(()=>window.__sqUniformColor && window.__sqUniformColor.ready===true,{timeout:60000});
+          const before=await page.evaluate(()=>({groups:[...document.querySelectorAll('.sq-refine-v3-sidebar>details')].map(d=>d.querySelector('summary')?.textContent?.trim()),choices:window.__sqUniformColor?.choices||[],resultIds:window.__sqUniformColor?.resultIds||[]}));
+          if(!before.groups.some(x=>/Shop by Color \/ Pattern/i.test(x||''))) throw Error('Color / Pattern group missing');
+          if(!before.choices.length) throw Error('Color / Pattern choices empty');
+          const first=before.choices.find(x=>x.count>0); if(!first) throw Error('No usable color choice');
+          const input=page.locator('input[data-sq-ucp-value="'+first.value.replace(/"/g,'\\"')+'"]').first();
+          await input.check();
+          await page.waitForLoadState('domcontentloaded');
+          await page.waitForFunction(()=>window.__sqUniformColor && window.__sqUniformColor.ready===true && window.__sqUniformColor.resultIds.length>0,{timeout:60000});
+          const after=await page.evaluate(()=>({url:location.href,selected:new URLSearchParams(location.search).getAll('sq_ucp'),resultIds:window.__sqUniformColor.resultIds,visibleCards:document.querySelectorAll('[data-sq-ucp-results] .sq-ucp-card').length}));
+          if(!after.selected.length||!after.resultIds.length||!after.visibleCards) throw Error('Color selection did not filter results');
+          if(errors.length) throw Error('Page errors: '+errors.join(' | '));
+          console.log(JSON.stringify({before,after,errors},null,2));
+          await page.screenshot({path:'safety-color-pattern-certified.png',fullPage:true});
+          await browser.close();
+          EOF
+          node verify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: safety-color-pattern-certification
+          path: safety-color-pattern-certified.png
+          retention-days: 7

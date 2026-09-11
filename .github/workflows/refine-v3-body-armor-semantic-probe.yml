@@ -1,0 +1,20 @@
+name: Refine V3 Body Armor semantic probe
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-body-armor-semantic-probe.yml'
+      - '.github/scripts/refine-v3-body-armor-type-integrity.mjs'
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Audit Body Armor type and subcategory product integrity
+        run: node .github/scripts/refine-v3-body-armor-type-integrity.mjs

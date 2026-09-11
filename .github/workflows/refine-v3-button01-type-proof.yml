@@ -1,0 +1,77 @@
+name: REFINE V3 Button 01 Type Filter Proof
+
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-button01-type-proof.yml'
+  workflow_dispatch:
+
+jobs:
+  type-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Prove customer Type click, refresh, and Back
+        run: |
+          mkdir -p evidence
+          node <<'NODE'
+          import fs from 'node:fs/promises';
+          import { chromium } from 'playwright';
+          const BASE='https://www.statesideqm.com';
+          const ROOT='/collections/accessories-gifts-collectibles';
+          const THEME='158561894555';
+          const b=await chromium.launch({headless:true});
+          const c=await b.newContext({viewport:{width:1440,height:1000},recordVideo:{dir:'evidence/video',size:{width:960,height:666}}});
+          const p=await c.newPage(); const video=p.video();
+          const report={pass:false,challenge:false,steps:{},errors:[]};
+          const challenge=async()=>/verify you are human|connection needs to be verified/i.test(await p.locator('body').innerText().catch(()=>''));
+          const ready=async()=>{await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:60000});await p.waitForSelector('#MainContent .sq-refine-v3-sidebar',{state:'visible',timeout:20000});};
+          try{
+            await p.goto(`${BASE}${ROOT}?preview_theme_id=${THEME}`,{waitUntil:'domcontentloaded',timeout:90000});
+            if(await challenge()) throw new Error('CLOUDFLARE_CHALLENGE_ROOT');
+            await ready();
+            const det=p.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group').filter({has:p.locator(':scope>summary',{hasText:'Shop by Type'})}).first();
+            if(await det.getAttribute('open')===null) await det.locator(':scope>summary').click();
+            const input=det.locator('input:not(:checked)').first();
+            const meta=await input.evaluate(i=>({name:i.dataset.filterName||i.dataset.sqPolishParam||'',value:i.dataset.filterValue||i.dataset.sqPolishValue||i.value||'',label:(i.closest('label')?.innerText||'').trim()}));
+            report.steps.meta=meta; const before=p.url(); report.steps.before=before;
+            await input.locator('xpath=ancestor::label[1]').click({noWaitAfter:true});
+            await p.waitForFunction(b=>location.href!==b,before,{timeout:20000});
+            report.steps.after=p.url();
+            if(await challenge()) throw new Error('CLOUDFLARE_CHALLENGE_AFTER_CLICK');
+            const u=new URL(p.url()); if(!u.searchParams.getAll(meta.name).includes(meta.value)) throw new Error('Type URL missing selected value');
+            await ready();
+            report.steps.cards=await p.locator('#MainContent .sq-refine-v3-results .product-grid a[href*="/products/"]').count();
+            if(!report.steps.cards) throw new Error('zero Type-filtered products');
+            report.steps.checked=await p.evaluate(m=>[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar input:checked')].some(i=>(i.dataset.filterName||i.dataset.sqPolishParam)===m.name&&(i.dataset.filterValue||i.dataset.sqPolishValue||i.value)===m.value),meta);
+            if(!report.steps.checked) throw new Error('Type selection not checked after navigation');
+            await p.screenshot({path:'evidence/type-filtered.png',fullPage:false});
+            await p.reload({waitUntil:'domcontentloaded',timeout:90000}); if(await challenge()) throw new Error('CLOUDFLARE_CHALLENGE_REFRESH'); await ready();
+            report.steps.refreshUrl=p.url();
+            report.steps.refreshChecked=await p.evaluate(m=>[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar input:checked')].some(i=>(i.dataset.filterName||i.dataset.sqPolishParam)===m.name&&(i.dataset.filterValue||i.dataset.sqPolishValue||i.value)===m.value),meta);
+            if(!report.steps.refreshChecked) throw new Error('Type selection lost on refresh');
+            await p.goBack({waitUntil:'domcontentloaded',timeout:90000}); if(await challenge()) throw new Error('CLOUDFLARE_CHALLENGE_BACK'); await ready();
+            report.steps.back=p.url(); if(report.steps.back!==before) throw new Error(`Back mismatch: ${report.steps.back}`);
+            await p.screenshot({path:'evidence/back-root.png',fullPage:false}); report.pass=true;
+          }catch(e){report.errors.push(String(e)); report.challenge=/CLOUDFLARE_CHALLENGE/.test(String(e)); await p.screenshot({path:'evidence/failure.png',fullPage:false}).catch(()=>{});}
+          await fs.writeFile('evidence/report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          await p.close(); await c.close(); if(video) await fs.copyFile(await video.path(),'evidence/type-proof.webm').catch(()=>{}); await b.close();
+          if(!report.pass) process.exit(1);
+          NODE
+      - name: Upload Type proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: button01-type-proof
+          path: evidence
+          retention-days: 14

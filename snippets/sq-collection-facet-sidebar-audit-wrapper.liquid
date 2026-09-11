@@ -1,0 +1,6 @@
+{% capture sq_v3 %}{% render 'sq-collection-facet-sidebar' %}{% endcapture %}
+{% capture sq_old %}var main=document.getElementById('MainContent');if(!main)return;{% endcapture %}
+{% capture sq_new %}var main=document.getElementById('MainContent');if(!main||new URL(location.href).searchParams.has('sq_type_family'))return;{% endcapture %}
+{% capture sq_race_old %}var sidebar=layout.querySelector('.sq-collection-sidebar'),column=layout.querySelector('.sq-collection-products-column');var maker={% endcapture %}
+{% capture sq_race_new %}var sidebar=layout.querySelector('.sq-collection-sidebar'),column=layout.querySelector('.sq-collection-products-column');if(!sidebar||!column)return;var maker={% endcapture %}
+{{ sq_v3 | replace: sq_old, sq_new | replace: sq_race_old, sq_race_new }}

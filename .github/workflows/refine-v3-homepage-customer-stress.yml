@@ -1,0 +1,38 @@
+name: Refine V3 homepage 41-button customer stress audit
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-homepage-customer-stress.yml'
+      - '.github/scripts/refine-v3-customer-stress-v3.mjs'
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        viewport: [desktop, mobile]
+        shard: [0,1,2,3,4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Click homepage cards and stress collection transitions
+        env:
+          SHARD: ${{ matrix.shard }}
+          VIEWPORT: ${{ matrix.viewport }}
+        run: node .github/scripts/refine-v3-customer-stress-v3.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: customer-stress-${{ matrix.viewport }}-${{ matrix.shard }}
+          path: shots/
+          retention-days: 7

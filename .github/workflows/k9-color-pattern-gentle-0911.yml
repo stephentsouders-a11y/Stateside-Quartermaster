@@ -1,0 +1,134 @@
+name: K9 inline color catalog Chromium certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/k9-color-pattern-gentle-0911.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  k9-inline-chromium:
+    runs-on: macos-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null
+          npm install playwright@1.55.0 agent-browser @shopify/liquid-html-parser >/dev/null
+          npx playwright install chromium >/dev/null
+          npx agent-browser install >/dev/null
+      - name: Validate exact release source
+        run: |
+          mkdir -p proof/source
+          cp snippets/sq-refine-v3-k9-color-pattern.liquid snippets/sq-refine-v3-structural-link-repair.liquid snippets/sq-refine-v3-sidebar-polish.liquid snippets/sq-refine-v3-visible-grid-rescue.liquid proof/source/
+          node - <<'NODE'
+          const fs=require('fs'),vm=require('vm'),crypto=require('crypto'),{toLiquidHtmlAST}=require('@shopify/liquid-html-parser');
+          const files=fs.readdirSync('proof/source').map(f=>'proof/source/'+f),checks=[];
+          for(const file of files){const s=fs.readFileSync(file,'utf8');toLiquidHtmlAST(s);if(file.endsWith('/sq-refine-v3-k9-color-pattern.liquid'))for(const m of s.matchAll(/<script(?![^>]*application\/json)[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(m[1]);checks.push({file,md5:crypto.createHash('md5').update(s).digest('hex'),pass:true});}
+          fs.writeFileSync('proof/syntax-validation.json',JSON.stringify({commit:process.env.GITHUB_SHA,checks},null,2));console.log('PASS Liquid and JavaScript syntax');
+          NODE
+      - name: Run strict product and geometry checks with rate-respecting retries
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,textwrap
+          source=Path('.github/workflows/k9-color-pattern-functional-0911.yml').read_text()
+          code=textwrap.dedent(re.search("cat > verify.mjs <<'EOF'\n(.*?)\n          EOF",source,re.S).group(1))
+          def replace(old,new):
+              global code
+              assert code.count(old)==1, 'Verifier signature changed: '+old[:90]
+              code=code.replace(old,new)
+          helpers=r'''
+          const retryStatuses=new Set([429,500,502,503,504]);
+          report.backoffs=[];
+          const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+          const backoff=async(label,attempt,retryAfter)=>{const ms=Math.min(30000,Math.max(10000*(attempt+1),(Number(retryAfter)||0)*1000));report.backoffs.push({label,attempt,ms});console.log('RATE_BACKOFF '+label+' '+ms);await pause(ms);};
+          let lastNavigation=0;
+          async function documentGet(p,url){
+            await pause(Math.max(0,6000-(Date.now()-lastNavigation)));
+            for(let attempt=0;attempt<4;attempt++){
+              lastNavigation=Date.now();const r=await p.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
+              if(r.status()===200)return;
+              if(!retryStatuses.has(r.status())||attempt===3)throw Error('Document HTTP '+r.status()+' '+url);
+              await backoff('document '+r.status(),attempt,r.headers()['retry-after']);
+            }
+          }
+          function observeDocument(p){p.on('response',r=>{try{if(r.request().isNavigationRequest()&&r.frame()===p.mainFrame())p.__k9DocumentStatus=r.status();}catch(_){}});}
+          observeDocument(page);
+          '''
+          replace("const ready=async p=>{await p.waitForFunction(()=>{const d=document.querySelector('#MainContent')?.dataset;return d?.sqK9ColorReady==='true'||d?.sqK9ColorError},null,{timeout:60000});assert.ok(!await p.locator('#MainContent').getAttribute('data-sq-k9-color-error'));assert.equal(await p.evaluate(()=>Shopify.theme.id),158561894555)};",helpers+r'''
+          const ready=async p=>{
+            for(let attempt=0;attempt<4;attempt++){
+              await p.waitForLoadState('domcontentloaded');
+              if(retryStatuses.has(p.__k9DocumentStatus)){
+                if(attempt===3)throw Error('Navigation rate limit did not clear');
+                await backoff('navigation '+p.__k9DocumentStatus,attempt);await documentGet(p,p.url());continue;
+              }
+              await p.waitForFunction(()=>{const d=document.querySelector('#MainContent')?.dataset;return d?.sqK9ColorReady==='true'||d?.sqK9ColorError},null,{timeout:90000});
+              const error=await p.locator('#MainContent').getAttribute('data-sq-k9-color-error');
+              if(error&&/HTTP (429|500|502|503|504)\b/.test(error)&&attempt<3){await backoff(error,attempt);await documentGet(p,p.url());continue;}
+              assert.ok(!error,error||'');assert.equal(await p.evaluate(()=>Shopify.theme.id),158561894555);return;
+            }
+            throw Error('Ready retry limit');
+          };''')
+          replace("async function catalog(context,path){const out=[];for(let n=1;n<=20;n++){const r=await context.request.get(path+'/products.json?limit=250&page='+n);assert.equal(r.status(),200);const p=(await r.json()).products;out.push(...p);if(p.length<250)return out;}throw Error('Catalog pagination limit');}",r'''
+          async function catalog(context,path){
+            const out=[];
+            for(let n=1;n<=20;n++){
+              let batch;
+              for(let attempt=0;attempt<4;attempt++){
+                const r=await context.request.get(path+'/products.json?limit=250&page='+n,{timeout:60000});
+                if(r.status()===200){batch=(await r.json()).products;break;}
+                if(!retryStatuses.has(r.status())||attempt===3)throw Error('Oracle HTTP '+r.status());
+                await backoff('independent oracle '+r.status(),attempt,r.headers()['retry-after']);
+              }
+              assert.ok(Array.isArray(batch));out.push(...batch);if(batch.length<250)return out;await pause(2000);
+            }
+            throw Error('Catalog pagination limit');
+          }''')
+          replace("async function goto(p,url){const r=await p.goto(url,{waitUntil:'domcontentloaded',timeout:90000});assert.equal(r.status(),200);await ready(p);}","async function goto(p,url){await documentGet(p,url);await ready(p);}")
+          replace("const mobile=await mctx.newPage();mobile.setDefaultTimeout(25000);mobile.on('pageerror',e=>report.errors.push(e.message));","const mobile=await mctx.newPage();observeDocument(mobile);mobile.setDefaultTimeout(25000);mobile.on('pageerror',e=>report.errors.push(e.message));")
+          needle="await test('cold desktop: one color group and one visible grid'"
+          insert=r'''
+          await test('inline catalog is complete and matches the independent product oracle',async()=>{
+            const data=await page.evaluate(()=>({source:document.querySelector('#MainContent').dataset.sqK9CatalogSource,version:document.querySelector('#MainContent').dataset.sqK9ColorVersion,catalogs:document.querySelectorAll('[data-sq-k9-catalog]').length,controllers:document.querySelectorAll('script[data-sq-k9-color-pattern]').length,seed:JSON.parse(document.querySelector('[data-sq-k9-catalog]').textContent)}));
+            assert.equal(data.source,'inline');assert.equal(data.version,'20260911-inline1');assert.equal(data.catalogs,1);assert.equal(data.controllers,1);assert.equal(data.seed.total,products.length);same(data.seed.products.map(p=>p.handle),products.map(p=>p.handle));
+            let variants=0;
+            for(const p of data.seed.products){const actual=products.find(x=>x.id===p.id);assert.ok(actual);assert.equal(p.variants.length,actual.variants.length);same(p.options.map(o=>o.name),actual.options.map(o=>o.name));for(const o of p.options){const a=actual.options.find(x=>x.name===o.name);same(o.values,a.values);}for(const v of p.variants){const a=actual.variants.find(x=>x.id===v.id);assert.ok(a);assert.equal(v.available,a.available);for(let n=1;n<=3;n++)assert.equal(v['option'+n]??v.options?.[n-1]??null,a['option'+n]??null);variants++;}}
+            report.inline={source:data.source,version:data.version,products:data.seed.products.length,variants,catalogs:data.catalogs,controllers:data.controllers};
+          });
+          '''
+          replace(needle,insert+needle)
+          replace("await goto(mobile,base+'?'+preview);await mobile.locator", "await pause(15000);await goto(mobile,base+'?'+preview);await mobile.locator")
+          replace("await goto(page,base+'?'+preview+'&sq_k9_color=black');const g=", "await pause(10000);await goto(page,base+'?'+preview+'&sq_k9_color=black');const g=")
+          Path('verify.mjs').write_text(code)
+          Path('proof/verify.mjs').write_text(code)
+          PY
+          node --check verify.mjs
+          node verify.mjs
+      - name: Independent agent-browser Chromium check
+        if: always()
+        run: |
+          sleep 15
+          passed=false
+          for attempt in 1 2 3; do
+            if npx agent-browser open 'https://www.statesideqm.com/collections/k9-dog-gear?preview_theme_id=158561894555&sq_k9_color=multicam' && npx agent-browser wait '#MainContent[data-sq-k9-color-ready="true"]' && npx agent-browser eval '(()=>{const m=document.querySelector("#MainContent");if(Shopify.theme.id!==158561894555||m.dataset.sqK9CatalogSource!=="inline"||document.querySelectorAll("[data-sq-k9-color-group]").length!==1)throw Error("Incorrect draft state");return {theme:Shopify.theme.id,source:m.dataset.sqK9CatalogSource,total:m.dataset.sqK9ColorTotal}})()'; then
+              npx agent-browser snapshot -i > proof/k9-agent-snapshot.txt
+              npx agent-browser screenshot proof/k9-agent-final.png
+              passed=true
+              npx agent-browser close
+              break
+            fi
+            npx agent-browser close || true
+            sleep 15
+          done
+          test "$passed" = true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k9-inline-chromium-proof
+          path: proof
+          retention-days: 7

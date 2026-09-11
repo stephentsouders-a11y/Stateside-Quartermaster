@@ -1,7 +1,7 @@
 {% doc %}
-Makes the Refine Products sidebar tall, sticky, and independently scrollable on desktop while preserving normal document flow on mobile.
+Preserves the legacy tall Refine Products sidebar behavior for State Guard Series while that route is frozen during the V3 rebuild.
 {% enddoc %}
-{% if request.page_type == 'collection' %}
+{% if request.page_type == 'collection' and collection.handle == 'state-guard-series' %}
 <style data-sq-refine-tall-sidebar>
 @media (min-width: 901px){
   #MainContent .sq-global-refine-sidebar{

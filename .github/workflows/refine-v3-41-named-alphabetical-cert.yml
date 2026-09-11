@@ -1,0 +1,232 @@
+name: Refine V3 41 named alphabetical Chromium certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-41-named-alphabetical-cert.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify-a-to-z:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      SHARDS: 41
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Build exact 41-button alphabetical matrix
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const f='.github/scripts/refine-v3-other40-exhaustive-cert.mjs';
+          let s=fs.readFileSync(f,'utf8');
+          const needle="const routes=[\n";
+          if(!s.includes(needle)) throw new Error('route array start not found');
+          s=s.replace(needle,needle+"['Accessories, Gifts & Collectibles','/collections/accessories-gifts-collectibles','v3'],");
+          const guard="if(routes.some(r=>r[1].includes('state-guard-series')))";
+          if(!s.includes(guard)) throw new Error('State Guard guard missing');
+          s=s.replace(guard,"routes.sort((a,b)=>a[0].localeCompare(b[0],'en',{sensitivity:'base'}));\nif(routes.length!==41) throw new Error('Expected 41 routes, got '+routes.length);\nif(routes.some(r=>r[1].includes('state-guard-series'))) throw new Error('State Guard must never enter certification');\n"+guard);
+          fs.writeFileSync(f,s);
+          NODE
+      - name: Install Chromium once
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: 01 Accessories, Gifts & Collectibles
+        id: r01
+        continue-on-error: true
+        run: SHARD=0 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 02 Air National Guard Series
+        id: r02
+        continue-on-error: true
+        run: SHARD=1 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 03 Airsoft & Milsim
+        id: r03
+        continue-on-error: true
+        run: SHARD=2 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 04 Apparel & Headwear
+        id: r04
+        continue-on-error: true
+        run: SHARD=3 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 05 Armed Forces Gear
+        id: r05
+        continue-on-error: true
+        run: SHARD=4 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 06 Armored Vehicles
+        id: r06
+        continue-on-error: true
+        run: SHARD=5 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 07 Army National Guard Series
+        id: r07
+        continue-on-error: true
+        run: SHARD=6 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 08 Art & Military Prints
+        id: r08
+        continue-on-error: true
+        run: SHARD=7 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 09 Body Armor & Ballistic Protection
+        id: r09
+        continue-on-error: true
+        run: SHARD=8 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 10 Books, Literature, Manuals & Reference
+        id: r10
+        continue-on-error: true
+        run: SHARD=9 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 11 Child Safety Shop
+        id: r11
+        continue-on-error: true
+        run: SHARD=10 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 12 DIVE / SCUBA
+        id: r12
+        continue-on-error: true
+        run: SHARD=11 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 13 Firearm Accessories, Holsters & Shooting Gear
+        id: r13
+        continue-on-error: true
+        run: SHARD=12 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 14 Firefighting, EMS & Search & Rescue
+        id: r14
+        continue-on-error: true
+        run: SHARD=13 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 15 First Aid, Medical & IFAK
+        id: r15
+        continue-on-error: true
+        run: SHARD=14 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 16 Flags, Displays & Memorials
+        id: r16
+        continue-on-error: true
+        run: SHARD=15 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 17 Flashlights, Lighting & Power
+        id: r17
+        continue-on-error: true
+        run: SHARD=16 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 18 Footwear, Gloves & Eyewear
+        id: r18
+        continue-on-error: true
+        run: SHARD=17 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 19 JROTC Series
+        id: r19
+        continue-on-error: true
+        run: SHARD=18 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 20 K9 & Working Dog Gear
+        id: r20
+        continue-on-error: true
+        run: SHARD=19 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 21 Knives, Axes & Multi-Tools
+        id: r21
+        continue-on-error: true
+        run: SHARD=20 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 22 Law Enforcement & Corrections
+        id: r22
+        continue-on-error: true
+        run: SHARD=21 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 23 Logo Merch
+        id: r23
+        continue-on-error: true
+        run: SHARD=22 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 24 Military Schools & Academies
+        id: r24
+        continue-on-error: true
+        run: SHARD=23 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 25 Morale Patches, Stickers & Tactical ID
+        id: r25
+        continue-on-error: true
+        run: SHARD=24 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 26 Outdoor, Survival & Preparedness
+        id: r26
+        continue-on-error: true
+        run: SHARD=25 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 27 Patriotic & American Heritage
+        id: r27
+        continue-on-error: true
+        run: SHARD=26 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 28 ROTC Series
+        id: r28
+        continue-on-error: true
+        run: SHARD=27 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 29 Safety, Rescue & Climbing
+        id: r29
+        continue-on-error: true
+        run: SHARD=28 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 30 Sta-Brite Insignia
+        id: r30
+        continue-on-error: true
+        run: SHARD=29 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 31 Tactical Gear, Packs & Load Carriage
+        id: r31
+        continue-on-error: true
+        run: SHARD=30 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 32 Thin Line Shop
+        id: r32
+        continue-on-error: true
+        run: SHARD=31 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 33 Uniforms, Insignia & Identification
+        id: r33
+        continue-on-error: true
+        run: SHARD=32 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 34 U.S. Air Force Series
+        id: r34
+        continue-on-error: true
+        run: SHARD=33 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 35 U.S. Army Series
+        id: r35
+        continue-on-error: true
+        run: SHARD=34 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 36 U.S. Coast Guard Series
+        id: r36
+        continue-on-error: true
+        run: SHARD=35 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 37 U.S. Marine Corps Series
+        id: r37
+        continue-on-error: true
+        run: SHARD=36 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 38 U.S. Navy Series
+        id: r38
+        continue-on-error: true
+        run: SHARD=37 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 39 U.S. Space Force Series
+        id: r39
+        continue-on-error: true
+        run: SHARD=38 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 40 Watches & Timepieces
+        id: r40
+        continue-on-error: true
+        run: SHARD=39 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: 41 Zippo, Lighters & Fire Starters
+        id: r41
+        continue-on-error: true
+        run: SHARD=40 node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: Final aggregate hard gate
+        if: always()
+        run: |
+          : > alphabetical41-status.tsv
+          overall=0
+          for i in $(seq 0 40); do
+            report="other40-exhaustive/shard-${i}/report.json"
+            if [ ! -f "$report" ]; then printf '%02d\tFAIL\tmissing report\n' "$((i+1))" | tee -a alphabetical41-status.tsv; overall=1; continue; fi
+            route=$(jq -r '.routes[0].name // "unknown"' "$report")
+            passed=$(jq -r '.interactionPassed // 0' "$report")
+            count=$(jq -r '.interactionCount // 0' "$report")
+            failures=$(jq -r '.failures | length' "$report")
+            pageerrors=$(jq '[.routes[] | select(.type=="v3") | .desktop.pageErrors[], .mobile.pageErrors[]] | length' "$report")
+            failedinteractions=$(jq '[.routes[] | select(.type=="v3") | .desktop.interactions.items[], .mobile.interactions.items[] | select(.pass!=true)] | length' "$report")
+            state=PASS
+            if [ "$failures" -ne 0 ] || [ "$pageerrors" -ne 0 ] || [ "$failedinteractions" -ne 0 ] || [ "$passed" -ne "$count" ]; then state=FAIL; overall=1; fi
+            printf '%02d\t%s\t%s\t%s/%s\tfailures=%s\tpageErrors=%s\tfailedInteractions=%s\n' "$((i+1))" "$state" "$route" "$passed" "$count" "$failures" "$pageerrors" "$failedinteractions" | tee -a alphabetical41-status.tsv
+          done
+          test "$(wc -l < alphabetical41-status.tsv)" -eq 41
+          ! grep -q $'\tFAIL\t' alphabetical41-status.tsv
+          exit "$overall"
+      - name: Upload complete A-to-Z evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alphabetical41-named-full-evidence
+          path: |
+            other40-exhaustive
+            alphabetical41-status.tsv
+          if-no-files-found: error
+          retention-days: 14

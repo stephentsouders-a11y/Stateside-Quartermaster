@@ -1,0 +1,54 @@
+name: Refine V3 other40 exhaustive Chromium certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/scripts/refine-v3-other40-exhaustive-cert.mjs'
+      - '.github/workflows/refine-v3-other40-exhaustive-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+# Definitive 40-route certification after green Child Safety desktop/mobile visible-control trace 34632055088.
+jobs:
+  certify:
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SHARD: ${{ matrix.shard }}
+      SHARDS: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Exhaustive checkbox, reset, page-size, responsive and page-error certification
+        run: node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: Hard gate page errors and incomplete checkbox coverage
+        if: always()
+        run: |
+          REPORT="other40-exhaustive/shard-${SHARD}/report.json"
+          test -f "$REPORT" || { echo "Missing report"; exit 1; }
+          PAGE_ERRORS=$(jq '[.routes[] | select(.type=="v3") | .desktop.pageErrors[], .mobile.pageErrors[]] | length' "$REPORT")
+          FAILED_INTERACTIONS=$(jq '[.routes[] | select(.type=="v3") | .desktop.interactions.items[], .mobile.interactions.items[] | select(.pass!=true)] | length' "$REPORT")
+          COUNT=$(jq '.interactionCount' "$REPORT")
+          PASSED=$(jq '.interactionPassed' "$REPORT")
+          echo "pageErrors=$PAGE_ERRORS checkboxInteractions=$PASSED/$COUNT failedInteractions=$FAILED_INTERACTIONS"
+          test "$PAGE_ERRORS" -eq 0
+          test "$FAILED_INTERACTIONS" -eq 0
+          test "$COUNT" -eq "$PASSED"
+      - name: Upload exhaustive certification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: other40-exhaustive-route-${{ matrix.shard }}
+          path: other40-exhaustive/shard-${{ matrix.shard }}
+          if-no-files-found: warn

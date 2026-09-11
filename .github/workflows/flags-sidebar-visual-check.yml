@@ -1,0 +1,93 @@
+name: Flags sidebar visual check
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/flags-sidebar-visual-check.yml'
+      - 'snippets/sq-refine-v3-sidebar-header-edge-fix.liquid'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install browser test tools
+        run: |
+          npm init -y >/dev/null
+          npm install playwright@1.55.0 pngjs@7.0.0 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Check public collection scroll rendering
+        run: |
+          mkdir -p out
+          cat > audit.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          import {PNG} from 'pngjs';
+          const browser=await chromium.launch();
+          const results=[];
+          for(const size of [{width:1440,height:1000},{width:1366,height:768},{width:390,height:844}]){
+            const tag=String(size.width);
+            const ctx=await browser.newContext({viewport:size,recordVideo:{dir:'out',size}});
+            const p=await ctx.newPage();p.setDefaultTimeout(20000);
+            const r={viewport:size,states:[],errors:[]};results.push(r);
+            p.on('pageerror',e=>r.errors.push(String(e)));
+            try{
+              const response=await p.goto('https://www.statesideqm.com/collections/flags-patriotic-decor?preview_theme_id=158561894555',{waitUntil:'domcontentloaded',timeout:90000});
+              r.status=response.status();
+              await p.locator('#MainContent .sq-refine-v3-sidebar').waitFor({state:'visible',timeout:45000});
+              await p.waitForTimeout(1800);
+              r.theme=await p.evaluate(()=>window.Shopify?.theme);
+              if(r.theme?.id!==158561894555)throw new Error('Wrong preview theme');
+              const side=p.locator('#MainContent .sq-refine-v3-sidebar');
+              await side.scrollIntoViewIfNeeded();
+              async function snap(label){
+                const s=await side.evaluate(e=>{const b=getComputedStyle(e),r=e.getBoundingClientRect(),t=e.querySelector('.sq-refine-v3-sidebar__title'),tr=t?.getBoundingClientRect(),pseudo=getComputedStyle(e,'::before');return {scrollTop:e.scrollTop,maxScroll:e.scrollHeight-e.clientHeight,background:b.backgroundColor,position:b.position,overflow:b.overflowY,windowY:window.scrollY,rect:{x:r.x,y:r.y,width:r.width,height:r.height},title:tr?{x:tr.x,y:tr.y,width:tr.width,height:tr.height,background:getComputedStyle(t).backgroundColor}:null,before:{content:pseudo.content,height:pseudo.height,background:pseudo.backgroundColor}}});
+                s.label=label;
+                const image=await p.screenshot({path:`out/${tag}-${label}.png`});
+                const png=PNG.sync.read(image),x=Math.floor(s.rect.x+4),y=Math.floor(Math.max(0,s.rect.y)+Math.min(150,s.rect.height/2));
+                if(x>=0&&x<png.width&&y>=0&&y<png.height){const i=(y*png.width+x)*4;s.bodyPixel=Array.from(png.data.subarray(i,i+3))}
+                r.states.push(s);
+              }
+              async function moveToRatio(f){
+                if(size.width>900){await side.evaluate((e,f)=>e.scrollTop=(e.scrollHeight-e.clientHeight)*f,f)}
+                else {await side.evaluate((e,f)=>{const r=e.getBoundingClientRect();window.scrollBy({top:r.top-18+Math.max(0,r.height-innerHeight+36)*f,behavior:'instant'})},f)}
+                await p.waitForTimeout(350);
+              }
+              await snap('initial');
+              const details=side.locator(':scope > details');
+              r.groups=await details.locator(':scope > summary').allTextContents();
+              for(let i=0;i<await details.count();i++){const d=details.nth(i);if(!await d.evaluate(e=>e.open))await d.locator(':scope > summary').click()}
+              await side.scrollIntoViewIfNeeded();await moveToRatio(0);await snap('expanded-top');
+              for(const [label,ratio] of [['middle',0.5],['bottom',1],['return',0]]){await moveToRatio(ratio);await snap(label)}
+              if(size.width>900){const box=await side.boundingBox();await p.mouse.move(box.x+box.width/2,Math.min(size.height-40,Math.max(40,box.y+160)));await p.mouse.wheel(0,600);await p.waitForTimeout(400);await snap('wheel-down');await p.mouse.wheel(0,-600);await p.waitForTimeout(400);await snap('wheel-up')}
+              await p.evaluate(()=>window.scrollBy(0,500));await p.waitForTimeout(350);await snap('page-scroll');
+              r.whiteBody=r.states.every(s=>s.background==='rgb(255, 255, 255)');
+              r.whiteBodyPixels=r.states.every(s=>s.bodyPixel?.every(v=>v===255));
+              r.overlayRemoved=r.states.every(s=>s.before.content==='none');
+              r.headerNavy=r.states.every(s=>s.title?.background==='rgb(8, 40, 63)');
+              r.headerFullWidth=r.states.every(s=>Math.abs(s.title.width-(s.rect.width-2))<=3);
+              r.scrollExercised=size.width>900?r.states.some(s=>s.scrollTop>100):(Math.max(...r.states.map(s=>s.windowY))-Math.min(...r.states.map(s=>s.windowY))>100);
+              r.passed=r.status===200&&r.whiteBody&&r.whiteBodyPixels&&r.overlayRemoved&&r.headerNavy&&r.headerFullWidth&&r.scrollExercised&&r.errors.length===0;
+              if(!r.passed)r.failure='Sidebar regression assertion failed; see report.json';
+            }catch(e){r.failure=String(e);r.passed=false;await p.screenshot({path:`out/${tag}-error.png`}).catch(()=>{})}
+            await ctx.close();
+          }
+          await browser.close();
+          fs.writeFileSync('out/report.json',JSON.stringify(results,null,2));
+          const summary=results.map(({viewport,whiteBody,whiteBodyPixels,overlayRemoved,headerNavy,headerFullWidth,scrollExercised,errors,passed,failure})=>({viewport,whiteBody,whiteBodyPixels,overlayRemoved,headerNavy,headerFullWidth,scrollExercised,errors,passed,failure}));
+          console.log('FLAGS_SIDEBAR_SUMMARY',JSON.stringify(summary));
+          if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'## Flags sidebar scroll regression\n\n```json\n'+JSON.stringify(summary,null,2)+'\n```\n');
+          if(results.some(r=>!r.passed))process.exitCode=1;
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flags-sidebar-scroll-evidence
+          path: out
+          retention-days: 14

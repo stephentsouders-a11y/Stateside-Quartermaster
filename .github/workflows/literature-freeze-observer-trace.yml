@@ -1,0 +1,46 @@
+name: Literature freeze observer trace
+on:
+  push:
+    paths: ['.github/workflows/literature-freeze-observer-trace.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm init -y >/dev/null
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Diagnostic observer circuit breaker, not a passing storefront test
+        run: |
+          mkdir -p out
+          cat > trace.mjs <<'JS'
+          import {chromium} from 'playwright';import fs from 'node:fs';
+          const browser=await chromium.launch(),context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage();
+          const report={diagnosticOnly:true,errors:[],console:[],responses:[]};
+          page.on('pageerror',e=>report.errors.push(String(e)));
+          page.on('console',m=>{if(m.type()==='error'||m.text().includes('OBSERVER_LOOP'))report.console.push(m.text())});
+          let n=0;page.on('response',async r=>{if(r.request().isNavigationRequest()&&r.request().frame()===page.mainFrame()){report.responses.push({url:r.url(),status:r.status()});try{fs.writeFileSync('out/document-'+(++n)+'.html',await r.body())}catch{}}});
+          await page.addInitScript(()=>{
+            const Native=window.MutationObserver;window.__observerTrace=[];
+            window.MutationObserver=class extends Native{
+              constructor(fn){const info={id:window.__observerTrace.length,stack:new Error().stack,callback:String(fn),calls:0,burst:0,since:performance.now(),targets:[],stopped:false};window.__observerTrace.push(info);super(function(records,observer){info.calls++;const t=performance.now();if(t-info.since>400){info.since=t;info.burst=0}info.burst++;if(info.burst>300){info.stopped=true;observer.disconnect();console.error('OBSERVER_LOOP '+JSON.stringify(info));return}fn(records,observer)});this.info=info}
+              observe(node,options){this.info.targets.push({name:node?.nodeName,id:node?.id,class:node?.className,options});if(this.info.targets.length>10)this.info.targets.shift();return super.observe(node,options)}
+            };
+          });
+          try{const r=await page.goto('https://www.statesideqm.com/collections/literature?preview_theme_id=158561894555',{waitUntil:'domcontentloaded',timeout:40000});report.status=r.status();await page.waitForTimeout(7000);report.state=await page.evaluate(()=>({url:location.href,theme:window.Shopify?.theme,main:{...document.querySelector('#MainContent')?.dataset},observers:window.__observerTrace,text:document.querySelector('#MainContent')?.innerText.slice(0,10000),groups:[...document.querySelectorAll('.sq-refine-v3-sidebar details > summary')].map(e=>e.textContent)}));await page.screenshot({path:'out/diagnostic.png'});fs.writeFileSync('out/dom.html',await page.content())}catch(e){report.error=String(e)}
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));await browser.close();process.exit(report.error?1:0);
+          JS
+          timeout 100 node trace.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: literature-freeze-observer-trace
+          path: out
+          retention-days: 7

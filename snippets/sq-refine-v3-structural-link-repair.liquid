@@ -1,0 +1,38 @@
+{% doc %}
+Repairs late-added V3 structural refinement targets so every collection navigation preserves sq_root. V3 only; State Guard remains untouched. Tactical Gear's Chest Rigs structural choice is pinned to the authoritative sq-type-chest-rigs tagged route so the broad parent collection cannot leak belts into a Chest Rigs selection.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<script data-sq-refine-v3-structural-link-repair>
+(function(){
+  const main=document.getElementById('MainContent');
+  if(!main)return;
+  const params=new URLSearchParams(location.search);
+  const root=params.get('sq_root') || {{ collection.handle | json }};
+  function repair(){
+    const side=main.querySelector('.sq-refine-v3-sidebar');
+    if(!side)return false;
+    side.querySelectorAll('input[data-kind="structural"][data-target]').forEach(function(input){
+      try{
+        const url=new URL(input.dataset.target,location.origin);
+        if(url.pathname.indexOf('/collections/')===0){
+          const label=(input.closest('label')&&input.closest('label').textContent||'').replace(/\s+/g,' ').trim();
+          if(root==='tactical-gear'&&/chest\s+rigs/i.test(label)&&url.pathname.replace(/\/$/,'')==='/collections/packs-pouches-carry-gear-chest-rigs-load-carriage'){
+            url.pathname='/collections/packs-pouches-carry-gear-chest-rigs-load-carriage/sq-type-chest-rigs';
+          }
+          url.searchParams.set('sq_root',root);
+          input.dataset.target=url.pathname+(url.searchParams.toString()?'?'+url.searchParams.toString():'');
+        }
+      }catch(_e){}
+    });
+    return true;
+  }
+  if(!repair()){
+    let tries=0;
+    const timer=setInterval(function(){if(repair()||++tries>120)clearInterval(timer)},250);
+  }
+  setTimeout(repair,750);
+  setTimeout(repair,1750);
+  setTimeout(repair,3500);
+})();
+</script>
+{% endif %}

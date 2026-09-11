@@ -1,52 +1,142 @@
-name: Flags Refine diagnostic
+name: Flags Refine exhaustive Chromium audit
 on:
   push:
+    branches: [refine-restart-v3]
     paths:
       - '.github/workflows/flags-refine-diagnostic.yml'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  diagnose:
+  audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 30
     steps:
       - uses: actions/setup-node@v4
-        with: {node-version: '24'}
-      - run: |
+        with:
+          node-version: '24'
+      - name: Install Playwright Chromium
+        run: |
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Diagnose Flags Refine
+      - name: Test every Refine Products choice one by one
         env:
           BASE: https://www.statesideqm.com
           THEME: '158561894555'
         run: |
-          cat > diag.mjs <<'EOF'
+          mkdir -p out
+          cat > audit.mjs <<'EOF'
           import { chromium } from 'playwright';
-          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          import fs from 'node:fs/promises';
+
+          const base=process.env.BASE;
+          const theme=process.env.THEME;
+          const root='/collections/flags-patriotic-decor';
+          const startUrl=`${base}${root}?preview_theme_id=${theme}`;
           const browser=await chromium.launch({headless:true});
           const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
-          const page=await ctx.newPage(); page.setDefaultTimeout(20000); page.setDefaultNavigationTimeout(60000);
-          const req=[];page.on('response',r=>{if(/\/collections\/.*products\.json|filter\.p\.vendor|section_id/.test(r.url()))req.push({status:r.status(),url:r.url()})});
-          const prime=new URL('/',process.env.BASE);prime.searchParams.set('preview_theme_id',process.env.THEME);await page.goto(prime.toString(),{waitUntil:'domcontentloaded'});await sleep(1000);
-          await page.goto(new URL('/collections/flags-patriotic-decor',process.env.BASE).toString(),{waitUntil:'domcontentloaded'});await sleep(4500);
-          const snap=async(label)=>console.log(label,JSON.stringify(await page.evaluate(()=>({
-            url:location.href,
-            directLen:window.__sqDirectFacetUniverse?.products?.length||0,
-            categoryV3:!!window.__sqCategoryUniverseV3,
-            guardV2:!!window.__sqFilteredProductSurfaceGuardV2,
-            guardNodes:document.querySelectorAll('#MainContent [data-sq-filtered-product-surface-guard-products]').length,
-            guardActive:document.querySelector('#MainContent')?.classList.contains('sq-filtered-result-guard-active')||false,
-            categoryUniverseScripts:document.querySelectorAll('script[data-sq-category-universe-v3]').length,
-            refineScripts:document.querySelectorAll('script[data-sq-filtered-product-surface-guard-v2]').length,
-            manufacturers:document.querySelectorAll('.sq-global-refine-manufacturer-checkbox').length,
-            selected:new URL(location.href).searchParams.get('sq_maker')||'',
-            gridVendors:[...document.querySelectorAll('#MainContent .sq-custom-color-product__vendor')].slice(0,8).map(x=>(x.textContent||'').trim())
-          })),null,2));
-          await snap('BEFORE');
-          const box=page.locator('.sq-global-refine-manufacturer-checkbox').first();console.log('BOX_COUNT',await box.count());if(await box.count()){console.log('BOX_VALUE',await box.inputValue());await box.evaluate(el=>{el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}))});}
-          await sleep(6000);await snap('AFTER');console.log('NETWORK',JSON.stringify(req,null,2));
+          const page=await ctx.newPage();
+          page.setDefaultTimeout(30000);
+          page.setDefaultNavigationTimeout(90000);
+          const jsErrors=[];
+          page.on('pageerror',e=>jsErrors.push(String(e)));
+
+          async function ready(expectSidebar=true){
+            if(expectSidebar) await page.locator('#MainContent .sq-refine-v3-sidebar').waitFor({state:'visible',timeout:60000});
+            await page.waitForTimeout(900);
+          }
+          async function gotoWithRetry(url,tries=4){
+            for(let i=0;i<tries;i++){
+              const r=await page.goto(url,{waitUntil:'domcontentloaded'});
+              if(r?.status()===429){await page.waitForTimeout(2500*(i+1));continue;}
+              if(!r||!r.ok()) throw new Error(`HTTP ${r&&r.status()} ${url}`);
+              return r;
+            }
+            throw new Error(`HTTP 429 after retries ${url}`);
+          }
+          async function openRoot(){await gotoWithRetry(startUrl);await ready();}
+          async function visibleHandles(){
+            return await page.evaluate(()=>{
+              const sels=['.sq-refine-taxonomy-product[href*="/products/"]','.sq-custom-color-product[href*="/products/"]','#MainContent .product-grid__item a[href*="/products/"]','#MainContent product-card a[href*="/products/"]'];
+              const a=[];for(const s of sels)document.querySelectorAll(s).forEach(x=>a.push(x));
+              return [...new Set(a.filter(x=>{const r=x.getBoundingClientRect(),cs=getComputedStyle(x);return r.width>2&&r.height>2&&cs.display!=='none'&&cs.visibility!=='hidden'}).map(x=>{const m=(x.getAttribute('href')||'').match(/\/products\/([^?#/]+)/);return m?decodeURIComponent(m[1]):''}).filter(Boolean))];
+            });
+          }
+          async function visibleTitles(){
+            return await page.evaluate(()=>[...document.querySelectorAll('#MainContent a[href*="/products/"]')].filter(x=>{const r=x.getBoundingClientRect();return r.width>2&&r.height>2}).map(x=>(x.textContent||x.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim()).filter(Boolean).slice(0,120));
+          }
+
+          await openRoot();
+          const rootTheme=await page.evaluate(()=>window.Shopify?.theme?.id||null);
+          const baseline=await visibleHandles();
+          const groups=await page.evaluate(()=>[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar details')].map((d,gi)=>({
+            index:gi,
+            title:(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),
+            choices:[...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>({
+              index:ii,
+              label:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').replace(/\d+\s*items?/i,'').trim(),
+              target:i.dataset.target||'',
+              kind:i.dataset.kind||'',
+              param:i.dataset.sqPolishParam||'',
+              polishValue:i.dataset.sqPolishValue||''
+            }))
+          })).filter(g=>g.choices.length));
+          console.log('FLAGS_GROUPS',JSON.stringify(groups));
+          const results=[];
+
+          // Structural categories: each is a real child collection destination.
+          const structural=groups.flatMap(g=>g.choices.filter(c=>c.target).map(c=>({group:g.title,...c})));
+          for(const c of structural){
+            const u=new URL(c.target,base);u.searchParams.set('preview_theme_id',theme);
+            await gotoWithRetry(u.toString()); await ready();
+            const handles=await visibleHandles();
+            const pathOk=page.url().includes(new URL(c.target,base).pathname);
+            const row={group:c.group,label:c.label,mode:'structural',target:c.target,url:page.url(),visibleCount:handles.length,pathOk,visibleHandles:handles,visibleTitles:await visibleTitles(),pass:pathOk&&handles.length>0};
+            results.push(row);console.log('CHOICE',JSON.stringify({...row,visibleHandles:undefined,visibleTitles:undefined}));
+            await page.waitForTimeout(700);
+          }
+
+          // Metadata filters: no full reload per checkbox; check -> verify route/result -> uncheck.
+          await openRoot();
+          for(const g of groups){
+            const metas=g.choices.filter(c=>c.param&&c.polishValue);
+            for(const c of metas){
+              const sel=`#MainContent .sq-refine-v3-sidebar input[data-sq-polish-param="${CSS.escape(c.param)}"][data-sq-polish-value="${CSS.escape(c.polishValue)}"]`;
+              const box=page.locator(sel).first();
+              let row={group:g.title,label:c.label,mode:'metadata',param:c.param,polishValue:c.polishValue};
+              try{
+                await box.scrollIntoViewIfNeeded();
+                await box.check();
+                await page.waitForTimeout(1000);
+                const handles=await visibleHandles();
+                const checked=await box.isChecked();
+                const current=page.url();
+                const encoded=new URL(current).searchParams.getAll(c.param).map(decodeURIComponent);
+                const routeOk=encoded.includes(c.polishValue)||current.includes(encodeURIComponent(c.polishValue))||current.includes(c.polishValue.replace(/ /g,'+'));
+                const changed=JSON.stringify(handles)!==JSON.stringify(baseline);
+                row={...row,checked,visibleCount:handles.length,url:current,routeOk,changed,visibleHandles:handles,visibleTitles:await visibleTitles(),pass:checked&&handles.length>0&&(routeOk||changed)};
+                await box.uncheck().catch(()=>{});
+                await page.waitForTimeout(650);
+                // If this filter implementation navigated away, restore root only when needed.
+                if(!page.url().includes(root)){await openRoot();}
+              }catch(e){row={...row,pass:false,error:String(e),url:page.url()};await openRoot();}
+              results.push(row);console.log('CHOICE',JSON.stringify({...row,visibleHandles:undefined,visibleTitles:undefined}));
+            }
+          }
+
+          const failures=results.filter(x=>!x.pass);
+          const report={collection:root,theme,rootTheme,groupCount:groups.length,choiceCount:results.length,baselineVisible:baseline.length,groups,results,failures,jsErrors};
+          await fs.writeFile('out/report.json',JSON.stringify(report,null,2));
+          await openRoot();await page.screenshot({path:'out/flags-refine-final.png',fullPage:true});
+          console.log('FLAGS_EXHAUSTIVE_SUMMARY',JSON.stringify({groupCount:groups.length,choiceCount:results.length,failures:failures.length,jsErrors:jsErrors.length}));
           await browser.close();
+          if(failures.length) process.exitCode=1;
           EOF
-          node diag.mjs
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flags-refine-exhaustive-evidence
+          path: out
+          retention-days: 14

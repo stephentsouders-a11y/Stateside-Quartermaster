@@ -1,0 +1,32 @@
+name: Refine V3 fast customer smoke
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-fast-smoke.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Test current blockers and customer interactions
+        run: |
+          cat > smoke.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const B='https://www.statesideqm.com',T='158561894555',paths=['/collections/accessories-gifts-collectibles','/collections/sta-brite-insignia','/collections/literature','/collections/stateside-quartermaster-logo-merch','/collections/air-national-guard-series','/collections/products-built-for-the-line-u-s-army','/collections/jrotc-series','/collections/products-built-for-the-line-u-s-navy'];
+          const u=p=>{let x=new URL(p,B);x.searchParams.set('preview_theme_id',T);return x+''},sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const browser=await chromium.launch({headless:true}),ctx=await browser.newContext({viewport:{width:1440,height:1000}}),p=await ctx.newPage();let bad=[];
+          async function go(path){await p.goto(u(path),{waitUntil:'domcontentloaded',timeout:90000});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});await sleep(1500)}
+          for(const path of paths){try{await go(path);const d=await p.evaluate(()=>{let m=document.querySelector('#MainContent'),vis=e=>{if(!e)return false;let r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'},s=[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis),l=[...m.querySelectorAll('.sq-global-refine-sidebar,.sq-collection-sidebar,.facets-block-wrapper,.facets-container,.facets-wrapper,[class*="filter-sidebar"]')].filter(e=>vis(e)&&!e.classList.contains('sq-refine-v3-sidebar')),gs=[...m.querySelectorAll('.sq-refine-v3-results .product-grid')],has=g=>vis(g)&&[...g.querySelectorAll(':scope>.product-grid__item')].some(x=>vis(x)&&x.querySelector('a[href*="/products/"]')),g=gs.find(x=>x.classList.contains('sq-v3-authoritative-grid')&&has(x))||gs.find(has),cs=g?[...g.querySelectorAll(':scope>.product-grid__item')].filter(x=>vis(x)&&x.querySelector('a[href*="/products/"]')):[],rs=cs.slice(0,8).map(x=>x.getBoundingClientRect()),row=rs.length?rs.filter(x=>Math.abs(x.y-rs[0].y)<4):[],groups=s[0]?[...s[0].querySelectorAll(':scope>details.sq-refine-v3-group')].map(x=>({label:(x.querySelector('summary')?.textContent||'').trim(),targets:[...x.querySelectorAll('input[data-kind=structural][data-target]')].map(i=>i.dataset.target||'')})):[];return{side:s.length,legacy:l.length,cards:cs.length,row:row.length,width:row[0]?.width||0,position:s[0]?getComputedStyle(s[0]).position:'',titlebg:s[0]?getComputedStyle(s[0].querySelector('.sq-refine-v3-sidebar__title')).backgroundColor:'',sidebg:s[0]?getComputedStyle(s[0]).backgroundColor:'',groups}});let e=[];if(d.side!==1)e.push('side='+d.side);if(d.legacy)e.push('legacy='+d.legacy);if(d.cards<1||d.row!==3||d.width<250)e.push('grid '+d.cards+'/'+d.row+'/'+Math.round(d.width));if(d.position!=='sticky')e.push('position='+d.position);if(d.titlebg!=='rgb(8, 40, 63)'||d.sidebg!=='rgb(8, 40, 63)')e.push('navy');for(const g of d.groups)for(const t of g.targets)if(!t.startsWith('/collections/')||!new URL(t,B).searchParams.get('sq_root'))e.push('target '+g.label);if(path.includes('literature')&&d.groups.some(g=>g.label==='Shop by Author'))e.push('unsafe Author visible');console.log((e.length?'FAIL ':'PASS ')+path+' '+JSON.stringify(d));if(e.length)bad.push(path+' '+e.join('|'))}catch(e){bad.push(path+' '+e);console.log('FAIL '+path+' '+e)}}
+          // click native filter and product/back on Accessories
+          try{await go(paths[0]);let q=p.locator('.sq-refine-v3-sidebar input[data-kind=native][data-filter-name][data-filter-value]:not(:checked)').first();if(await q.count()){let n=await q.getAttribute('data-filter-name'),v=await q.getAttribute('data-filter-value');await q.check();await p.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});await sleep(1000);if(!new URL(p.url()).searchParams.getAll(n).includes(v))bad.push('native filter URL');console.log('FILTER '+n+'='+v+' '+p.url())}await go(paths[0]);let a=p.locator('.sq-refine-v3-results .product-grid:visible .product-grid__item:visible a[href*="/products/"]').first();await a.click();await p.waitForURL(/\/products\//,{timeout:30000});await p.goBack({waitUntil:'domcontentloaded',timeout:90000});await sleep(1000);console.log('PRODUCT-BACK '+p.url())}catch(e){bad.push('interaction '+e)}
+          // mobile Navy
+          const mc=await browser.newContext({viewport:{width:390,height:844}}),mp=await mc.newPage();try{await mp.goto(u(paths[7]),{waitUntil:'domcontentloaded',timeout:90000});await mp.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});await sleep(1500);let d=await mp.evaluate(()=>{let vis=e=>{if(!e)return false;let r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'},m=document.querySelector('#MainContent'),s=[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis),gs=[...m.querySelectorAll('.sq-refine-v3-results .product-grid')],g=gs.find(x=>x.classList.contains('sq-v3-authoritative-grid')&&vis(x))||gs.find(vis),cs=g?[...g.querySelectorAll(':scope>.product-grid__item')].filter(vis).slice(0,6):[],rs=cs.map(x=>x.getBoundingClientRect());return{side:s.length,pos:s[0]?getComputedStyle(s[0]).position:'',row:rs.length?rs.filter(r=>Math.abs(r.y-rs[0].y)<4).length:0}});console.log('MOBILE '+JSON.stringify(d));if(d.side!==1||d.pos==='sticky'||d.row!==2)bad.push('mobile '+JSON.stringify(d))}catch(e){bad.push('mobile '+e)}await mc.close();
+          console.log('SMOKE SUMMARY '+JSON.stringify({failures:bad.length,bad}));await ctx.close();await browser.close();if(bad.length)process.exit(1);
+          EOF
+          node smoke.mjs

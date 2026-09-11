@@ -1,0 +1,46 @@
+name: Refine V3 Firearm interaction smoke
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-firearm-interaction-smoke.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  firearm-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Test Firearm Make Model like a customer
+        run: |
+          cat > firearm.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const B='https://www.statesideqm.com',T='158561894555';
+          const u=new URL('/collections/firearm-accessories',B);u.searchParams.set('preview_theme_id',T);
+          const browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:90000});
+          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});
+          await page.waitForTimeout(1500);
+          const groups=page.locator('.sq-refine-v3-sidebar details.sq-refine-v3-group');
+          const make=groups.filter({has:page.locator('summary:text-is("Shop by Make / Model")')}).first();
+          if(await make.count()!==1)throw new Error('Make / Model group count is not 1');
+          await make.locator(':scope > summary').click();
+          const input=make.locator('input[data-kind="native"][data-filter-name="filter.p.product_type"]').first();
+          if(await input.count()<1)throw new Error('Make / Model has no native inputs');
+          const value=await input.getAttribute('data-filter-value');
+          await input.check();
+          await page.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});
+          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});
+          await page.waitForTimeout(1000);
+          const data=await page.evaluate(()=>{const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>1&&r.height>1&&s.display!=='none'&&s.visibility!=='hidden'};const m=document.querySelector('#MainContent');const sides=[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis);const legacy=[...m.querySelectorAll('.sq-global-refine-sidebar,.sq-collection-sidebar,.facets-block-wrapper,.facets-container,.facets-wrapper,[class*="filter-sidebar"]')].filter(e=>vis(e)&&!e.classList.contains('sq-refine-v3-sidebar'));const grids=[...m.querySelectorAll('.sq-refine-v3-results .product-grid')].filter(vis);const cards=grids.flatMap(g=>[...g.querySelectorAll(':scope>.product-grid__item')].filter(vis));return{sidebars:sides.length,legacy:legacy.length,cards:cards.length,href:location.href,labels:[...sides[0].querySelectorAll(':scope>details>summary')].map(x=>(x.textContent||'').trim())}});
+          const q=new URL(page.url());if(!q.searchParams.getAll('filter.p.product_type').includes(value))throw new Error('URL did not retain selected Make / Model');
+          if(data.sidebars!==1||data.legacy!==0)throw new Error('Sidebar count failed '+JSON.stringify(data));
+          if(data.cards<1)throw new Error('Filtered results empty after Make / Model click');
+          if(data.labels.filter(x=>x==='Shop by Make / Model').length!==1)throw new Error('Make / Model duplicate/missing after navigation');
+          console.log('FIREARM PASS '+JSON.stringify({value,...data}));
+          await browser.close();
+          EOF
+          node firearm.mjs

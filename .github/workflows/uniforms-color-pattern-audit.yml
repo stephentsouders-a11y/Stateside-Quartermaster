@@ -1,0 +1,55 @@
+name: Uniforms color pattern audit
+on:
+  push:
+    paths:
+      - '.github/workflows/uniforms-color-pattern-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          mkdir -p out
+          npm install --no-save agent-browser playwright >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Capture audit theme and product metadata
+        run: |
+          export AGENT_BROWSER_EXECUTABLE_PATH="$(node -e 'console.log(require("playwright").chromium.executablePath())')"
+          npx agent-browser open 'https://www.statesideqm.com/collections/uniforms?preview_theme_id=158561894555'
+          npx agent-browser wait '.sq-refine-v3-sidebar'
+          npx agent-browser snapshot -i > out/snapshot.txt
+          npx agent-browser screenshot out/before.png
+          npx agent-browser eval 'JSON.stringify({theme:Shopify.theme,url:location.href,side:[...document.querySelectorAll(".sq-refine-v3-sidebar")].map(x=>x.innerText),data:[...document.querySelectorAll("script[type=\"application/json\"]")].map(x=>({attrs:x.getAttributeNames().filter(a=>a.startsWith("data-")).join(" "),text:x.textContent.slice(0,4000)})).filter(x=>x.attrs)})' > out/diagnostic.json
+          npx agent-browser eval 'document.documentElement.outerHTML' > out/page.html.json
+          npx agent-browser close
+          cat out/diagnostic.json
+          cat > collect.mjs <<'EOF'
+          import fs from 'node:fs';
+          const all=[];const seen=new Set();
+          for(let page=1;page<=20;page++){
+            const r=await fetch(`https://www.statesideqm.com/collections/uniforms/products.json?limit=250&page=${page}`);
+            if(!r.ok)throw new Error(`catalog HTTP ${r.status}`);
+            const {products}=await r.json();
+            for(const p of products){if(!seen.has(p.id)){all.push(p);seen.add(p.id)}}
+            if(products.length<250)break;
+          }
+          fs.writeFileSync('out/products.json',JSON.stringify(all));
+          const tags=[...new Set(all.flatMap(p=>p.tags||[]))];
+          const appearanceTags=tags.filter(t=>/^(?:sq\s+)?(?:colou?r(?:\s*\/\s*pattern)?|pattern|camo(?:uflage)?)\s*:/i.test(t));
+          const options=[...new Set(all.flatMap(p=>(p.options||[]).filter(o=>/color|colour|pattern|camo/i.test(o.name)).flatMap(o=>o.values||[])))];
+          console.log('CATALOG_APPEARANCE',JSON.stringify({products:all.length,appearanceTags,options,sample:all.filter(p=>(p.options||[]).some(o=>/color|pattern/i.test(o.name))).slice(0,2)}));
+          EOF
+          node collect.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uniforms-color-pattern-audit
+          path: out
+          retention-days: 7

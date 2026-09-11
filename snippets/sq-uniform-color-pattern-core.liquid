@@ -1,0 +1,100 @@
+{% doc %}
+Adds a collection-scoped color/pattern facet to the V3 sidebar for Uniforms and other approved Refine roots. Uses complete paginated catalog metadata, exact variant colors, same-variant availability, and the existing category/type/manufacturer filters. Does not change State Guard.
+{% enddoc %}
+{% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
+<script type="application/json" data-sq-ucp-config>{"handle":{{ collection.handle | json }},"currency":{{ cart.currency.iso_code | json }}}</script>
+<style data-sq-uniform-color-style>
+.sq-uniform-colors-loading{border-top:1px solid #dfe4e7;margin:0;padding:0}.sq-uniform-colors-loading>summary{cursor:pointer;padding:13px 34px 13px 2px;font-weight:900}.sq-ucp-status{font-size:13px;padding:8px 2px;line-height:1.5}.sq-ucp-count{font-variant-numeric:tabular-nums;white-space:nowrap;font-size:11px}
+html.sq-ucp-pending #MainContent .sq-refine-v3-results>collection-component{visibility:hidden!important}
+html.sq-ucp-filtered #MainContent.sq-refine-v3-active .sq-refine-v3-results>:not(.sq-refine-v3-page-size):not([data-sq-ucp-results]){display:none!important;visibility:hidden!important}
+#MainContent [data-sq-ucp-results] .product-grid{list-style:none;margin:0;padding:0;gap:28px}
+#MainContent [data-sq-ucp-results] .sq-ucp-card{display:flex;flex-direction:column;gap:8px;min-width:0;color:inherit;text-decoration:none}
+#MainContent [data-sq-ucp-results] .sq-ucp-image{display:grid;place-items:center;background:#fff;aspect-ratio:1/1;overflow:hidden}
+#MainContent [data-sq-ucp-results] .sq-ucp-image img{width:100%;height:100%;object-fit:contain}
+#MainContent [data-sq-ucp-results] .sq-ucp-card h3{font:inherit;font-weight:700;margin:0;line-height:1.4}
+#MainContent [data-sq-ucp-results] .sq-ucp-price{font-weight:800}.sq-ucp-empty{padding:24px 8px}.sq-ucp-card:focus-visible{outline:3px solid #d5ab4b;outline-offset:3px}
+</style>
+<script data-sq-uniform-color-pattern>
+(function(){
+  'use strict';
+  var configNode=document.querySelector('[data-sq-ucp-config]'),config=JSON.parse(configNode.textContent),query=new URLSearchParams(location.search);
+  if(config.handle==='safety-rescue-climbing'&&query.get('sq_root')==='uniforms'){query.delete('sq_root');history.replaceState(null,'',location.pathname+(query.toString()?'?'+query.toString():'')+location.hash)}
+  var activeRoot=query.get('sq_root')||config.handle;if(['uniforms','body-armor-ballistic-protection','safety-rescue-climbing','footwear-gloves-eyewear'].indexOf(activeRoot)===-1||window.__sqUniformColor)return;
+  var PARAM='sq_ucp',selected=query.getAll(PARAM),main=document.getElementById('MainContent'),group,catalog,counts;
+  var api=window.__sqUniformColor={version:'2026-09-11.4',ready:false,total:0,choices:[],resultIds:[]};
+  if(selected.length)document.documentElement.classList.add('sq-ucp-pending');
+  function norm(v){return String(v||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
+  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]})}
+  function key(v){return norm(v).replace(/ /g,'-')}
+  function appearance(raw,titleMode){
+    var n=norm(String(raw||'').replace(/^\d+[a-z]?\.\s*/i,'').replace(/\([^)]*\)/g,'').replace(/,.*$/,'').replace(/\b\d+\s*-?\s*pack\b/gi,''));
+    if(!n||(!titleMode&&/\b(?:sergeant|lieutenant|corporal|specialist|captain|colonel|major|private|count|tactical version|other color)\b/.test(n)))return [];
+    if(/multicam black/.test(n))return ['MultiCam Black'];
+    if(/multicam alpine/.test(n))return ['MultiCam Alpine'];
+    if(/multicam tropic/.test(n))return ['MultiCam Tropic'];
+    if(/multicam arid/.test(n))return ['MultiCam Arid'];
+    if(/\b(?:multicam|ocp|scorpion)\b/.test(n))return ['MultiCam / OCP'];
+    if(/\b(?:ucp|acu)\b/.test(n))return ['UCP / ACU'];
+    if(/\bmtp\b/.test(n))return ['MTP'];
+    if(/desert marpat/.test(n))return ['Desert MARPAT'];
+    if(/woodland marpat/.test(n))return ['Woodland MARPAT'];
+    if(/(?:aor ?2|nwu type iii)/.test(n))return ['AOR2 / NWU Type III'];
+    if(/(?:3|three) color desert/.test(n))return ['3-Color Desert'];
+    if(/(?:6|six) color desert/.test(n))return ['6-Color Desert'];
+    if(/desert tiger/.test(n))return ['Desert Tiger Stripe'];
+    if(/tiger stripe/.test(n))return ['Tiger Stripe'];
+    if(/greek lizard/.test(n))return ['Greek Lizard'];
+    if(/\bcce\b/.test(n))return ['CCE Woodland'];
+    if(/roma 90/.test(n))return ['Roma-90 Woodland'];
+    if(/m81 arid/.test(n))return ['M81 Arid'];
+    if(/\bwoodland\b|\bm81\b/.test(n))return ['Woodland / M81'];
+    if(/\bmm14\b/.test(n))return ['MM14'];
+    if(/\bngu camo\b/.test(n))return ['NGU Camo'];
+    if(/\b(?:treebark|tree bark)\b/.test(n))return ['TreeBark'];
+    if(/real tree|realtree/.test(n))return ['Realtree'];
+    if(/metro(?: camo)?$/.test(n))return ['Metro Camo'];
+    if(/sky camo/.test(n))return ['Sky Camo'];
+    if(/midnight camo/.test(n))return ['Midnight Camo'];
+    if(/derby tweed/.test(n))return ['Derby Tweed'];
+    if(/^(?:camo|camouflage|subdued camo)$/.test(n))return ['Camouflage'];
+    if(/^(?:multi|full color)$/.test(n))return ['Multicolor'];
+    if(/camo|pattern|marpat/.test(n))return [];
+    var labels=[],rules=[
+      [/\b(?:black|deep black)\b/,'Black'],[/\b(?:coyote|coyote brown)\b/,'Coyote'],
+      [/\branger green\b/,'Ranger Green'],[/\b(?:olive drab|od green|od|olive green|olive|army olive|dark olive|rifle green)\b/,'OD / Olive Green'],
+      [/\bfoliage(?: green)?\b/,'Foliage Green'],[/\b(?:navy|true navy|midnight navy blue|lapd navy)\b/,'Navy Blue'],
+      [/\bkhaki\b/,'Khaki'],[/\b(?:tan|desert tan|ar tan)\b/,'Tan'],[/\b(?:sand|desert sand)\b/,'Sand'],
+      [/\b(?:brown|earth brown|heather brown|peat brown)\b/,'Brown'],[/\b(?:white|ivory)\b/,'White'],
+      [/\b(?:gray|grey|wolf|gunmetal)\b/,'Gray'],[/\b(?:blue|royal|pop blue|lapd blue)\b/,'Blue'],
+      [/\b(?:green|vintage green|sharp lime)\b/,'Green'],[/\b(?:red|garnet)\b/,'Red'],[/\bmaroon\b/,'Maroon'],
+      [/\bpink\b/,'Pink'],[/\bpurple\b/,'Purple'],[/\borange\b/,'Orange'],[/\b(?:yellow|safety yellow)\b/,'Yellow'],
+      [/\b(?:gold|brass)\b/,'Gold'],[/\b(?:silver|steel|stainless steel)\b/,'Silver']
+    ];
+    rules.forEach(function(r){if(r[0].test(n))labels.push(r[1])});
+    if(labels.includes('Coyote'))labels=labels.filter(function(x){return x!=='Brown'});
+    if(labels.includes('Navy Blue'))labels=labels.filter(function(x){return x!=='Blue'});
+    if(labels.some(function(x){return /Green/.test(x)&&x!=='Green'}))labels=labels.filter(function(x){return x!=='Green'});
+    return Array.from(new Set(labels));
+  }
+  function unpack(p){
+    var ix=(p.options||[]).map(function(x){return typeof x==='string'?x:x.name}).findIndex(function(n){return /color|colour|pattern|camo/i.test(n)});
+    var tags=(p.tags||[]).filter(function(t){return /^(?:sq\s+)?(?:colou?r(?:\s*\/\s*pattern)?|pattern|camo(?:uflage)?)\s*:/i.test(t)}).flatMap(function(t){return appearance(t.replace(/^[^:]*:/,''))});
+    var title=appearance(p.title,true),base=Array.from(new Set(tags.concat(title))),variants=(p.variants||[]).map(function(v){var own=ix>=0?appearance((v.options||[])[ix]):[];v._sqColors=Array.from(new Set(base.concat(own)));return v});
+    p._sqColors=Array.from(new Set(variants.flatMap(function(v){return v._sqColors})));p.variants=variants;return p;
+  }
+  function matchesBase(p){var vendors=query.getAll('filter.p.vendor').map(norm),types=query.getAll('filter.p.product_type').map(norm),tags=query.getAll('filter.p.tag').map(norm);if(vendors.length&&vendors.indexOf(norm(p.vendor))<0)return false;if(types.length&&types.indexOf(norm(p.type))<0)return false;if(tags.length&&!tags.some(function(t){return (p.tags||[]).map(norm).indexOf(t)>=0}))return false;return true}
+  function variantOk(p,v,colors){if(colors.length&&!colors.some(function(c){return v._sqColors.indexOf(c)>=0}))return false;var av=query.getAll('filter.v.availability').flatMap(function(x){return x.split(',')});if(av.length&&av.indexOf(v.available?'1':'0')<0)return false;var min=query.get('filter.v.price.gte'),max=query.get('filter.v.price.lte');if(min!==null&&min!==''&&v.price<Number(min)*100)return false;if(max!==null&&max!==''&&v.price>Number(max)*100)return false;var ok=true;query.forEach(function(value,name){if(name.indexOf('filter.v.option.')!==0)return;var opt=name.slice(16),i=(p.options||[]).map(function(x){return norm(typeof x==='string'?x:x.name)}).indexOf(opt);if(i>=0&&query.getAll(name).map(norm).indexOf(norm((v.options||[])[i]))<0)ok=false});return ok}
+  function productOk(p,colors){if(!matchesBase(p))return false;return (p.variants||[]).some(function(v){return variantOk(p,v,colors)})}
+  function selectedUrl(vals){var u=new URL(location.href);if(config.handle==='safety-rescue-climbing'&&u.searchParams.get('sq_root')==='uniforms')u.searchParams.delete('sq_root');u.searchParams.delete('page');u.searchParams.delete('sq_view_page');u.searchParams.delete(PARAM);vals.forEach(function(v){u.searchParams.append(PARAM,v)});return u.pathname+'?'+u.searchParams.toString()}
+  function pageUrl(page){var u=new URL(location.pathname,location.origin);u.searchParams.set('view','sq-uniform-color-data');u.searchParams.set('page',String(page));var preview=query.get('preview_theme_id');if(preview)u.searchParams.set('preview_theme_id',preview);return u.pathname+'?'+u.searchParams.toString()}
+  async function getPage(page){for(var a=0;a<3;a++){try{var r=await fetch(pageUrl(page),{credentials:'same-origin'});if(!r.ok)throw new Error('color data HTTP '+r.status);var d=await r.json();if(!Array.isArray(d.products))throw new Error('invalid color data');return d}catch(e){if(a===2)throw e;await new Promise(function(res){setTimeout(res,350*(a+1))})}}}
+  async function loadCatalog(){var first=await getPage(1),pages=[first],next=2;async function worker(){while(next<=first.pages){var n=next++;pages[n-1]=await getPage(n)}}await Promise.all([worker(),worker()]);return pages.flatMap(function(p){return p.products||[]}).filter(function(p){return norm(p.type)!=='options hidden product'&&norm(p.type)!=='options_hidden_product'}).map(unpack)}
+  function groupMarkup(values){return '<details class="sq-refine-v3-group sq-uniform-colors-loading" open><summary>Shop by Color / Pattern</summary><div class="sq-refine-v3-choices">'+values.map(function(v){var checked=selected.indexOf(v)>-1;return '<label class="sq-refine-v3-choice"><input type="checkbox" data-sq-ucp-value="'+esc(v)+'"'+(checked?' checked':'')+'><span>'+esc(v)+'</span><small class="sq-ucp-count">'+String(counts.get(v)||0)+'</small></label>'}).join('')+'</div><div class="sq-ucp-status" aria-live="polite"></div></details>'}
+  function bind(){group.querySelectorAll('input[data-sq-ucp-value]').forEach(function(input){input.addEventListener('change',function(){var v=input.dataset.sqUcpValue,vals=selected.filter(function(x){return x!==v});if(input.checked)vals.push(v);location.assign(selectedUrl(vals))})})}
+  function ensureGroup(side){var existing=[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')).find(function(d){var s=d.querySelector(':scope > summary');return s&&/color\s*\/\s*pattern/i.test(s.textContent)});if(existing){existing.remove();}var html=groupMarkup(api.choices),tmp=document.createElement('template');tmp.innerHTML=html;group=tmp.content.firstElementChild;var all=[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')),anchor=all.find(function(d){var s=d.querySelector(':scope > summary');return s&&/manufacturer|availability/i.test(s.textContent)});side.insertBefore(group,anchor||null);bind()}
+  function render(){var results=main.querySelector('.sq-refine-v3-results');if(!results)return;results.querySelectorAll('[data-sq-ucp-results]').forEach(function(n){n.remove()});if(!selected.length){document.documentElement.classList.remove('sq-ucp-pending','sq-ucp-filtered');return}var matches=catalog.filter(function(p){return productOk(p,selected)}),size=Number(query.get('sq_per_page')||50);if([50,100,250].indexOf(size)<0)size=50;var page=Math.max(1,Number(query.get('sq_view_page')||1)||1),pages=Math.max(1,Math.ceil(matches.length/size));page=Math.min(page,pages);var items=matches.slice((page-1)*size,page*size),wrap=document.createElement('div');wrap.dataset.sqUcpResults='true';wrap.innerHTML='<p role="status">'+matches.length+' matching products</p><ul class="product-grid" role="list"></ul>';var list=wrap.querySelector('.product-grid');items.forEach(function(p){var v=(p.variants||[]).find(function(x){return variantOk(p,x,selected)})||(p.variants||[])[0],li=document.createElement('li');li.className='product-grid__item';li.innerHTML='<a class="sq-ucp-card" href="/products/'+esc(p.handle)+'"><span class="sq-ucp-image">'+(p.image?'<img loading="lazy" src="'+esc(p.image)+'" alt="'+esc(p.title)+'">':'')+'</span><h3>'+esc(p.title)+'</h3><span class="sq-ucp-price">'+((v&&v.price!=null)?new Intl.NumberFormat(document.documentElement.lang||'en-US',{style:'currency',currency:config.currency}).format(v.price/100):'')+'</span></a>';list.appendChild(li)});if(!items.length)wrap.innerHTML='<p class="sq-ucp-empty">No products match the selected color / pattern.</p>';results.appendChild(wrap);document.documentElement.classList.remove('sq-ucp-pending');document.documentElement.classList.add('sq-ucp-filtered')}
+  async function launch(){try{for(var i=0;i<120;i++){var side=main&&main.querySelector('.sq-refine-v3-sidebar');if(side&&main.dataset.sqRefineV3Ready==='true')break;await new Promise(function(r){setTimeout(r,100)})}var side=main&&main.querySelector('.sq-refine-v3-sidebar');if(!side)throw new Error('V3 sidebar missing');catalog=await loadCatalog();counts=new Map();catalog.filter(matchesBase).forEach(function(p){p._sqColors.forEach(function(c){counts.set(c,(counts.get(c)||0)+1)})});api.total=catalog.length;api.choices=Array.from(counts.keys()).sort(function(a,b){return a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'})});ensureGroup(side);api.ready=true;render()}catch(e){api.error=String(e&&e.message||e);document.documentElement.classList.remove('sq-ucp-pending');console.error('[SQ UCP]',e)}}
+  launch();
+})();
+</script>
+{% endif %}

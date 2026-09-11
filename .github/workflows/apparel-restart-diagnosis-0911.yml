@@ -1,0 +1,123 @@
+name: Apparel restart Chromium certification 0911
+on:
+  push:
+    paths:
+      - '.github/workflows/apparel-restart-diagnosis-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium tools
+        run: |
+          npm init -y >/dev/null
+          npm install playwright@1.55.0 agent-browser >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Agent browser visual snapshot
+        run: |
+          mkdir -p out
+          export AGENT_BROWSER_EXECUTABLE_PATH="$(node -e "console.log(require('playwright').chromium.executablePath())")"
+          npx agent-browser open 'https://www.statesideqm.com/collections/apparel?preview_theme_id=158561894555'
+          npx agent-browser wait --load networkidle
+          npx agent-browser snapshot -i > out/agent-browser-snapshot.txt
+          npx agent-browser screenshot out/agent-browser.png
+          npx agent-browser close
+      - name: Chromium strict certification
+        run: |
+          cat > certify.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          fs.mkdirSync('out/screens',{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          const report={browser:browser.version(),createdAt:new Date().toISOString(),cases:[],failures:[]};
+          const cases=[
+            ['desktop-50','?preview_theme_id=158561894555',1440,1000,50],
+            ['desktop-page2','?preview_theme_id=158561894555&page=2',1440,1000,50],
+            ['desktop-100','?preview_theme_id=158561894555&sq_per_page=100',1440,1000,100],
+            ['desktop-250','?preview_theme_id=158561894555&sq_per_page=250',1440,1000,250],
+            ['mobile-50','?preview_theme_id=158561894555',390,844,50]
+          ];
+          const visibleFn=`e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return !e.hidden&&r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&Number.parseFloat(s.opacity||'1')>0.01}`;
+          for(const [name,query,width,height,requested] of cases){
+            const c=await browser.newContext({viewport:{width,height}});
+            const p=await c.newPage();
+            const nav=[],errors=[];
+            p.on('framenavigated',f=>{if(f===p.mainFrame())nav.push(f.url())});
+            p.on('pageerror',e=>errors.push(String(e)));
+            await p.addInitScript(()=>{
+              window.__apparelFrames=[];
+              function vis(e){const r=e.getBoundingClientRect(),s=getComputedStyle(e);return !e.hidden&&r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&Number.parseFloat(s.opacity||'1')>0.01}
+              function sample(){
+                const grids=[...document.querySelectorAll('#MainContent .product-grid')].filter(vis);
+                window.__apparelFrames.push({t:Math.round(performance.now()),grids:grids.map(g=>({owner:g.closest('.sq-refine-v3-results')?'v3':'native',count:g.querySelectorAll('.product-grid__item').length}))});
+                if(performance.now()<10000)setTimeout(sample,50);
+              }
+              sample();
+            });
+            const entry={name,input:'https://www.statesideqm.com/collections/apparel'+query,requested};
+            try{
+              const r=await p.goto(entry.input,{waitUntil:'domcontentloaded',timeout:90000});
+              entry.status=r?.status();
+              await p.waitForSelector('#MainContent[data-sq-refine-v3-ready="true"]',{timeout:90000});
+              await p.waitForTimeout(10500);
+              entry.state=await p.evaluate(()=>{
+                const main=document.querySelector('#MainContent');
+                const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return !e.hidden&&r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&Number.parseFloat(s.opacity||'1')>0.01};
+                const grids=[...document.querySelectorAll('#MainContent .product-grid')].map(g=>({visible:vis(g),owner:g.closest('.sq-refine-v3-results')?'v3':'native',count:g.querySelectorAll('.product-grid__item').length,first:g.querySelector('a[href*="/products/"]')?.getAttribute('href')||null,duplicate:g.dataset.sqApparelDuplicate||null}));
+                const vg=grids.filter(g=>g.visible);
+                const owner=document.querySelector('.sq-refine-v3-results .product-grid');
+                const items=owner?[...owner.querySelectorAll('.product-grid__item')].filter(vis):[];
+                const tops=items.slice(0,8).map(e=>Math.round(e.getBoundingClientRect().top));
+                const firstTop=tops[0];
+                const firstRow=tops.filter(t=>Math.abs(t-firstTop)<=3).length;
+                return {url:location.href,ready:main?.dataset.sqRefineV3Ready||null,repair:main?.dataset.sqApparelRepair||null,duplicatesSuppressed:main?.dataset.sqApparelDuplicateGrids||null,grids,visibleGrids:vg,visibleCount:vg[0]?.count||0,firstProduct:vg[0]?.first||null,firstRow,frames:window.__apparelFrames||[]};
+              });
+              await p.screenshot({path:`out/screens/${name}.png`,fullPage:true});
+              const f=[];
+              if(entry.status!==200)f.push(`HTTP ${entry.status}`);
+              if(entry.state.ready!=='true')f.push(`V3 not ready: ${entry.state.ready}`);
+              if(entry.state.repair!=='single-owner-v3')f.push(`repair marker ${entry.state.repair}`);
+              if(entry.state.visibleGrids.length!==1)f.push(`visible grids ${entry.state.visibleGrids.length}`);
+              if(entry.state.visibleGrids[0]?.owner!=='v3')f.push(`visible owner ${entry.state.visibleGrids[0]?.owner}`);
+              if(entry.state.frames.some(x=>x.grids.length>1))f.push('more than one visible product grid during load trace');
+              const u=new URL(entry.state.url);
+              if(u.searchParams.has('filter.v.availability'))f.push('availability was force-added');
+              if(name==='desktop-50'||name==='desktop-page2'||name==='mobile-50'){
+                if(entry.state.visibleCount!==50)f.push(`expected 50 products, got ${entry.state.visibleCount}`);
+              }
+              if(name==='desktop-100'&&entry.state.visibleCount!==100)f.push(`expected 100 products, got ${entry.state.visibleCount}`);
+              if(name==='desktop-250'&&entry.state.visibleCount!==250)f.push(`expected 250 products, got ${entry.state.visibleCount}`);
+              if(name.startsWith('desktop-')&&entry.state.firstRow!==3)f.push(`expected 3 desktop columns, got ${entry.state.firstRow}`);
+              if(name==='mobile-50'&&entry.state.firstRow!==2)f.push(`expected 2 mobile columns, got ${entry.state.firstRow}`);
+              if(errors.length)f.push(`page errors: ${errors.join(' | ')}`);
+              entry.failures=f;
+              report.failures.push(...f.map(x=>`${name}: ${x}`));
+            }catch(e){
+              entry.error=String(e);
+              report.failures.push(`${name}: ${entry.error}`);
+            }
+            entry.nav=nav;entry.errors=errors;report.cases.push(entry);
+            console.log('CASE',name,JSON.stringify({status:entry.status,state:entry.state,failures:entry.failures,error:entry.error,nav,errors}));
+            await c.close();
+          }
+          const p1=report.cases.find(x=>x.name==='desktop-50')?.state?.firstProduct;
+          const p2=report.cases.find(x=>x.name==='desktop-page2')?.state?.firstProduct;
+          if(p1&&p2&&p1===p2)report.failures.push('pagination: page 2 repeats page 1 first product');
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          console.log('CERTIFICATION',report.failures.length?'FAIL':'PASS',JSON.stringify(report.failures));
+          await browser.close();
+          if(report.failures.length)process.exit(1);
+          EOF
+          node certify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apparel-restart-certification-0911
+          path: out
+          retention-days: 14

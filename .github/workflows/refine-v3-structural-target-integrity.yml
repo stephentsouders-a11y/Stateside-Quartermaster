@@ -1,0 +1,27 @@
+name: Refine V3 structural target integrity
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/scripts/refine-v3-structural-target-integrity.mjs'
+      - '.github/workflows/refine-v3-structural-target-integrity.yml'
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        shard: [0,1,2,3,4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Audit live structural targets
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: node .github/scripts/refine-v3-structural-target-integrity.mjs

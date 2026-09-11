@@ -1,0 +1,60 @@
+name: Zippos grid diagnosis 20260911
+on:
+  push:
+    paths: ['.github/workflows/zippos-grid-diagnosis-20260911.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install playwright@1.55.0 agent-browser && npx playwright install --with-deps chromium
+      - name: Inspect live and preview
+        run: |
+          mkdir -p out/videos
+          export AGENT_BROWSER_EXECUTABLE_PATH="$(node -e "console.log(require('playwright').chromium.executablePath())")"
+          npx agent-browser open 'https://www.statesideqm.com/collections/zippos-lighters-torches'
+          npx agent-browser snapshot -i > out/snapshot.txt
+          npx agent-browser screenshot out/agent-browser.png
+          npx agent-browser close
+          cat > audit.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          const browser=await chromium.launch({headless:true});
+          const report={browser:browser.version(),cases:[]};
+          for(const [name,width,height,query] of [['live',1440,1000,''],['preview',1440,1000,'?preview_theme_id=158561894555'],['mobile',390,844,'']]){
+            const ctx=await browser.newContext({viewport:{width,height},recordVideo:{dir:'out/videos'}});
+            const page=await ctx.newPage(),errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            const entry={name};
+            try{
+              const r=await page.goto('https://www.statesideqm.com/collections/zippos-lighters-torches'+query,{waitUntil:'domcontentloaded',timeout:90000});entry.status=r.status();
+              await page.waitForTimeout(6500);
+              await page.screenshot({path:`out/${name}-top.png`});
+              for(let y=0;y<Math.min(await page.evaluate(()=>document.documentElement.scrollHeight),50000);y+=1500){await page.evaluate(y=>scrollTo(0,y),y);await page.waitForTimeout(100)}
+              await page.waitForTimeout(1500);
+              entry.state=await page.evaluate(()=>{
+                const main=document.querySelector('#MainContent');
+                const vis=e=>e.getBoundingClientRect().height>0&&getComputedStyle(e).visibility!=='hidden';
+                return {url:location.href,theme:window.Shopify?.theme,ready:main?.dataset.sqRefineV3Ready,grids:[...main.querySelectorAll('.product-grid')].map(g=>({id:g.id,visible:vis(g),owner:g.closest('.sq-refine-v3-results')?'v3':'native',count:g.children.length,top:g.getBoundingClientRect().top+scrollY,parents:[g.parentElement,g.parentElement.parentElement,g.parentElement.parentElement.parentElement].map(e=>({tag:e.tagName,id:e.id,classes:e.className})),ids:[...g.children].map(e=>e.dataset.productId||e.querySelector('[data-product-id]')?.dataset.productId||e.querySelector('a[href*="/products/"]')?.pathname)})),scripts:[...document.scripts].filter(s=>s.src).map(s=>s.src),groups:[...main.querySelectorAll('.sq-refine-v3-sidebar summary')].map(e=>e.textContent.trim())};
+              });
+              fs.writeFileSync(`out/${name}.html`,await page.content());
+              await page.screenshot({path:`out/${name}-bottom.png`});
+              const second=entry.state.grids.filter(g=>g.visible)[1];if(second){await page.evaluate(y=>scrollTo(0,y-200),second.top);await page.screenshot({path:`out/${name}-restart.png`})}
+            }catch(e){entry.error=String(e)}
+            entry.errors=errors;report.cases.push(entry);await ctx.close();
+          }
+          await browser.close();fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zippos-grid-diagnosis-20260911
+          path: out
+          retention-days: 7

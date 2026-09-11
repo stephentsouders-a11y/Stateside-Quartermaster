@@ -1,0 +1,36 @@
+{% layout none %}
+{% paginate collection.products by 250 %}
+{
+  "schema": "sq-tactical-colors-1",
+  "handle": {{ collection.handle | json }},
+  "page": {{ paginate.current_page | json }},
+  "pages": {{ paginate.pages | json }},
+  "total": {{ paginate.items | json }},
+  "products": [
+    {% for item in collection.products %}
+      {
+        "id": {{ item.id | json }},
+        "handle": {{ item.handle | json }},
+        "title": {{ item.title | json }},
+        "vendor": {{ item.vendor | json }},
+        "type": {{ item.type | json }},
+        "tags": {{ item.tags | json }},
+        "options": {{ item.options | json }},
+        "image": {% if item.featured_image %}{{ item.featured_image | image_url: width: 720 | json }}{% else %}null{% endif %},
+        "variants": [
+          {% for variant in item.variants %}
+            {
+              "id": {{ variant.id | json }},
+              "available": {{ variant.available | json }},
+              "price": {{ variant.price | json }},
+              "compare": {{ variant.compare_at_price | json }},
+              "options": {{ variant.options | json }},
+              "image": {% if variant.featured_image %}{{ variant.featured_image | image_url: width: 720 | json }}{% else %}null{% endif %}
+            }{% unless forloop.last %},{% endunless %}
+          {% endfor %}
+        ]
+      }{% unless forloop.last %},{% endunless %}
+    {% endfor %}
+  ]
+}
+{% endpaginate %}

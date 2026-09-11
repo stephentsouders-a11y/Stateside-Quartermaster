@@ -1,0 +1,60 @@
+name: REFINE V3 Button 01 Availability Redirect Origin
+
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-button01-availability-origin.yml'
+  workflow_dispatch:
+
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Trace Availability redirect origin
+        run: |
+          node <<'NODE'
+          const { chromium } = await import('playwright');
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1000}});
+          const p=await ctx.newPage();
+          const cdp=await ctx.newCDPSession(p);await cdp.send('Network.enable');
+          const rows=[];
+          cdp.on('Network.requestWillBeSent',e=>{
+            if(e.type==='Document'&&/accessories-gifts-collectibles/.test(e.request.url)) rows.push({kind:'request',url:e.request.url,documentURL:e.documentURL,initiator:e.initiator,redirect:e.redirectResponse?{status:e.redirectResponse.status,url:e.redirectResponse.url,location:e.redirectResponse.headers?.location||null}:null});
+          });
+          cdp.on('Network.responseReceived',e=>{
+            if(e.type==='Document'&&/accessories-gifts-collectibles/.test(e.response.url)) rows.push({kind:'response',url:e.response.url,status:e.response.status,headers:{location:e.response.headers?.location||null}});
+          });
+          await p.addInitScript(()=>{
+            window.__origin=[];const rec=(kind,data={})=>window.__origin.push({kind,...data,url:location.href,stack:new Error().stack});
+            addEventListener('beforeunload',()=>rec('beforeunload'));
+            const a=Location.prototype.assign;try{Location.prototype.assign=function(u){rec('location.assign',{target:String(u)});return a.call(this,u)}}catch(_){}
+            const r=Location.prototype.replace;try{Location.prototype.replace=function(u){rec('location.replace',{target:String(u)});return r.call(this,u)}}catch(_){}
+            const ps=history.pushState.bind(history),rs=history.replaceState.bind(history);
+            history.pushState=function(s,t,u){rec('pushState',{target:String(u||'')});return ps(s,t,u)};
+            history.replaceState=function(s,t,u){rec('replaceState',{target:String(u||'')});return rs(s,t,u)};
+          });
+          await p.goto('https://www.statesideqm.com/?preview_theme_id=158561894555',{waitUntil:'domcontentloaded',timeout:90000});
+          await p.goto('https://www.statesideqm.com/collections/accessories-gifts-collectibles',{waitUntil:'domcontentloaded',timeout:90000});
+          await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:60000});
+          await p.waitForTimeout(3000);rows.length=0;
+          const d=p.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group').filter({has:p.locator(':scope>summary',{hasText:'Availability'})}).first();
+          if(await d.getAttribute('open')===null)await d.locator(':scope>summary').click();
+          const row=d.locator('.sq-refine-v3-choice',{hasText:'In stock'}).first();
+          console.log('PRE',JSON.stringify(await row.evaluate(r=>({outer:r.outerHTML,group:r.closest('details')?.outerHTML.slice(0,1500)})),null,2));
+          await row.click({noWaitAfter:true});
+          await p.waitForTimeout(5000);
+          const state=await p.evaluate(()=>({url:location.href,origin:window.__origin||[]})).catch(()=>({url:p.url(),origin:[]}));
+          console.log('TRACE',JSON.stringify({rows,state},null,2));
+          await browser.close();
+          NODE

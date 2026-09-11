@@ -1,0 +1,21 @@
+{
+  "sections": {
+    "sq_thin_line_loading_space": {
+      "type": "sq-thin-line-loading-space",
+      "settings": {}
+    },
+    "sq_thin_stabrite_subcategories": {
+      "type": "sq-thin-stabrite-subcategories",
+      "settings": {}
+    },
+    "sq_collection_manufacturers": {
+      "type": "vac-collection-manufacturers",
+      "settings": {}
+    }
+  },
+  "order": [
+    "sq_thin_line_loading_space",
+    "sq_thin_stabrite_subcategories",
+    "sq_collection_manufacturers"
+  ]
+}

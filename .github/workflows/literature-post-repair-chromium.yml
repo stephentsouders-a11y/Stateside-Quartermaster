@@ -1,0 +1,81 @@
+name: Literature post-repair Chromium
+on:
+  push:
+    paths: ['.github/workflows/literature-post-repair-chromium.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm init -y >/dev/null
+          npm install playwright@1.55.0 agent-browser >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Check actual deployed theme and Literature interaction stability
+        run: |
+          mkdir -p out
+          cat > check.mjs <<'JS'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          const report={expectedTheme:158561894555,sourceCommit:'925295e8e41361d9c29dc94e5435f9c642f3ae57',files:{},devices:[],failures:[]};
+          for(const f of fs.readdirSync('snippets').filter(f=>/^sq-refine-v3-literature-author-.*\.liquid$/.test(f)))report.files[f]=crypto.createHash('md5').update(fs.readFileSync('snippets/'+f)).digest('hex');
+          const save=()=>fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          const limited=(p,ms,label)=>Promise.race([p,new Promise((_,reject)=>{const t=setTimeout(()=>reject(new Error(label+' timed out')),ms);t.unref()})]);
+          for(const [name,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
+            const browser=await chromium.launch();
+            const context=await browser.newContext({viewport,recordVideo:{dir:'out/videos',size:viewport}});
+            const page=await context.newPage();page.setDefaultTimeout(8000);page.setDefaultNavigationTimeout(45000);
+            const row={name,errors:[],requests:[],responses:[],failed:[],toggles:[]};report.devices.push(row);save();
+            page.on('pageerror',e=>row.errors.push(String(e)));
+            page.on('request',r=>{if(r.isNavigationRequest()||/collections.*(?:json|view|section_id)/.test(r.url()))row.requests.push(r.url())});
+            page.on('response',r=>{if(r.request().isNavigationRequest())row.responses.push({url:r.url(),status:r.status()})});
+            page.on('requestfailed',r=>row.failed.push({url:r.url(),error:r.failure()?.errorText}));
+            await page.addInitScript(()=>{window.__litAudit={ticks:0,longTasks:[],samples:[]};setInterval(()=>window.__litAudit.ticks++,100);new PerformanceObserver(l=>window.__litAudit.longTasks.push(...l.getEntries().map(e=>({start:e.startTime,duration:e.duration})))).observe({type:'longtask',buffered:true});let last=0;function frame(){const m=document.querySelector('#MainContent'),visible=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>1&&r.height>1};if(m&&performance.now()-last>100){last=performance.now();window.__litAudit.samples.push({t:last,ready:m.dataset.sqRefineV3Ready||'',sidebar:[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(visible).length,old:[...m.querySelectorAll('.sq-books-tree,.sq-subcategory-section,.sq-subcategory-card')].filter(visible).length})}if(performance.now()<10000)requestAnimationFrame(frame)}requestAnimationFrame(frame)});
+            const cdp=await context.newCDPSession(page);await cdp.send('Profiler.enable');await cdp.send('Profiler.start');
+            try{
+              const response=await page.goto('https://www.statesideqm.com/collections/literature?preview_theme_id=158561894555',{waitUntil:'domcontentloaded'});
+              row.status=response?.status();await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:25000});await page.waitForTimeout(5500);
+              row.state=await limited(page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>1&&r.height>1};const side=m.querySelector('.sq-refine-v3-sidebar'),grids=[...m.querySelectorAll('.product-grid')].filter(vis);return{theme:Shopify.theme,url:location.href,dataset:{...m.dataset},sidebars:[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis).length,groups:side?[...side.querySelectorAll('details')].map(d=>({title:d.querySelector('summary')?.textContent.trim(),choices:d.querySelectorAll('input[type=checkbox]').length,labels:[...d.querySelectorAll('label span')].slice(0,22).map(x=>x.textContent.trim())})):[],grids:grids.map(g=>({cards:[...g.children].filter(e=>e.querySelector('a[href*="/products/"]')).length,columns:getComputedStyle(g).gridTemplateColumns})),overflow:document.documentElement.scrollWidth>innerWidth+3,audit:window.__litAudit,revisions:[...document.querySelectorAll('script[data-revision]')].map(s=>({revision:s.dataset.revision,attr:[...s.attributes].map(a=>a.name)}))}}),12000,'state');
+              await page.screenshot({path:'out/'+name+'-loaded.png'});
+              if(row.state.theme.id!==report.expectedTheme)throw new Error('WRONG THEME '+row.state.theme.id);
+              if(row.state.sidebars!==1||!row.state.grids.some(g=>g.cards>0))throw new Error('Missing sidebar or product grid');
+              const summaries=page.locator('.sq-refine-v3-sidebar details > summary');
+              for(let i=0;i<await summaries.count();i++){const s=summaries.nth(i),title=await s.innerText();const before=await s.evaluate(e=>e.parentElement.open);await s.click();const clicked=await s.evaluate(e=>e.parentElement.open);await page.waitForTimeout(450);const stable=await s.evaluate(e=>e.parentElement.open);await s.click();const after=await s.evaluate(e=>e.parentElement.open);row.toggles.push({title,before,clicked,stable,after,ok:clicked!==before&&stable===clicked&&after===before})}
+              row.heartbeat=await page.evaluate(()=>window.__litAudit.ticks);await page.waitForTimeout(1600);row.heartbeatDelta=(await page.evaluate(()=>window.__litAudit.ticks))-row.heartbeat;
+              await page.screenshot({path:'out/'+name+'-final.png'});
+              if(row.toggles.some(x=>!x.ok))report.failures.push(name+': disclosure reset');
+              if(row.heartbeatDelta<10)report.failures.push(name+': unresponsive heartbeat');
+              if(row.state.overflow)report.failures.push(name+': horizontal overflow');
+              if(row.errors.length)report.failures.push(name+': runtime errors');
+              fs.writeFileSync('out/'+name+'.html',await page.content());
+            }catch(e){row.error=String(e);report.failures.push(name+': '+row.error);try{row.fallback=await limited(page.evaluate(()=>({url:location.href,theme:window.Shopify?.theme,text:document.body.innerText.slice(0,2500),dataset:{...document.querySelector('#MainContent')?.dataset}})),5000,'fallback')}catch{}}
+            try{fs.writeFileSync('out/'+name+'.cpuprofile',JSON.stringify((await limited(cdp.send('Profiler.stop'),5000,'profile')).profile))}catch{}
+            console.log('LITERATURE_RESULT '+JSON.stringify(row));save();
+            await limited(context.close(),6000,'context close').catch(()=>{});await limited(browser.close(),5000,'browser close').catch(()=>{});
+          }
+          console.log('FAILURES '+JSON.stringify(report.failures));save();process.exit(report.failures.length?1:0);
+          JS
+          timeout 220 node check.mjs
+      - name: Independent agent-browser snapshot
+        if: always()
+        continue-on-error: true
+        run: |
+          export AGENT_BROWSER_EXECUTABLE_PATH=$(node -e "console.log(require('playwright').chromium.executablePath())")
+          timeout 30 npx agent-browser --session literature-fixed open 'https://www.statesideqm.com/collections/literature?preview_theme_id=158561894555'
+          timeout 15 npx agent-browser --session literature-fixed snapshot -i > out/agent-browser.txt
+          timeout 15 npx agent-browser --session literature-fixed screenshot out/agent-browser.png
+          timeout 10 npx agent-browser --session literature-fixed close
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: literature-post-repair-chromium
+          path: out
+          retention-days: 7

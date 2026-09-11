@@ -1,0 +1,56 @@
+name: Literature parser blocker isolation
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/literature-parser-blocker-isolation.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Isolate inline script that prevents DOMContentLoaded
+        run: |
+          mkdir -p out
+          cat > isolate.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const URL='https://www.statesideqm.com/collections/literature?preview_theme_id=158561894555';
+          const browser=await chromium.launch({headless:true});
+          const seed=await browser.newContext({viewport:{width:1280,height:900}});
+          const seedPage=await seed.newPage();
+          let html='';
+          seedPage.on('response',async r=>{if(r.request().isNavigationRequest()&&r.request().frame()===seedPage.mainFrame()&&r.status()===200){try{html=await r.text()}catch{}}});
+          try{await seedPage.goto(URL,{waitUntil:'commit',timeout:30000});await seedPage.waitForTimeout(6000)}catch{}
+          if(!html)throw new Error('failed to capture Literature HTML');
+          fs.writeFileSync('out/original.html',html);
+          const scripts=[];const re=/<script\b([^>]*)>([\s\S]*?)<\/script>/gi;let m;
+          while((m=re.exec(html))){if(!/\bsrc\s*=/.test(m[1]))scripts.push({start:m.index,end:re.lastIndex,attrs:m[1],body:m[2],ordinal:scripts.length})}
+          function strip(remove){let out='',pos=0,idx=0;re.lastIndex=0;let x;while((x=re.exec(html))){out+=html.slice(pos,x.index);if(!/\bsrc\s*=/.test(x[1])){if(remove.has(idx))out+='<script'+x[1]+'></script>';else out+=x[0];idx++}else out+=x[0];pos=re.lastIndex}return out+html.slice(pos)}
+          async function probe(remove,label){const ctx=await browser.newContext({viewport:{width:1280,height:900}});const p=await ctx.newPage();let dcl=false,errs=[];p.on('domcontentloaded',()=>dcl=true);p.on('pageerror',e=>errs.push(String(e)));await p.route('**/collections/literature**',async route=>{if(route.request().resourceType()==='document')await route.fulfill({status:200,contentType:'text/html',body:strip(remove)});else await route.continue()});try{await p.goto(URL,{waitUntil:'commit',timeout:15000});for(let i=0;i<80&&!dcl;i++)await p.waitForTimeout(100)}catch{}const state={label,dcl,readyState:await p.evaluate(()=>document.readyState).catch(()=>null),errors:errs.slice(0,8)};await ctx.close();return state}
+          const all=new Set(scripts.map((_,i)=>i));const report={inlineCount:scripts.length,tests:[],candidate:null};
+          report.tests.push(await probe(new Set(),'baseline'));
+          report.tests.push(await probe(all,'remove-all-inline'));
+          if(!report.tests.at(-1).dcl){report.externalOrMarkupBlocker=true}else{
+            let candidates=[...all];
+            while(candidates.length>1){const mid=Math.ceil(candidates.length/2),half=new Set(candidates.slice(0,mid));const t=await probe(half,'remove-candidate-half '+[...half].join(','));report.tests.push(t);if(t.dcl)candidates=candidates.slice(0,mid);else candidates=candidates.slice(mid)}
+            const i=candidates[0],s=scripts[i];report.candidate={ordinal:i,attrs:s.attrs,bodyStart:s.body.slice(0,1000),bodyEnd:s.body.slice(-500)};report.tests.push(await probe(new Set([i]),'remove-single-candidate '+i));
+          }
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));await seed.close();await browser.close();
+          JS
+          node isolate.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: literature-parser-blocker-isolation
+          path: out
+          retention-days: 7

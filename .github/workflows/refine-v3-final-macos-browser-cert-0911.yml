@@ -1,0 +1,54 @@
+name: Refine V3 final macOS Chromium storefront certification
+on:
+  push:
+    paths:
+      - '.github/workflows/refine-v3-final-macos-browser-cert-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify immutable checkout
+        env:
+          CERT_SHA: ${{ github.sha }}
+        run: |
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          echo "CERT_SHA=$CERT_SHA"
+          echo "ACTUAL_SHA=$ACTUAL_SHA"
+          test "$ACTUAL_SHA" = "$CERT_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium Playwright
+        run: |
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install chromium >/dev/null 2>&1
+      - name: Run final storefront browser certification
+        run: |
+          cat > final-cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const BASE='https://www.statesideqm.com',THEME='158561894555';
+          const routes=[
+          ['Accessories','/collections/accessories-gifts-collectibles','v3'],['Airsoft','/collections/airsoft-milsim','v3'],['Apparel','/collections/apparel','v3'],['Armed Forces Gear','/collections/armed-forces-gear','v3'],['Armored Vehicles','/pages/armored-vehicles-purchase-inquiry','legacy'],['Art','/collections/art','v3'],['Body Armor','/collections/body-armor-ballistic-protection','v3'],['Books','/collections/literature','v3'],['Child Safety','/collections/child-safety-shop','v3'],['DIVE / SCUBA','/collections/dive-scuba','v3'],['Firearm Accessories','/collections/firearm-accessories','v3'],['First Aid','/collections/first-aid-medical-ifak','v3'],['Flags','/collections/flags-patriotic-decor','v3'],['Flashlights','/collections/flashlights-lighting','v3'],['Footwear','/collections/footwear-gloves-eyewear','v3'],['K9','/collections/k9-dog-gear','v3'],['Knives','/collections/knives-axes-cutlery','v3'],['Morale Patches','/collections/morale-patches-tactical-id','v3'],['Outdoor','/collections/outdoor-preparedness-gear','v3'],['Patriotic','/collections/patriotic-american-heritage','v3'],['Safety Rescue','/collections/safety-rescue-climbing','v3'],['Sta-Brite','/collections/sta-brite-insignia','v3'],['Tactical Gear','/collections/tactical-gear','v3'],['Thin Line','/collections/thin-line','v3'],['Uniforms','/collections/uniforms','v3'],['Watches','/collections/watches','v3'],['Lighters','/collections/zippos-lighters-torches','v3'],['Logo Merch','/collections/stateside-quartermaster-logo-merch','v3'],['Army National Guard','/collections/army-national-guard-series','v3'],['Air National Guard','/collections/air-national-guard-series','v3'],['State Guard','/collections/state-guard-series','state'],['U.S. Army','/collections/products-built-for-the-line-u-s-army','v3'],['U.S. Navy','/collections/products-built-for-the-line-u-s-navy','v3'],['U.S. Air Force','/collections/products-built-for-the-line-u-s-air-force','v3'],['U.S. Marines','/collections/products-built-for-the-line-u-s-marine-corps','v3'],['U.S. Coast Guard','/collections/products-built-for-the-line-u-s-coast-guard','v3'],['U.S. Space Force','/collections/products-built-for-the-line-u-s-space-force','v3'],['ROTC','/collections/rotc-series','v3'],['JROTC','/collections/jrotc-series','v3'],['Military Schools & Academies','/collections/military-schools-academies','v3'],['Law Enforcement & Corrections','/collections/law-enforcement-corrections','v3'],['Firefighting, EMS & SAR','/collections/firefighting-ems-search-rescue','v3']];
+          const norm=s=>String(s||'').toLowerCase().replace(/manufacturers?/g,'manufacturer').replace(/^shop by\s+/,'').replace(/\s+/g,' ').trim();
+          const median=a=>{const x=a.filter(Number.isFinite).sort((a,b)=>a-b);return x.length?x[Math.floor(x.length/2)]:null};
+          const browser=await chromium.launch({headless:true});let failures=0,checks=0;
+          async function runSample(name,path,type,device,viewport,n){
+            const c=await browser.newContext({viewport});const p=await c.newPage();
+            await p.addInitScript(()=>{window.__sqOld=[];const sels=['[class*="button-tree"]','[class*="root-categories"]','[class*="subcategory"]','[class*="third-level"]','[class*="branch-grid"]','[class*="type-grid"]','[class*="program-tree"]','[class*="category-grid"]','[class*="navigation-grid"]'];const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};const sample=()=>{for(const q of sels)for(const e of document.querySelectorAll(q)){if(e.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results'))continue;if(vis(e)){window.__sqOld.push({t:Math.round(performance.now()),q});return}}};new MutationObserver(()=>requestAnimationFrame(sample)).observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});[0,75,150,250,500,750,1000,1500,2000,3000].forEach(t=>setTimeout(sample,t))});
+            const errors=[];p.on('pageerror',e=>errors.push(String(e)));const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);const start=Date.now();let status=null,usable=null,nav=false;
+            try{const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});status=r?.status()??null;const end=Date.now()+15000;while(Date.now()<end){const ok=await p.evaluate(type=>{const v=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};const m=document.querySelector('#MainContent');if(!m)return false;if(type==='legacy'||type==='state')return true;return [...m.querySelectorAll('.sq-refine-v3-sidebar')].some(v)&&[...m.querySelectorAll('.product-grid')].some(g=>v(g)&&[...g.querySelectorAll(':scope>.product-grid__item')].some(c=>v(c)&&c.querySelector('a[href*="/products/"]')))},type);if(ok){usable=Date.now()-start;break}await p.waitForTimeout(100)}await p.waitForTimeout(650)}catch{nav=true}
+            const a=await p.evaluate(()=>{const v=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};const m=document.querySelector('#MainContent'),sides=m?[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(v):[],s=sides[0],t=s?.querySelector('.sq-refine-v3-sidebar__title'),sr=s?.getBoundingClientRect(),tr=t?.getBoundingClientRect(),grids=m?[...m.querySelectorAll('.product-grid')].filter(g=>v(g)&&[...g.querySelectorAll(':scope>.product-grid__item')].some(c=>v(c)&&c.querySelector('a[href*="/products/"]'))):[],g=grids.find(x=>x.closest('.sq-refine-v3-results'))||grids[0],cards=g?[...g.querySelectorAll(':scope>.product-grid__item')].filter(c=>v(c)&&c.querySelector('a[href*="/products/"]')):[],rs=cards.slice(0,10).map(x=>x.getBoundingClientRect()),row=rs.length?rs.filter(x=>Math.abs(x.top-rs[0].top)<4).length:0,hs=cards.map(c=>{const x=c.querySelector('a[href*="/products/"]');try{return new URL(x.href).pathname.match(/^\/products\/([^/]+)/)?.[1]||''}catch{return''}}).filter(Boolean),seen=new Set(),dups=[];for(const h of hs){if(seen.has(h)&&!dups.includes(h))dups.push(h);seen.add(h)}const summaries=s?[...s.querySelectorAll(':scope>details>summary')].map(x=>(x.textContent||'').replace(/\s+/g,' ').trim()):[],sizes=[...document.querySelectorAll('#MainContent .sq-refine-v3-page-size input,#MainContent .sq-refine-v3-page-size option')].map(x=>x.value).filter(Boolean),fcp=performance.getEntriesByType('paint').find(x=>x.name==='first-contentful-paint')?.startTime??null;return{sidebars:sides.length,body:s?getComputedStyle(s).backgroundColor:null,title:(t?.textContent||'').trim(),titleBg:t?getComputedStyle(t).backgroundColor:null,gap:sr&&tr?Math.max(0,sr.right-tr.right):999,grids:grids.length,cards:cards.length,row,dups,summaries,sizes:[...new Set(sizes)],fcp,old:(window.__sqOld||[]).slice(0,3)}}).catch(()=>({}));
+            const f=[];if(status!==200)f.push('HTTP '+status);if(nav)f.push('navigation');if(errors.length)f.push('pageerror');if(type==='state'){if(a.sidebars!==0)f.push('State Guard V3 contamination')}else if(type==='v3'){if(a.sidebars!==1)f.push('sidebar '+a.sidebars);if(a.grids!==1)f.push('grids '+a.grids);if(a.cards<1)f.push('no products');if(a.dups?.length)f.push('duplicate products');const want=Math.min(device==='desktop'?3:2,a.cards||0);if(want&&a.row!==want)f.push(`row ${a.row}/${want}`);if(a.body!=='rgb(255, 255, 255)')f.push('sidebar body');if(a.titleBg!=='rgb(8, 40, 63)'||a.title.toUpperCase()!=='REFINE PRODUCTS'||a.gap>2)f.push('header');if(!['50','100','250'].every(x=>a.sizes?.includes(x)))f.push('page sizes');if(a.old?.length)f.push('legacy flash');const labels=(a.summaries||[]).map(norm),has=x=>labels.some(y=>y===x||y.startsWith(x));if(!has('type'))f.push('missing type');if(path==='/collections/armed-forces-gear'&&(labels.length!==3||!['branch','availability','type'].every(x=>labels.includes(x))))f.push('AFG policy');if(path==='/collections/apparel'&&(labels.length!==4||!['category','type','manufacturer / artist','availability'].every(x=>labels.includes(x))))f.push('Apparel policy');if(path==='/collections/firearm-accessories'&&!labels.some(x=>x.includes('firearm make / model')))f.push('Firearm policy');if(path==='/collections/literature'&&!['author','publisher','branch','topic'].every(x=>has(x)))f.push('Books policy')}
+            await c.close();console.log(`SAMPLE ${device} ${name} #${n} status=${status} usable=${usable} fcp=${a.fcp==null?'n/a':Math.round(a.fcp)} functional=${f.length}`);return{f,usable,fcp:a.fcp??null};
+          }
+          for(const [name,path,type] of routes)for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){checks++;const s=[await runSample(name,path,type,device,viewport,1)];if(s[0].f.length||s[0].usable==null||s[0].usable>3500||(s[0].fcp!=null&&s[0].fcp>2500)){s.push(await runSample(name,path,type,device,viewport,2),await runSample(name,path,type,device,viewport,3))}const clean=s.filter(x=>x.f.length===0),medU=median(clean.map(x=>x.usable)),medF=median(clean.map(x=>x.fcp));const ok=clean.length>=Math.min(2,s.length)&&medU!=null&&medU<=3500&&(medF==null||medF<=2500);console.log(`${ok?'PASS':'FAIL'} ${device} ${name} medianUsable=${medU} medianFCP=${medF} clean=${clean.length}/${s.length}`);if(!ok)failures++}
+          await browser.close();console.log(`FINAL_MACOS_SUMMARY checks=${checks} failures=${failures}`);if(failures)process.exit(2);
+          EOF
+          node final-cert.mjs
