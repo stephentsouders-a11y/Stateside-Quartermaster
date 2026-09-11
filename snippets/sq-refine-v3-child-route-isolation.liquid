@@ -21,7 +21,7 @@ html[data-sq-refine-v3-child-isolation="true"] #MainContent [data-sq-refine-v3-h
   pointer-events:none!important;
 }
 </style>
-<script data-sq-refine-v3-child-route-isolation="{{ collection.handle | escape }}">
+<script data-sq-refine-v3-child-route-isolation>
 (function(){
   var ROOTS=new Set([
     'accessories-gifts-collectibles','airsoft-milsim','apparel','armed-forces-gear','art',
@@ -37,7 +37,7 @@ html[data-sq-refine-v3-child-isolation="true"] #MainContent [data-sq-refine-v3-h
     'products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series',
     'military-schools-academies','law-enforcement-corrections','firefighting-ems-search-rescue'
   ]);
-  var current={{ collection.handle | json }};
+  var current=(location.pathname.match(/^\/collections\/([^/?#]+)/)||[])[1]||'';
   var params=new URLSearchParams(location.search);
   var root=params.get('sq_root')||'';
   if(current==='sta-brite-insignia'||root==='sta-brite-insignia'){
