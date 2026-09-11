@@ -1,0 +1,135 @@
+name: Accessories exhaustive Chromium video audit
+on:
+  push:
+    paths:
+      - '.github/workflows/accessories-exhaustive-chromium-video-audit.yml'
+      - 'snippets/sq-refine-v3-legacy-isolation.liquid'
+      - 'snippets/sq-refine-v3-button01-accessories-fix.liquid'
+      - 'snippets/sq-refine-v3.liquid'
+      - 'snippets/sq-refine-v3-layout-fix.liquid'
+      - 'sections/sq-refine-v3-product-grid.liquid'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          sudo apt-get update -qq >/dev/null && sudo apt-get install -y ffmpeg >/dev/null 2>&1 || true
+      - name: Record and certify Accessories page
+        run: |
+          cat > certify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          import cp from 'child_process';
+          fs.mkdirSync('out/videos',{recursive:true});
+          fs.mkdirSync('out/screens',{recursive:true});
+          fs.mkdirSync('out/frames',{recursive:true});
+          const target='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
+          const expectedCats=['Challenge Coins & Displays','Collectibles & Cards','Drinkware','Keychains & Lanyards','Memorial & Personalized Gifts','Military Surplus & Collectibles','Pins, Buttons & Small Insignia','Sword & Knife Display Cases','Wallets & Pocket Gifts'];
+          const report={target,devices:[],failures:[],warnings:[]};
+          const visible=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
+          for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
+            const browser=await chromium.launch({headless:true});
+            const ctx=await browser.newContext({viewport,recordVideo:{dir:'out/videos',size:{width:device==='desktop'?1280:390,height:device==='desktop'?720:720}}});
+            const page=await ctx.newPage();
+            page.setDefaultNavigationTimeout(90000);
+            const consoleErrors=[],pageErrors=[],requestFailures=[];
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            page.on('pageerror',e=>pageErrors.push(String(e)));
+            page.on('requestfailed',r=>requestFailures.push({url:r.url(),error:r.failure()?.errorText||''}));
+            await page.addInitScript(()=>{
+              window.__sqFirstPaintAudit=[];
+              const sample=()=>{
+                const main=document.querySelector('#MainContent');
+                if(main){
+                  const text=(main.innerText||'').replace(/\s+/g,' ').trim();
+                  const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
+                  const native=[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].some(vis);
+                  const legacy=/State Guard Uniform Builder|Build Your Uniform|PT Uniform|building the customer-facing product tree/i.test(text);
+                  const refine=[...main.querySelectorAll('.sq-refine-v3-sidebar,.sq-global-refine-sidebar')].some(vis);
+                  window.__sqFirstPaintAudit.push({t:Math.round(performance.now()),native,legacy,refine,ready:main.dataset.sqRefineV3Ready||null,text:text.slice(0,220)});
+                }
+                if(performance.now()<7000)requestAnimationFrame(sample);
+              };
+              requestAnimationFrame(sample);
+            });
+            const started=Date.now(); let response=null,navError=null;
+            try{response=await page.goto(target,{waitUntil:'domcontentloaded'})}catch(e){navError=String(e)}
+            for(const [name,delay] of [['0ms',0],['100ms',100],['250ms',150],['500ms',250],['1s',500],['2s',1000]]){
+              if(delay)await page.waitForTimeout(delay);
+              await page.screenshot({path:`out/screens/${device}-${name}.png`,fullPage:false}).catch(()=>{});
+            }
+            let readyMs=null;
+            try{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:30000});readyMs=Date.now()-started}catch{}
+            await page.waitForTimeout(700);
+            const audit=await page.evaluate(({expectedCats})=>{
+              const main=document.querySelector('#MainContent'); if(!main)return {missingMain:true};
+              const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
+              const side=main.querySelector('.sq-refine-v3-sidebar')||main.querySelector('.sq-global-refine-sidebar');
+              const groups=side?[...side.querySelectorAll('details.sq-refine-v3-group')].map(d=>({title:(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),choices:[...d.querySelectorAll(':scope > .sq-refine-v3-choices .sq-refine-v3-choice')].filter(vis).map(r=>(r.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim()),inputs:[...d.querySelectorAll('input[type="checkbox"]')].length})):[];
+              const category=groups.find(g=>g.title==='Shop by Category');
+              const cards=[...main.querySelectorAll('.sq-refine-v3-results .product-grid > *')].filter(vis);
+              const xs=[...new Set(cards.slice(0,8).map(e=>Math.round(e.getBoundingClientRect().left)))];
+              const native=[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis);
+              const text=(main.innerText||'').replace(/\s+/g,' ').trim();
+              const broken=[...main.querySelectorAll('img')].filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.currentSrc||i.src).filter(Boolean);
+              return {missingMain:false,ready:main.dataset.sqRefineV3Ready||null,error:main.dataset.sqRefineV3Error||null,groups,categoryChoices:category?.choices||[],categoryExact:JSON.stringify(category?.choices||[])===JSON.stringify(expectedCats),productCards:cards.length,columns:xs.length,nativeVisible:native.length,stateGuard:/State Guard Uniform Builder|Build Your Uniform|PT Uniform/i.test(text),pageSizeText:(main.querySelector('.sq-refine-v3-page-size')?.innerText||'').replace(/\s+/g,' ').trim(),duplicateProductGrids:[...main.querySelectorAll('.product-grid')].filter(g=>vis(g)&&!main.querySelector('.sq-refine-v3-results')?.contains(g)&&g.querySelector('a[href*="/products/"]')).length,brokenImages:broken,horizontalOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+3,firstPaint:window.__sqFirstPaintAudit||[]};
+            },{expectedCats});
+            const interactions=[];
+            if(!audit.missingMain){
+              const summaries=page.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group > summary');
+              const n=await summaries.count();
+              for(let i=0;i<n;i++){
+                const s=summaries.nth(i),title=(await s.innerText().catch(()=>'' )).trim();
+                let opened=false,closed=false;
+                try{await s.click();opened=await s.evaluate(e=>e.parentElement.open);await s.click();closed=!(await s.evaluate(e=>e.parentElement.open));}catch{}
+                interactions.push({title,opened,closed});
+              }
+            }
+            await page.screenshot({path:`out/screens/${device}-final.png`,fullPage:true}).catch(()=>{});
+            const result={device,status:response?.status()??null,navError,readyMs,audit,interactions,consoleErrors,pageErrors,requestFailures:requestFailures.slice(0,30)};
+            report.devices.push(result);
+            if(result.status!==200)report.failures.push(`${device}: HTTP ${result.status}`);
+            if(navError)report.failures.push(`${device}: navigation error ${navError}`);
+            if(readyMs===null||readyMs>5000)report.failures.push(`${device}: V3 ready too slow ${readyMs}`);
+            if(audit.missingMain)report.failures.push(`${device}: MainContent missing`); else {
+              if(audit.ready!=='true')report.failures.push(`${device}: V3 not ready`);
+              if(audit.nativeVisible)report.failures.push(`${device}: ${audit.nativeVisible} visible native filter surfaces`);
+              if(audit.stateGuard)report.failures.push(`${device}: State Guard contamination visible`);
+              if(!audit.categoryExact)report.failures.push(`${device}: category taxonomy mismatch ${JSON.stringify(audit.categoryChoices)}`);
+              if(audit.productCards<1)report.failures.push(`${device}: no product cards`);
+              if(audit.duplicateProductGrids)report.failures.push(`${device}: duplicate product grids ${audit.duplicateProductGrids}`);
+              if(audit.brokenImages.length)report.failures.push(`${device}: broken images ${audit.brokenImages.length}`);
+              if(audit.horizontalOverflow)report.failures.push(`${device}: horizontal overflow`);
+              if(!/50/.test(audit.pageSizeText)||!/100/.test(audit.pageSizeText)||!/250/.test(audit.pageSizeText))report.failures.push(`${device}: page-size controls incomplete: ${audit.pageSizeText}`);
+              if(device==='mobile'&&audit.columns!==2)report.failures.push(`mobile: expected 2 product columns, got ${audit.columns}`);
+              const badFrames=audit.firstPaint.filter(x=>x.native||x.legacy);
+              if(badFrames.length)report.failures.push(`${device}: old/contaminated layout visible during first paint in ${badFrames.length} sampled frames, first at ${badFrames[0].t}ms`);
+              const badGroup=interactions.find(x=>!x.opened||!x.closed);if(badGroup)report.failures.push(`${device}: Refine group interaction failed: ${badGroup.title}`);
+              const empty=audit.groups.filter(g=>g.inputs<1);if(empty.length)report.failures.push(`${device}: Refine groups without checkbox inputs: ${empty.map(x=>x.title).join(', ')}`);
+            }
+            if(consoleErrors.length)report.warnings.push(`${device}: ${consoleErrors.length} console errors`);
+            const video=page.video(); await page.close(); await ctx.close();
+            if(video){const src=await video.path().catch(()=>null);if(src){const dest=`out/videos/${device}.webm`;fs.copyFileSync(src,dest);try{cp.execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-i',dest,'-vf','fps=2',`out/frames/${device}-%03d.png`])}catch{}}}
+            await browser.close();
+          }
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify({failures:report.failures,warnings:report.warnings,devices:report.devices.map(d=>({device:d.device,status:d.status,readyMs:d.readyMs,groups:d.audit.groups?.map(g=>({title:g.title,choices:g.choices.length,inputs:g.inputs})),categories:d.audit.categoryChoices,productCards:d.audit.productCards,columns:d.audit.columns,nativeVisible:d.audit.nativeVisible,stateGuard:d.audit.stateGuard,pageSize:d.audit.pageSizeText,firstPaintBad:d.audit.firstPaint?.filter(x=>x.native||x.legacy).slice(0,5),interactions:d.interactions}))},null,2));
+          if(report.failures.length)process.exitCode=2;
+          EOF
+          node certify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accessories-exhaustive-chromium-video-audit
+          path: out
+          retention-days: 14
