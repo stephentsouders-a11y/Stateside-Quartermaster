@@ -9,7 +9,7 @@ permissions:
 jobs:
   certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -22,29 +22,90 @@ jobs:
         run: |
           cat > cert.mjs <<'JS'
           import {chromium} from 'playwright';
+          import fs from 'node:fs';
           const browser=await chromium.launch({headless:true});
-          const context=await browser.newContext({viewport:{width:1440,height:1000}});
-          const page=await context.newPage();
-          const errors=[];page.on('pageerror',e=>errors.push(e.message));
           const base='https://www.statesideqm.com/collections/body-armor-ballistic-protection?preview_theme_id=158561894555';
-          const r=await page.goto(base,{waitUntil:'domcontentloaded',timeout:90000});
-          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:60000});
-          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqUniformColorReady==='true'&&window.__sqUniformColor?.ready===true,{timeout:90000});
-          const before=await page.evaluate(()=>{const group=document.querySelector('[data-sq-ucp-group]');return{heading:group?.querySelector('summary')?.textContent?.trim(),choices:window.__sqUniformColor?.choices||[],total:window.__sqUniformColor?.total||0,root:new URL(location.href).searchParams.get('sq_root'),ready:document.querySelector('#MainContent')?.dataset.sqUniformColorReady}});
-          const black=page.locator('[data-sq-ucp-group] label').filter({hasText:/^Black\s*\(/}).locator('input');
-          if(await black.count()!==1)throw Error('Black color choice missing or duplicated');
-          await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),black.check()]);
-          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqUniformColorReady==='true'&&document.documentElement.classList.contains('sq-ucp-filtered'),{timeout:90000});
-          const filtered=await page.evaluate(()=>({params:new URL(location.href).searchParams.getAll('sq_ucp'),root:new URL(location.href).searchParams.get('sq_root'),matches:window.__sqUniformColor?.matches||0,cards:document.querySelectorAll('[data-sq-ucp-results] .product-grid__item').length,checked:[...document.querySelectorAll('[data-sq-ucp-group] input:checked')].map(i=>i.value)}));
-          const checked=page.locator('[data-sq-ucp-group] input[value="black"]');
-          await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),checked.uncheck()]);
-          await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqUniformColorReady==='true',{timeout:90000});
-          const cleared=await page.evaluate(()=>({params:new URL(location.href).searchParams.getAll('sq_ucp'),root:new URL(location.href).searchParams.get('sq_root'),filtered:document.documentElement.classList.contains('sq-ucp-filtered'),nativeCards:document.querySelectorAll('.sq-refine-v3-results collection-component .product-grid > .product-grid__item').length}));
           const needed=['Black','Coyote','MultiCam / OCP','OD / Olive Green','Ranger Green'];
-          const labels=before.choices.map(x=>x.label);
-          const ok=r.status()===200&&errors.length===0&&before.heading==='Shop by Color / Pattern'&&before.total>0&&needed.every(x=>labels.includes(x))&&before.root===null&&filtered.params.includes('black')&&filtered.root===null&&filtered.matches>0&&filtered.cards>0&&filtered.checked.includes('black')&&cleared.params.length===0&&cleared.root===null&&!cleared.filtered&&cleared.nativeCards>0;
-          console.log('BODY_ARMOR_COLOR_CERT '+JSON.stringify({http:r.status(),errors,before,filtered,cleared,ok}));
-          await page.screenshot({path:'body-armor-color-cert.png',fullPage:true});
+          const reports=[];
+          async function ready(page,filtered=false){
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:60000});
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqUniformColorReady==='true'&&window.__sqUniformColor?.ready===true,{timeout:90000});
+            if(filtered)await page.waitForFunction(()=>document.documentElement.classList.contains('sq-ucp-filtered'),{timeout:30000});
+          }
+          async function openDetails(locator){
+            const details=locator.locator('xpath=ancestor::details[1]');
+            if(await details.count() && !(await details.getAttribute('open')))await details.locator(':scope > summary').click();
+          }
+          async function certify(name,viewport){
+            const context=await browser.newContext({viewport});
+            const page=await context.newPage();
+            const pageErrors=[],consoleErrors=[];
+            page.on('pageerror',e=>pageErrors.push(e.message));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            const r=await page.goto(base,{waitUntil:'domcontentloaded',timeout:90000});
+            await ready(page);
+            const before=await page.evaluate(()=>{const g=document.querySelector('[data-sq-ucp-group]'),u=new URL(location.href);return{heading:g?.querySelector('summary')?.textContent?.trim(),choices:window.__sqUniformColor?.choices||[],total:window.__sqUniformColor?.total||0,root:u.searchParams.get('sq_root'),path:u.pathname,nativeCards:document.querySelectorAll('.sq-refine-v3-results collection-component .product-grid > .product-grid__item').length}});
+            const colorGroup=page.locator('[data-sq-ucp-group]');
+            await openDetails(colorGroup);
+            const black=colorGroup.locator('label').filter({hasText:/^Black\s*\(/}).locator('input');
+            if(await black.count()!==1)throw Error(name+': Black choice missing or duplicated');
+            await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),black.check()]);
+            await ready(page,true);
+            const filtered=await page.evaluate(()=>{const u=new URL(location.href);return{params:u.searchParams.getAll('sq_ucp'),root:u.searchParams.get('sq_root'),path:u.pathname,matches:window.__sqUniformColor?.matches||0,cards:document.querySelectorAll('[data-sq-ucp-results] .product-grid__item').length,checked:[...document.querySelectorAll('[data-sq-ucp-group] input:checked')].map(i=>i.value),pageSize:window.__sqUniformColor?.pageSize}});
+            const pageSize100=page.locator('.sq-refine-v3-page-size input[value="100"], .sq-refine-v3-page-size a').filter({hasText:/100/}).first();
+            let size100={tested:false};
+            if(await pageSize100.count()){
+              size100.tested=true;
+              if((await pageSize100.getAttribute('type'))==='radio'){
+                await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),pageSize100.check()]);
+              }else{
+                await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),pageSize100.click()]);
+              }
+              await ready(page,true);
+              size100=await page.evaluate(()=>({tested:true,param:new URL(location.href).searchParams.get('sq_per_page'),pageSize:window.__sqUniformColor?.pageSize,cards:document.querySelectorAll('[data-sq-ucp-results] .product-grid__item').length}));
+            }
+            const structural=page.locator('.sq-refine-v3-sidebar input[data-kind="structural"][data-target]').first();
+            let structuralResult={tested:false};
+            if(await structural.count()){
+              await openDetails(structural);
+              const target=await structural.getAttribute('data-target');
+              structuralResult.tested=true;structuralResult.target=target;
+              await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),structural.check()]);
+              await ready(page,true);
+              const child=await page.evaluate(()=>{const u=new URL(location.href);return{path:u.pathname,root:u.searchParams.get('sq_root'),colors:u.searchParams.getAll('sq_ucp'),matches:window.__sqUniformColor?.matches||0}});
+              const selectedStructural=page.locator('.sq-refine-v3-sidebar input[data-kind="structural"]:checked').first();
+              if(await selectedStructural.count()){
+                await openDetails(selectedStructural);
+                await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),selectedStructural.uncheck()]);
+                await ready(page,true);
+              }
+              const returned=await page.evaluate(()=>{const u=new URL(location.href);return{path:u.pathname,root:u.searchParams.get('sq_root'),colors:u.searchParams.getAll('sq_ucp')}});
+              structuralResult={tested:true,target,child,returned};
+            }
+            if(!location){}
+            if(new URL(page.url()).pathname!=='/collections/body-armor-ballistic-protection')await page.goto(base+'&sq_ucp=black',{waitUntil:'domcontentloaded',timeout:90000});
+            await ready(page,true);
+            const checked=page.locator('[data-sq-ucp-group] input[value="black"]');
+            await openDetails(checked);
+            await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),checked.uncheck()]);
+            await ready(page);
+            const cleared=await page.evaluate(()=>{const u=new URL(location.href);return{params:u.searchParams.getAll('sq_ucp'),root:u.searchParams.get('sq_root'),path:u.pathname,filtered:document.documentElement.classList.contains('sq-ucp-filtered'),nativeCards:document.querySelectorAll('.sq-refine-v3-results collection-component .product-grid > .product-grid__item').length}});
+            const labels=before.choices.map(x=>x.label);
+            const structuralOk=!structuralResult.tested||(structuralResult.child.path!=='/collections/uniforms'&&structuralResult.child.colors.includes('black')&&structuralResult.returned.path==='/collections/body-armor-ballistic-protection'&&structuralResult.returned.path!=='/collections/uniforms'&&structuralResult.returned.colors.includes('black')&&structuralResult.returned.root!== 'uniforms');
+            const sizeOk=!size100.tested||(size100.param==='100'&&size100.pageSize===100&&size100.cards>0);
+            const ok=r.status()===200&&pageErrors.length===0&&before.heading==='Shop by Color / Pattern'&&before.total>0&&before.nativeCards>0&&needed.every(x=>labels.includes(x))&&before.root===null&&filtered.params.includes('black')&&filtered.root===null&&filtered.path==='/collections/body-armor-ballistic-protection'&&filtered.matches>0&&filtered.cards>0&&filtered.checked.includes('black')&&sizeOk&&structuralOk&&cleared.params.length===0&&cleared.root===null&&cleared.path==='/collections/body-armor-ballistic-protection'&&!cleared.filtered&&cleared.nativeCards>0;
+            const report={name,viewport,http:r.status(),pageErrors,consoleErrors,before,filtered,size100,structuralResult,cleared,ok};
+            reports.push(report);
+            await page.screenshot({path:`body-armor-color-${name}.png`,fullPage:true});
+            await context.close();
+          }
+          try{
+            await certify('desktop',{width:1440,height:1000});
+            await certify('mobile',{width:390,height:844});
+          }catch(e){reports.push({fatal:String(e?.stack||e),ok:false})}
+          const ok=reports.length===2&&reports.every(r=>r.ok);
+          fs.writeFileSync('body-armor-color-report.json',JSON.stringify({ok,reports},null,2));
+          console.log('BODY_ARMOR_COLOR_CERT '+JSON.stringify({ok,reports}));
           await browser.close();
           if(!ok)process.exit(1);
           JS
@@ -53,5 +114,9 @@ jobs:
         if: always()
         with:
           name: body-armor-color-cert
-          path: body-armor-color-cert.png
+          path: |
+            body-armor-color-report.json
+            body-armor-color-desktop.png
+            body-armor-color-mobile.png
+          if-no-files-found: ignore
           retention-days: 7
