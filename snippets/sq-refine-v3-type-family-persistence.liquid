@@ -1,42 +1,91 @@
 {% doc %}
-Canonicalizes legacy broad V3 Shop by Type family selections to Shopify's authoritative product_type filter so the V3 server-rendered product feed actually changes. The selected Type remains checked through Shopify's native filter state. State Guard is excluded.
+Canonicalizes legacy broad V3 Shop by Type family selections to Shopify's authoritative product_type filter so the V3 server-rendered product feed actually changes. For Armed Forces Gear, preserve the complete Type choice set across filtered navigations even when Shopify suppresses the native product_type facet because only one type is currently selected. State Guard is excluded.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
-<script data-sq-refine-v3-type-family-persistence>
+<script data-sq-refine-v3-type-family-persistence data-revision="afg-type-persist-20260911-v2">
 (function(){
   var main=document.getElementById('MainContent');if(!main)return;
+  var params=new URLSearchParams(location.search),core=document.querySelector('script[data-sq-refine-v3]'),current=core&&core.dataset.currentHandle||'';
+  var root=params.get('sq_root')||current,isAfg=root==='armed-forces-gear'||current==='armed-forces-gear';
+  var CACHE='sq:v3:afg:type-group:v2';
   function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
+  function typeGroup(side){return [].slice.call((side||main).querySelectorAll(':scope > details.sq-refine-v3-group, .sq-refine-v3-sidebar > details.sq-refine-v3-group')).find(function(d){var s=d.querySelector(':scope > summary');return s&&/^(?:Shop by )?Type$/i.test(clean(s.textContent))})||null}
+  function choiceLabel(i){var lab=i.closest('.sq-refine-v3-choice');var span=lab&&lab.querySelector('span');var text=clean(span&&span.textContent||lab&&lab.textContent);return text&&text.toLowerCase()!=='on'?text:''}
+  function choiceValue(i){var v=clean(i.dataset.sqPolishValue||i.dataset.filterValue||i.getAttribute('data-value'));if(v)return v;v=choiceLabel(i);if(v)return v;v=clean(i.value);return v.toLowerCase()==='on'?'':v}
+  function remember(){
+    if(!isAfg||main.dataset.sqRefineV3Ready!=='true')return false;
+    var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;
+    var type=typeGroup(side);if(!type)return false;
+    var summary=type.querySelector(':scope > summary');if(summary)summary.textContent='Shop by Type';
+    var inputs=[].slice.call(type.querySelectorAll('input[type=checkbox]'));if(!inputs.length)return false;
+    try{sessionStorage.setItem(CACHE,type.outerHTML)}catch(_){}
+    return true;
+  }
+  function setParam(u,param,value,checked){
+    var vals=u.searchParams.getAll(param).filter(function(v){return clean(v)!==clean(value)});
+    u.searchParams.delete(param);vals.forEach(function(v){u.searchParams.append(param,v)});if(checked)u.searchParams.append(param,value);
+  }
+  function bindRestored(type){
+    if(!type||type.dataset.sqTypePersistenceBound==='true')return;
+    type.dataset.sqTypePersistenceBound='true';
+    type.querySelectorAll('input[type=checkbox]').forEach(function(i){
+      i.addEventListener('change',function(){
+        var target=i.dataset.target||'';if(target){location.assign(target);return}
+        var param=i.dataset.filterName||i.dataset.sqPolishParam||'filter.p.product_type',value=choiceValue(i);if(!value)return;
+        var u=new URL(location.href);u.searchParams.delete('sq_type_family');u.searchParams.delete('page');u.searchParams.delete('sq_view_page');
+        setParam(u,param,value,i.checked);location.assign(u.pathname+'?'+u.searchParams.toString());
+      });
+    });
+  }
+  function restoreAfgType(){
+    if(!isAfg||main.dataset.sqRefineV3Ready!=='true')return false;
+    var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;
+    var type=typeGroup(side);
+    if(!type){
+      var html='';try{html=sessionStorage.getItem(CACHE)||''}catch(_){}
+      if(html){var box=document.createElement('div');box.innerHTML=html;type=box.querySelector('details.sq-refine-v3-group')}
+      if(!type){
+        var selected=paramsFromLocation().getAll('filter.p.product_type');if(!selected.length)return false;
+        type=document.createElement('details');type.className='sq-refine-v3-group';
+        type.innerHTML='<summary>Shop by Type</summary><div class="sq-refine-v3-choices"></div>';
+        var choices=type.querySelector('.sq-refine-v3-choices');selected.forEach(function(v){var lab=document.createElement('label');lab.className='sq-refine-v3-choice';var i=document.createElement('input');i.type='checkbox';i.checked=true;i.dataset.filterName='filter.p.product_type';i.dataset.filterValue=v;i.value=v;var span=document.createElement('span');span.textContent=v;lab.append(i,span);choices.appendChild(lab)});
+      }
+      var avail=[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')).find(function(d){var s=d.querySelector(':scope > summary');return s&&/^Availability$/i.test(clean(s.textContent))});
+      if(avail)avail.after(type);else side.appendChild(type);
+    }
+    var summary=type.querySelector(':scope > summary');if(summary)summary.textContent='Shop by Type';
+    var selected=paramsFromLocation().getAll('filter.p.product_type');var found=false;
+    type.querySelectorAll('input[type=checkbox]').forEach(function(i){var value=choiceValue(i);var checked=selected.some(function(v){return clean(v)===clean(value)});i.checked=checked;if(checked)found=true});
+    if(selected.length){type.open=true;type.dataset.active='true'}else delete type.dataset.active;
+    bindRestored(type);main.dataset.sqAfgTypePersistence='true';
+    return !!type;
+  }
+  function paramsFromLocation(){return new URLSearchParams(location.search)}
   function canonicalize(){
     var u=new URL(location.href),family=clean(u.searchParams.get('sq_type_family'));
     if(!family)return false;
     var existing=u.searchParams.getAll('filter.p.product_type');
     if(existing.some(function(v){return clean(v)===family})){
-      u.searchParams.delete('sq_type_family');
-      history.replaceState(history.state,'',u.pathname+'?'+u.searchParams.toString());
-      return false;
+      u.searchParams.delete('sq_type_family');history.replaceState(history.state,'',u.pathname+'?'+u.searchParams.toString());return false;
     }
-    u.searchParams.delete('sq_type_family');
-    u.searchParams.delete('page');
-    u.searchParams.delete('sq_view_page');
-    u.searchParams.append('filter.p.product_type',family);
-    location.replace(u.pathname+'?'+u.searchParams.toString());
-    return true;
+    u.searchParams.delete('sq_type_family');u.searchParams.delete('page');u.searchParams.delete('sq_view_page');u.searchParams.append('filter.p.product_type',family);
+    location.replace(u.pathname+'?'+u.searchParams.toString());return true;
   }
-  if(canonicalize())return;
   function sync(){
     if(main.dataset.sqRefineV3Ready!=='true')return false;
-    var selected=new URLSearchParams(location.search).getAll('filter.p.product_type');if(!selected.length)return true;
+    remember();
+    if(isAfg)restoreAfgType();
+    var selected=paramsFromLocation().getAll('filter.p.product_type');if(!selected.length)return true;
     var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;
-    var groups=[].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group'));
-    var type=groups.find(function(d){var s=d.querySelector(':scope > summary');return s&&/^Shop by Type$/i.test(clean(s.textContent))});if(!type)return false;
+    var type=typeGroup(side);if(!type)return false;
     var found=false;
-    [].slice.call(type.querySelectorAll('input[type=checkbox]')).forEach(function(i){
-      var value=clean(i.dataset.sqPolishValue||i.dataset.filterValue||i.value);
-      if(selected.some(function(v){return clean(v)===value})){i.checked=true;type.open=true;type.dataset.active='true';found=true}
-    });
-    return found;
+    [].slice.call(type.querySelectorAll('input[type=checkbox]')).forEach(function(i){var value=choiceValue(i);if(selected.some(function(v){return clean(v)===clean(value)})){i.checked=true;type.open=true;type.dataset.active='true';found=true}});
+    return found||!!type;
   }
-  if(sync())return;var tries=0,t=setInterval(function(){tries++;if(sync()||tries>120)clearInterval(t)},250);
+  var tries=0,t=setInterval(function(){tries++;if(main.dataset.sqRefineV3Ready==='true'){remember();restoreAfgType();if(tries>8)clearInterval(t)}if(tries>160)clearInterval(t)},100);
+  setTimeout(function(){remember();if(canonicalize())return;sync()},0);
+  var mo=new MutationObserver(function(){if(main.dataset.sqRefineV3Ready==='true'){remember();restoreAfgType()}});mo.observe(main,{childList:true,subtree:true});
+  setTimeout(function(){mo.disconnect()},12000);
 })();
 </script>
 {% endif %}
