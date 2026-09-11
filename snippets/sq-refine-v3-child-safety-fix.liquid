@@ -47,7 +47,7 @@
     var isParent=group.dataset.sqChildSafetyParents==='true',active=false;
     group.querySelectorAll('input[type="checkbox"][data-kind="structural"][data-target]').forEach(function(input){
       var checked=isParent?parentActive(input.dataset.target):samePath(input.dataset.target);
-      input.checked=checked;
+      if(input.checked!==checked)input.checked=checked;
       input.toggleAttribute('data-sq-path-active',checked);
       if(checked)active=true;
     });
@@ -71,6 +71,22 @@
     [].slice.call(choices.children).forEach(function(node){dest.appendChild(node)});
     syncActive(type);
   }
+  function bindParentChoices(choices){
+    if(!choices||choices.dataset.sqChildSafetyBound==='true')return;
+    choices.dataset.sqChildSafetyBound='true';
+    choices.querySelectorAll('input[data-target]').forEach(function(input){
+      input.addEventListener('change',function(){location.assign(input.checked?input.dataset.target:rootTarget())});
+    });
+  }
+  function parentMarkupMatches(choices){
+    if(!choices)return false;
+    var inputs=[].slice.call(choices.querySelectorAll(':scope label.sq-refine-v3-choice > input[data-kind="structural"][data-target]'));
+    if(inputs.length!==PARENTS.length)return false;
+    return inputs.every(function(input,i){
+      var label=(input.closest('label')?.textContent||'').replace(/\s+/g,' ').trim();
+      return label===PARENTS[i].label&&input.dataset.target===withPreview(PARENTS[i].path);
+    });
+  }
   function renderParents(cat,s){
     if(!cat){
       cat=document.createElement('details');cat.className='sq-refine-v3-group';cat.dataset.active='false';
@@ -80,8 +96,11 @@
     cat.dataset.sqChildSafetyParents='true';
     var choices=cat.querySelector(':scope>.sq-refine-v3-choices');
     if(!choices){choices=document.createElement('div');choices.className='sq-refine-v3-choices';cat.appendChild(choices)}
-    choices.innerHTML=PARENTS.map(function(x){var href=withPreview(x.path);return '<label class="sq-refine-v3-choice"><input type="checkbox" data-kind="structural" data-target="'+esc(href)+'"><span>'+esc(x.label)+'</span></label>'}).join('');
-    choices.querySelectorAll('input[data-target]').forEach(function(input){input.addEventListener('change',function(){location.assign(input.checked?input.dataset.target:rootTarget())})});
+    if(!parentMarkupMatches(choices)){
+      choices.innerHTML=PARENTS.map(function(x){var href=withPreview(x.path);return '<label class="sq-refine-v3-choice"><input type="checkbox" data-kind="structural" data-target="'+esc(href)+'"><span>'+esc(x.label)+'</span></label>'}).join('');
+      delete choices.dataset.sqChildSafetyBound;
+    }
+    bindParentChoices(choices);
     syncActive(cat);
     return cat;
   }
