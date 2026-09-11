@@ -15,10 +15,11 @@ jobs:
   certify-pagination:
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         shard: [0, 1, 2, 3, 4]
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -60,6 +61,7 @@ jobs:
           const report={theme,shard,routes:routes.map(x=>x.handle),checked:[],failures:[]};
           const fail=(key,msg)=>report.failures.push(`${key}: ${msg}`);
           const uniq=a=>[...new Set(a.filter(Boolean))];
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
           const resultSelector='#MainContent .sq-refine-v3-results .product-grid';
           function sourceHandle(route){return route.handle==='air-national-guard-series'?'products-built-for-the-line-u-s-air-force':route.handle}
           function makeViewUrl(route,perPage,viewPage){
@@ -76,6 +78,19 @@ jobs:
             u.searchParams.set('view','sq-refine-v3-products');
             u.searchParams.set('page',String(n));
             return u.toString();
+          }
+          async function gotoWithRetry(page,url,label){
+            let lastStatus=0,lastError='';
+            for(let attempt=0;attempt<7;attempt++){
+              try{
+                const r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
+                lastStatus=r?.status()||0;
+                if(r&&r.ok())return r;
+                if(lastStatus!==429&&lastStatus<500)throw new Error(`HTTP ${lastStatus}`);
+              }catch(e){lastError=String(e);if(!/429|5\d\d|Timeout/i.test(lastError))throw e}
+              await sleep(Math.min(15000,1500*Math.pow(2,attempt)));
+            }
+            throw new Error(`${label} failed after retries; HTTP ${lastStatus}; ${lastError}`);
           }
           async function waitV3(page){
             await page.waitForLoadState('domcontentloaded');
@@ -100,12 +115,11 @@ jobs:
             const p=await context.newPage();
             let links=[];
             try{
-              const r=await p.goto(makeSourceUrl(route,n),{waitUntil:'domcontentloaded',timeout:90000});
-              if(!r||!r.ok())throw new Error(`HTTP ${r?.status()}`);
-              await p.waitForTimeout(500);
+              await gotoWithRetry(p,makeSourceUrl(route,n),`source ${key}`);
+              await p.waitForTimeout(650);
               links=await p.evaluate(()=>[...new Set([...document.querySelectorAll('.product-grid a[href*="/products/"], [data-product-id] a[href*="/products/"], .card-wrapper a[href*="/products/"]')].map(a=>a.href.split('?')[0]))]);
             }finally{await p.close()}
-            sourceCache.set(key,links); return links;
+            sourceCache.set(key,links); await sleep(300); return links;
           }
           async function expectedWindow(route,perPage,viewPage){
             const pagesPerView=perPage/50;
@@ -144,7 +158,7 @@ jobs:
             let ok=false,last='';
             for(let i=0;i<18&&!ok;i++){
               try{
-                await p.goto(u,{waitUntil:'domcontentloaded',timeout:90000});
+                await gotoWithRetry(p,u,'preflight');
                 last=await p.evaluate(()=>document.querySelector('script[data-sq-refine-v3-pagination-repair]')?.getAttribute('data-revision')||'');
                 ok=last==='direct-next-probe-20260911';
               }catch(e){last=String(e)}
@@ -160,7 +174,7 @@ jobs:
               const page=await context.newPage();
               const errors=[]; page.on('pageerror',e=>errors.push(String(e)));
               let navError=null;
-              try{await page.goto(makeViewUrl(route,perPage,1),{waitUntil:'domcontentloaded',timeout:90000});await waitV3(page)}catch(e){navError=String(e)}
+              try{await gotoWithRetry(page,makeViewUrl(route,perPage,1),`${key} page1`);await waitV3(page)}catch(e){navError=String(e)}
               if(navError){fail(key,`page1 navigation failed: ${navError}`);await page.close();continue}
               const actual1=await visibleLinks(page);
               const expected1=await expectedWindow(route,perPage,1);
@@ -185,7 +199,7 @@ jobs:
               const row={route,perPage,page1:{actual:actual1.length,expected:expected1.length,missing:missing.length,extra:extra.length},controls,pager1,shouldNext,page2:null,data};
               if(shouldNext&&next){
                 try{
-                  await page.goto(next.href,{waitUntil:'domcontentloaded',timeout:90000}); await waitV3(page);
+                  await gotoWithRetry(page,next.href,`${key} page2`); await waitV3(page);
                   const actual2=await visibleLinks(page),expected2=await expectedWindow(route,perPage,2),pager2=await inspectPager(page);
                   const missing2=expected2.filter(x=>!actual2.includes(x)),extra2=actual2.filter(x=>!expected2.includes(x));
                   const overlap=actual2.filter(x=>actual1.includes(x));
@@ -202,7 +216,7 @@ jobs:
               if(report.failures.some(x=>x.startsWith(key+':'))||route.special){
                 await page.screenshot({path:`out/${route.handle}-${perPage}.png`,fullPage:true}).catch(()=>{});
               }
-              report.checked.push(row); await page.close();
+              report.checked.push(row); await page.close(); await sleep(500);
             }
           }
           await browser.close();
