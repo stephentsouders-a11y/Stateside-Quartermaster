@@ -1,38 +1,26 @@
 {% doc %}
-Removes unsafe Literature Author refine groups immediately when legacy V3 builders insert them. Only verified native Author: / Book Author: tag controls or the transitional collection-local sq_author controls may survive. Search-derived or malformed author controls are never allowed to remain customer-interactive.
+Retains verified native Author and Book Author controls and collection-local author search controls. Removes malformed controls once without observing its own removals. Scoped exclusively to Literature.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle == 'literature' %}
-<script data-sq-refine-v3-literature-author-safety>
+<script data-sq-refine-v3-literature-author-safety data-revision="literature-stable-20260911">
 (function(){
-  var main=document.getElementById('MainContent');if(!main)return;
-  var cleaning=false,observer=null;
+  var main=document.getElementById('MainContent');if(!main)return;var observer=null,timer=0;
   function clean(){
-    if(cleaning)return false;cleaning=true;
-    var side=main.querySelector('.sq-refine-v3-sidebar');
-    if(!side){cleaning=false;return false}
-    [].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group')).forEach(function(group){
-      var summary=group.querySelector(':scope > summary');
-      var label=(summary&&summary.textContent||'').replace(/\s+/g,' ').trim();
-      if(label!=='Shop by Author')return;
-      var inputs=[].slice.call(group.querySelectorAll('input[type="checkbox"]'));
+    var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;if(observer)observer.disconnect();
+    try{Array.from(side.querySelectorAll(':scope > details.sq-refine-v3-group')).forEach(function(group){
+      var summary=group.querySelector(':scope > summary'),label=(summary&&summary.textContent||'').replace(/\s+/g,' ').trim();if(label!=='Shop by Author')return;
+      var inputs=Array.from(group.querySelectorAll('input[type="checkbox"]'));
       var unsafe=!inputs.length||inputs.some(function(input){
-        var option=(input.closest('label')&&input.closest('label').textContent||input.parentElement&&input.parentElement.textContent||'').replace(/\s+/g,' ').trim();
-        var target=input.dataset.target||'';
-        var legacySafe=input.dataset.kind==='author'&&target.indexOf('/collections/literature?')===0&&target.indexOf('sq_author=')>-1;
-        var tagSafe=input.dataset.kind==='native'&&input.dataset.filterName==='filter.p.tag'&&/^(author|book author)\s*:\s*.+/i.test(input.dataset.filterValue||'');
-        return !(legacySafe||tagSafe)||option.length>90||/(?:description|paperback|hardcover|publisher|publication date|language|print length|isbn)/i.test(option);
-      });
-      if(unsafe)group.remove();
-    });
-    if(!observer){
-      observer=new MutationObserver(function(){queueMicrotask(clean)});
-      observer.observe(side,{childList:true,subtree:true});
-    }
-    cleaning=false;return true;
+        var option=(input.closest('label')&&input.closest('label').textContent||'').replace(/\s+/g,' ').trim(),target=input.dataset.target||'';
+        var local=input.dataset.kind==='author'&&target.indexOf('/collections/literature?')===0&&target.indexOf('sq_author=')>-1;
+        var native=input.dataset.kind==='native'&&input.dataset.filterName==='filter.p.tag'&&/^(author|book author)\s*:\s*.+/i.test(input.dataset.filterValue||'');
+        return !(local||native)||!option||option.length>90||/(description|paperback|hardcover|publisher|publication date|language|print length|isbn)/i.test(option);
+      });if(unsafe)group.remove();
+    })}finally{if(!observer)observer=new MutationObserver(function(){clearTimeout(timer);timer=setTimeout(clean,80)});observer.observe(side,{childList:true,subtree:true})}
+    return true;
   }
-  clean();
-  var tries=0,t=setInterval(function(){if(clean()&&++tries>20)clearInterval(t);else if(++tries>80)clearInterval(t)},50);
-  window.addEventListener('load',clean,{once:true});
+  var attempts=0,poll=setInterval(function(){attempts++;if(clean()||attempts>=100)clearInterval(poll)},100);
+  window.addEventListener('load',clean,{once:true});window.addEventListener('pageshow',clean);window.addEventListener('pagehide',function(){clearInterval(poll);clearTimeout(timer);if(observer)observer.disconnect()});
 })();
 </script>
 {% endif %}
