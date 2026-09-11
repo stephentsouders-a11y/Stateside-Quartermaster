@@ -1,64 +1,52 @@
 {% doc %}
-Button 01 release repair for Accessories, Gifts & Collectibles. Keeps the root category tree authoritative on child routes, guarantees one visible product surface, owns Type and Availability clicks at document capture phase so sidebar replacement cannot drop the handler, and keeps 50/100/250 labels visibly readable on mobile. State Guard is unaffected.
+Accessories, Gifts & Collectibles Refine Products hard repair. Ensures the nine canonical page-specific categories always render as checkbox choices and recovers Shopify native Type, Manufacturer and Availability facets even when the V3 product host does not contain the native facet controls.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
-{% if collection.handle == 'accessories-gifts-collectibles' %}
-<style data-sq-button01-zero-flash-isolation>
-/* Accessories is V3-owned. Suppress obsolete taxonomy and Shopify facet surfaces
-   in server-rendered CSS so they cannot flash before the V3 runtime takes over. */
+{% assign sq_accessories_root = request.params.sq_root | default: collection.handle %}
+{% if collection.handle == 'accessories-gifts-collectibles' or sq_accessories_root == 'accessories-gifts-collectibles' %}
+<style data-sq-button01-accessories-hard-repair>
 #MainContent .sq-subcategory-section,
 #MainContent .sq-subcategory-card,
 #MainContent .facets-block-wrapper--horizontal .facets__filters-wrapper,
 #MainContent .facets-toggle__wrapper,
-#MainContent theme-drawer#filters-drawer{
-  display:none!important;
-  visibility:hidden!important;
-  pointer-events:none!important;
-}
+#MainContent theme-drawer#filters-drawer{display:none!important;visibility:hidden!important;pointer-events:none!important}
 </style>
-{% endif %}
-<style data-sq-refine-v3-button01-fix>
-#MainContent.sq-v3-button01-root .sq-refine-v3-page-size > strong,
-#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label > span{display:inline-block!important;position:static!important;width:auto!important;height:auto!important;min-width:20px!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;clip:auto!important;clip-path:none!important;white-space:nowrap!important;opacity:1!important;visibility:visible!important;color:#071d2d!important;font-size:12px!important;font-weight:900!important;line-height:1.2!important;text-indent:0!important;transform:none!important}
-#MainContent.sq-v3-button01-root [data-sq-button01-duplicate-products='true']{display:none!important;visibility:hidden!important;pointer-events:none!important}
-@media (max-width:900px){
-#MainContent.sq-v3-button01-root .sq-refine-v3-page-size{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:7px!important;flex-wrap:wrap!important;color:#071d2d!important;font-size:12px!important;line-height:1.2!important}
-#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label{display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;min-width:58px!important;min-height:34px!important;padding:7px 9px!important;color:#071d2d!important;font-size:12px!important;line-height:1.2!important;text-indent:0!important;overflow:visible!important}
-#MainContent.sq-v3-button01-root .sq-refine-v3-page-size>strong,#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label>span{position:absolute!important;width:1px!important;height:1px!important;min-width:1px!important;min-height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;clip-path:inset(50%)!important;white-space:nowrap!important}
-#MainContent.sq-v3-button01-root .sq-refine-v3-page-size::before{content:'Products per page:'!important;display:inline-block!important;position:static!important;width:auto!important;height:auto!important;margin:0 3px 0 0!important;padding:0!important;color:#071d2d!important;font-size:12px!important;font-weight:900!important;line-height:1.2!important;opacity:1!important;visibility:visible!important;white-space:nowrap!important;text-indent:0!important;transform:none!important}
-#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label:nth-of-type(1)::after{content:'50'!important}
-#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label:nth-of-type(2)::after{content:'100'!important}
-#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label:nth-of-type(3)::after{content:'250'!important}
-#MainContent.sq-v3-button01-root .sq-refine-v3-page-size label::after{display:inline-block!important;position:static!important;width:auto!important;height:auto!important;margin:0!important;padding:0!important;color:#071d2d!important;font-size:12px!important;font-weight:900!important;line-height:1.2!important;opacity:1!important;visibility:visible!important;white-space:nowrap!important;text-indent:0!important;transform:none!important}
-}
-</style>
-<script data-sq-refine-v3-button01-fix>
+<script data-sq-button01-accessories-hard-repair>
 (function(){
   var main=document.getElementById('MainContent');if(!main)return;
-  var params=new URLSearchParams(location.search),current={{ collection.handle | json }},root=params.get('sq_root')||current;
-  if(root!=='accessories-gifts-collectibles')return;
-  main.classList.add('sq-v3-button01-root');
-  var CATEGORIES=[['Challenge Coins & Displays','challenge-coins-display-holders'],['Collectibles & Cards','collectibles-cards'],['Drinkware','drinkware-gifts'],['Keychains & Lanyards','keychains-lanyards'],['Memorial & Personalized Gifts','personalized-displays-memorials'],['Military Surplus & Collectibles','military-surplus-field-gear-collectibles'],['Pins, Buttons & Small Insignia','pins-buttons-small-insignia'],['Sword & Knife Display Cases','sword-knife-display-cases'],['Wallets & Pocket Gifts','wallets-pocket-gifts']];
+  var params=new URLSearchParams(location.search),root='accessories-gifts-collectibles';
+  var CATS=[
+    ['Challenge Coins & Displays','challenge-coins-display-holders'],
+    ['Collectibles & Cards','collectibles-cards'],
+    ['Drinkware','drinkware-gifts'],
+    ['Keychains & Lanyards','keychains-lanyards'],
+    ['Memorial & Personalized Gifts','personalized-displays-memorials'],
+    ['Military Surplus & Collectibles','military-surplus-field-gear-collectibles'],
+    ['Pins, Buttons & Small Insignia','pins-buttons-small-insignia'],
+    ['Sword & Knife Display Cases','sword-knife-display-cases'],
+    ['Wallets & Pocket Gifts','wallets-pocket-gifts']
+  ];
   function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
-  function key(v){return clean(v).toLowerCase().replace(/[\u2019']/g,'').replace(/&/g,' ').replace(/\band\b/g,' ').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim()}
-  function groups(side){return [].slice.call(side.querySelectorAll(':scope > details.sq-refine-v3-group'))}
-  function group(side,title){return groups(side).find(function(d){var s=d.querySelector(':scope > summary');return s&&key(s.textContent)===key(title)})||null}
-  function target(handle){var u=new URL('/collections/'+handle,location.origin);u.searchParams.set('sq_root',root);params.forEach(function(v,k){if(k.indexOf('filter.')===0||k==='sort_by')u.searchParams.append(k,v)});return u.pathname+'?'+u.searchParams.toString()}
+  function key(v){return clean(v).toLowerCase().replace(/[\u2019']/g,'').replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim()}
+  function current(){return location.pathname.match(/^\/collections\/([^/?#]+)/)?.[1]||root}
+  function target(handle){var u=new URL('/collections/'+handle,location.origin);u.searchParams.set('sq_root',root);params.forEach(function(v,k){if(k.indexOf('filter.')===0||k==='sort_by'||k==='preview_theme_id')u.searchParams.append(k,v)});return u.pathname+'?'+u.searchParams.toString()}
   function filterUrl(name,value,checked){var u=new URL(location.href),vals=u.searchParams.getAll(name).filter(function(v){return v!==value});if(checked)vals.push(value);u.searchParams.delete(name);Array.from(new Set(vals)).forEach(function(v){u.searchParams.append(name,v)});u.searchParams.delete('page');u.searchParams.delete('sq_view_page');return u.pathname+(u.searchParams.toString()?'?'+u.searchParams.toString():'')}
-  function makeChoice(label,handle){var row=document.createElement('label');row.className='sq-refine-v3-choice';var input=document.createElement('input');input.type='checkbox';input.dataset.kind='structural';input.dataset.target=target(handle);input.checked=current===handle;var span=document.createElement('span');span.textContent=label;row.appendChild(input);row.appendChild(span);input.addEventListener('change',function(e){e.stopImmediatePropagation();location.assign(input.checked?input.dataset.target:target(root))},true);return row}
-  function categoryIsCanonical(cat){var rows=[].slice.call(cat.querySelectorAll(':scope > .sq-refine-v3-choices > .sq-refine-v3-choice'));if(rows.length!==CATEGORIES.length)return false;return rows.every(function(row,index){var input=row.querySelector('input'),span=row.querySelector('span'),expected=CATEGORIES[index];return clean(span&&span.textContent)===expected[0]&&input&&String(input.dataset.target||'').indexOf('/collections/'+expected[1])===0})}
-  function repairCategory(side){var cat=group(side,'Shop by Category');if(!cat){cat=document.createElement('details');cat.className='sq-refine-v3-group';cat.innerHTML='<summary>Shop by Category</summary><div class="sq-refine-v3-choices"></div>';var first=side.querySelector(':scope > details.sq-refine-v3-group');if(first)side.insertBefore(cat,first);else side.appendChild(cat)}if(!categoryIsCanonical(cat)){var host=cat.querySelector(':scope > .sq-refine-v3-choices');if(!host){host=document.createElement('div');host.className='sq-refine-v3-choices';cat.appendChild(host)}host.replaceChildren();CATEGORIES.forEach(function(row){host.appendChild(makeChoice(row[0],row[1]))})}var active=!!cat.querySelector('input:checked');cat.dataset.active=active?'true':'false';if(active)cat.open=true}
-  function removeWrongStructural(side){groups(side).forEach(function(d){var s=d.querySelector(':scope > summary'),name=key(s&&s.textContent);if(name===key('Shop by Branch'))d.remove()})}
-  function normalizeManufacturer(side){var d=group(side,'Shop by Manufacturer')||group(side,'Shop by Manufacturers');if(!d)return;var s=d.querySelector(':scope > summary');if(s)s.textContent='Shop by Manufacturers'}
-  function normalizeFilterInput(input,name,value,checked){input.dataset.kind='native';input.dataset.filterName=name;input.dataset.filterValue=value;input.value=value;input.checked=checked}
-  function repairAvailability(side){var availability=group(side,'Availability');if(!availability)return;availability.querySelectorAll('.sq-refine-v3-choice').forEach(function(row){var input=row.querySelector('input'),label=key(row.querySelector('span')&&row.querySelector('span').textContent);if(!input)return;var value=label.indexOf('in stock')>-1?'1':label.indexOf('out of stock')>-1?'0':'';if(value)normalizeFilterInput(input,'filter.v.availability',value,params.getAll('filter.v.availability').indexOf(value)>-1)});var active=!!availability.querySelector('input:checked');availability.dataset.active=active?'true':'false';if(active)availability.open=true}
-  function repairType(side){var type=group(side,'Shop by Type');if(!type)return;type.querySelectorAll('.sq-refine-v3-choice').forEach(function(row){var input=row.querySelector('input');if(!input)return;var value=clean(input.dataset.sqPolishValue||input.dataset.filterValue||input.value);if(value&&value!=='on')normalizeFilterInput(input,'filter.p.product_type',value,params.getAll('filter.p.product_type').indexOf(value)>-1)});var active=!!type.querySelector('input:checked');type.dataset.active=active?'true':'false';if(active)type.open=true}
-  function normalizeSynthetic(side){side.querySelectorAll('input[data-sq-polish-param][data-sq-polish-value]').forEach(function(input){input.dataset.kind='native';input.dataset.filterName=input.dataset.sqPolishParam;input.dataset.filterValue=input.dataset.sqPolishValue})}
-  function ownSidebarClicks(){if(window.__sqButton01DocumentClickOwner===true)return;window.__sqButton01DocumentClickOwner=true;document.addEventListener('click',function(e){var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return;var input=e.target.closest&&e.target.closest('input[type="checkbox"]');if(!input){var row=e.target.closest&&e.target.closest('.sq-refine-v3-choice');input=row&&row.querySelector('input[type="checkbox"]')}if(!input||!side.contains(input))return;var details=input.closest('details.sq-refine-v3-group'),summary=details&&details.querySelector(':scope > summary'),label=key(summary&&summary.textContent),name='',value='';if(label===key('Shop by Type')){name='filter.p.product_type';value=clean(input.dataset.filterValue||input.dataset.sqPolishValue||input.value)}else if(label===key('Availability')){name='filter.v.availability';var choice=input.closest('.sq-refine-v3-choice'),span=choice&&choice.querySelector('span'),rowLabel=key(span&&span.textContent);value=rowLabel.indexOf('in stock')>-1?'1':rowLabel.indexOf('out of stock')>-1?'0':''}else{return}if(!name||!value||value==='on')return;e.preventDefault();e.stopImmediatePropagation();var nextChecked=!input.checked,href=filterUrl(name,value,nextChecked);window.__sqButton01LastOwnedClick={name:name,value:value,checked:nextChecked,href:href};location.assign(href)},true)}
-  function hideDuplicateProductSurfaces(){var results=main.querySelector('.sq-refine-v3-results');if(!results)return;main.querySelectorAll('.product-grid').forEach(function(grid){if(results.contains(grid))return;if(!grid.querySelector('a[href*="/products/"]'))return;var surface=grid.closest('collection-component,results-list,.product-grid-container')||grid;surface.dataset.sqButton01DuplicateProducts='true'})}
-  function repair(){var side=main.querySelector('.sq-refine-v3-sidebar');if(!side)return false;removeWrongStructural(side);repairCategory(side);normalizeManufacturer(side);normalizeSynthetic(side);repairType(side);repairAvailability(side);ownSidebarClicks();hideDuplicateProductSurfaces();side.dataset.sqButton01Fixed='true';return main.dataset.sqRefineV3Ready==='true'}
-  ownSidebarClicks();
-  var tries=0,t=setInterval(function(){tries++;if(repair()||tries>160)clearInterval(t)},100);[100,250,500,800,1800,3500,5000].forEach(function(ms){setTimeout(repair,ms)});
+  function sidebar(){var s=main.querySelector('.sq-refine-v3-sidebar,.sq-global-refine-sidebar');if(s&&!s.classList.contains('sq-refine-v3-sidebar'))s.classList.add('sq-refine-v3-sidebar');return s}
+  function groups(s){return [].slice.call(s.querySelectorAll(':scope > details.sq-refine-v3-group'))}
+  function group(s,title){return groups(s).find(function(d){return key(d.querySelector(':scope > summary')?.textContent)===key(title)})||null}
+  function ensureGroup(s,title){var d=group(s,title);if(d)return d;d=document.createElement('details');d.className='sq-refine-v3-group';d.innerHTML='<summary></summary><div class="sq-refine-v3-choices"></div>';d.querySelector('summary').textContent=title;s.appendChild(d);return d}
+  function structuralChoice(label,handle){var row=document.createElement('label');row.className='sq-refine-v3-choice';var input=document.createElement('input');input.type='checkbox';input.dataset.kind='structural';input.dataset.target=target(handle);input.checked=current()===handle;var span=document.createElement('span');span.textContent=label;row.append(input,span);input.addEventListener('change',function(e){e.stopImmediatePropagation();location.assign(input.checked?input.dataset.target:target(root))},true);return row}
+  function ensureCategories(s){var d=ensureGroup(s,'Shop by Category'),host=d.querySelector(':scope > .sq-refine-v3-choices');host.replaceChildren();CATS.forEach(function(x){host.appendChild(structuralChoice(x[0],x[1]))});var active=!!host.querySelector('input:checked');d.dataset.active=active?'true':'false';if(active)d.open=true;if(d!==groups(s)[0])s.insertBefore(d,groups(s)[0]||null)}
+  function nativeHeading(input){var d=input.closest('details'),h=clean(d&&d.querySelector(':scope > summary')?.textContent);if(!h){var fs=input.closest('fieldset');h=clean(fs&&fs.querySelector('legend')?.textContent)}var n=key(h);if(/availability/.test(n)||input.name==='filter.v.availability')return'Availability';if(/vendor|manufacturer|brand/.test(n)||input.name==='filter.p.vendor')return'Shop by Manufacturers';if(/product type|type/.test(n)||input.name==='filter.p.product_type')return'Shop by Type';return''}
+  function nativeLabel(input){if(input.id){var l=document.querySelector('label[for="'+CSS.escape(input.id)+'"]');if(l)return clean(l.textContent)}return clean(input.closest('label')?.textContent)||clean(input.value)}
+  function recoverNative(s){
+    var map=new Map();
+    main.querySelectorAll('input[name^="filter."]').forEach(function(src){if(s.contains(src))return;var title=nativeHeading(src);if(!title)return;var label=nativeLabel(src),value=clean(src.value);if(!label||!value)return;var name=src.name,k=key(title);if(!map.has(k))map.set(k,{title:title,items:[]});var a=map.get(k).items;if(!a.some(function(x){return x.name===name&&x.value===value}))a.push({name:name,value:value,label:label})});
+    map.forEach(function(g){var d=ensureGroup(s,g.title),host=d.querySelector(':scope > .sq-refine-v3-choices');if(host.children.length)return;g.items.forEach(function(x){var row=document.createElement('label');row.className='sq-refine-v3-choice';var input=document.createElement('input');input.type='checkbox';input.dataset.kind='native';input.dataset.filterName=x.name;input.dataset.filterValue=x.value;input.value=x.value;input.checked=params.getAll(x.name).indexOf(x.value)>-1;var span=document.createElement('span');span.textContent=x.label;row.append(input,span);input.addEventListener('change',function(e){e.stopImmediatePropagation();location.assign(filterUrl(x.name,x.value,input.checked))},true);host.appendChild(row)});if(host.querySelector('input:checked')){d.dataset.active='true';d.open=true}})
+  }
+  function repair(){var s=sidebar();if(!s)return false;ensureCategories(s);recoverNative(s);s.dataset.sqButton01Fixed='true';main.dataset.sqAccessoriesRefineRepair='true';return s.querySelectorAll('input[type="checkbox"]').length>0}
+  var tries=0,t=setInterval(function(){tries++;if(repair()||tries>200)clearInterval(t)},50);[0,100,250,500,1000,2000,4000].forEach(function(ms){setTimeout(repair,ms)});
 })();
 </script>
+{% endif %}
 {% endif %}
