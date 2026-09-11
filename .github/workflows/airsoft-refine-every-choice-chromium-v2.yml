@@ -1,0 +1,82 @@
+name: Airsoft Refine every-choice Chromium audit v2
+
+on:
+  push:
+    paths:
+      - '.github/workflows/airsoft-refine-every-choice-chromium-v2.yml'
+      - 'snippets/sq-refine-v3.liquid'
+      - 'snippets/sq-refine-v3-layout-fix.liquid'
+      - 'sections/sq-refine-v3-product-grid.liquid'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  every-choice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Audit every Airsoft Refine checkbox
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const themeId='158561894555';
+          const base=`https://www.statesideqm.com/collections/airsoft-milsim?preview_theme_id=${themeId}&sq_per_page=50`;
+          const expected=new Map([
+            ['Airsoft Accessories','airsoft-milsim-airsoft-accessories'],
+            ['Ammo & Magazines','airsoft-milsim-airsoft-ammo-magazines'],
+            ['Batteries & Chargers','airsoft-milsim-batteries-chargers'],
+            ['Field Gear & Training','airsoft-milsim-field-gear-training'],
+            ['Internal Parts & Electronics','airsoft-milsim-internal-parts-electronics'],
+            ['Protection & Apparel','airsoft-milsim-protection-apparel'],
+            ['Replicas & Launchers','airsoft-milsim-airsoft-replicas-launchers'],
+            ['Starter Kits & Bundles','airsoft-milsim-starter-kits-bundles']
+          ]);
+          fs.mkdirSync('out/screens',{recursive:true});
+          const report={base,startedAt:new Date().toISOString(),choices:[],failures:[],runtimeErrors:[]};
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          page.setDefaultTimeout(30000); page.setDefaultNavigationTimeout(90000);
+          page.on('pageerror',e=>report.runtimeErrors.push(String(e)));
+          async function ready(){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true');await page.waitForTimeout(300)}
+          async function openBase(){const r=await page.goto(base,{waitUntil:'domcontentloaded'});if(r?.status()!==200)throw new Error(`HTTP ${r?.status()}`);await ready()}
+          await openBase();
+          const initial=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return {sidebar:!!m?.querySelector('.sq-refine-v3-sidebar'),oldNative:[...m.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length,oldButtons:[...m.querySelectorAll('.sq-subcategory-section,.sq-subcategory-card')].filter(vis).length,stateGuard:/State Guard Uniform Builder|Build Your Uniform|PT Uniform/i.test(m?.innerText||'')}});
+          if(!initial.sidebar)report.failures.push('Refine sidebar missing');
+          if(initial.oldNative)report.failures.push(`Old native filters visible: ${initial.oldNative}`);
+          if(initial.oldButtons)report.failures.push(`Legacy category buttons visible: ${initial.oldButtons}`);
+          if(initial.stateGuard)report.failures.push('State Guard contamination visible');
+          const inventory=await page.evaluate(()=>{const side=document.querySelector('#MainContent .sq-refine-v3-sidebar');return [...side.querySelectorAll('details.sq-refine-v3-group')].flatMap((d,gi)=>{const group=(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim();return [...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>{const lab=i.closest('label')||i.parentElement;const label=(lab?.querySelector('span')?.textContent||lab?.textContent||i.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim();return {group,gi,ii,label,value:i.value||'',target:i.dataset.target||'',filterName:i.dataset.filterName||'',polish:i.dataset.sqPolishParam||''}})})});
+          if(!inventory.length)report.failures.push('No checkboxes found');
+          for(let n=0;n<inventory.length;n++){
+            const meta=inventory[n]; await openBase();
+            const d=page.locator('#MainContent details.sq-refine-v3-group').nth(meta.gi); if(!(await d.getAttribute('open')))await d.locator(':scope > summary').click();
+            const input=d.locator('input[type="checkbox"]').nth(meta.ii); await input.scrollIntoViewIfNeeded();
+            const before=page.url(); let clickError='';
+            try{await Promise.all([page.waitForURL(u=>u.href!==before,{timeout:15000}).catch(()=>null),input.click({force:true})]);await page.waitForLoadState('domcontentloaded').catch(()=>{});await ready().catch(()=>{})}catch(e){clickError=String(e)}
+            const u=new URL(page.url());
+            const state=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return {ready:m?.dataset.sqRefineV3Ready||null,cards:[...m.querySelectorAll('.sq-refine-v3-results .product-grid > *')].filter(vis).length,duplicate:[...m.querySelectorAll('.product-grid')].filter(g=>vis(g)&&!m.querySelector('.sq-refine-v3-results')?.contains(g)&&g.querySelector('a[href*="/products/"]')).length}}).catch(()=>({ready:null,cards:0,duplicate:0}));
+            const errors=[]; if(clickError)errors.push(clickError); if(state.ready!=='true')errors.push(`V3 not ready: ${state.ready}`); if(state.duplicate)errors.push(`duplicate grids: ${state.duplicate}`);
+            if(meta.group==='Shop by Category'){const h=expected.get(meta.label);if(!h)errors.push(`unexpected category ${meta.label}`);else if(u.pathname!==`/collections/${h}`)errors.push(`wrong target ${u.pathname} expected /collections/${h}`);if(state.cards<1)errors.push('zero visible products')}
+            else {const p=meta.filterName||meta.polish;if(p&&!u.searchParams.getAll(p).includes(meta.value))errors.push(`missing ${p}=${meta.value}`);if(!p&&!meta.target)errors.push('no filter/target metadata')}
+            report.choices.push({...meta,url:u.href,cards:state.cards,errors}); if(errors.length){report.failures.push(`${meta.group} > ${meta.label}: ${errors.join('; ')}`);await page.screenshot({path:`out/screens/${String(n+1).padStart(3,'0')}.png`,fullPage:true}).catch(()=>{})}
+          }
+          report.finishedAt=new Date().toISOString(); fs.writeFileSync('out/report.json',JSON.stringify(report,null,2)); console.log(JSON.stringify({total:report.choices.length,failures:report.failures,runtimeErrors:report.runtimeErrors},null,2)); await browser.close(); if(report.failures.length||report.runtimeErrors.length)process.exitCode=2;
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: airsoft-refine-every-choice-chromium-v2
+          path: out
+          retention-days: 14
