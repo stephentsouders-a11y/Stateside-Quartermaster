@@ -1,0 +1,132 @@
+name: Refine V3 Pagination Chromium Certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-pagination-chromium-cert.yml'
+      - 'snippets/sq-refine-v3-pagination-repair.liquid'
+      - 'snippets/sq-refine-v3.liquid'
+      - 'sections/sq-refine-v3-product-grid.liquid'
+      - 'layout/theme.liquid'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify-pagination:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify 50-per-page pagination across all V3 roots
+        run: |
+          cat > pagination-cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const theme='158561894555';
+          const base='https://www.statesideqm.com/collections/';
+          const handles=[
+            'accessories-gifts-collectibles','airsoft-milsim','apparel','armed-forces-gear',
+            'art','body-armor-ballistic-protection','literature','child-safety-shop','dive-scuba',
+            'firearm-accessories','first-aid-medical-ifak','flags-patriotic-decor','flashlights-lighting',
+            'footwear-gloves-eyewear','k9-dog-gear','knives-axes-cutlery','morale-patches-tactical-id',
+            'outdoor-preparedness-gear','patriotic-american-heritage','safety-rescue-climbing',
+            'sta-brite-insignia','tactical-gear','thin-line','uniforms','watches','zippos-lighters-torches',
+            'stateside-quartermaster-logo-merch','army-national-guard-series','air-national-guard-series',
+            'products-built-for-the-line-u-s-army','products-built-for-the-line-u-s-navy',
+            'products-built-for-the-line-u-s-air-force','products-built-for-the-line-u-s-marine-corps',
+            'products-built-for-the-line-u-s-coast-guard','products-built-for-the-line-u-s-space-force',
+            'rotc-series','jrotc-series','military-schools-academies','law-enforcement-corrections',
+            'firefighting-ems-search-rescue'
+          ];
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1000}});
+          const report={theme,checked:[],failures:[]};
+          const fail=(h,m)=>report.failures.push(`${h}: ${m}`);
+          const cardSelector='#MainContent .sq-refine-v3-results .product-grid > *, #MainContent .sq-refine-v3-results [data-product-id], #MainContent .sq-refine-v3-results .card-wrapper';
+          const altCardSelector='.product-grid > *, [data-product-id], .card-wrapper';
+          async function waitV3(page){
+            await page.waitForLoadState('domcontentloaded');
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',{timeout:20000}).catch(()=>{});
+            await page.waitForTimeout(1800);
+          }
+          async function hrefs(page,selector){
+            return await page.$$eval(selector,els=>[...new Set(els.map(el=>el.querySelector('a[href*="/products/"]')?.href).filter(Boolean))]);
+          }
+          for(const handle of handles){
+            const page=await context.newPage();
+            const errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            const p1=new URL(`${base}${handle}`);
+            p1.searchParams.set('preview_theme_id',theme);
+            p1.searchParams.set('sq_per_page','50');
+            p1.searchParams.set('sq_view_page','1');
+            let navError=null;
+            try{await page.goto(p1.toString(),{waitUntil:'domcontentloaded',timeout:90000});await waitV3(page);}catch(e){navError=String(e)}
+            const page1Hrefs=navError?[]:await hrefs(page,cardSelector);
+            const mainData=navError?{}:await page.$eval('#MainContent',el=>({...el.dataset})).catch(()=>({}));
+            const pager=navError?{}:await page.evaluate(()=>{
+              const p=document.querySelector('#MainContent .sq-refine-v3-pager');
+              if(!p)return {exists:false,links:[]};
+              return {exists:true,links:[...p.querySelectorAll('a')].map(a=>({text:(a.textContent||'').trim(),href:a.href}))};
+            });
+            const alt=new URL(`${base}${handle}`);
+            alt.searchParams.set('preview_theme_id',theme);
+            alt.searchParams.set('view','sq-refine-v3-products');
+            alt.searchParams.set('page','2');
+            const altPage=await context.newPage();
+            let altError=null;
+            try{await altPage.goto(alt.toString(),{waitUntil:'domcontentloaded',timeout:90000});await altPage.waitForTimeout(700);}catch(e){altError=String(e)}
+            const altHrefs=altError?[]:await hrefs(altPage,altCardSelector);
+            await altPage.close();
+            const shouldHaveNext=altHrefs.length>0;
+            const next=pager.links?.find(x=>/next/i.test(x.text)||/sq_view_page=2/.test(x.href));
+            const row={handle,page1Products:page1Hrefs.length,alternatePage2Products:altHrefs.length,shouldHaveNext,hasNext:!!next,mainData,errors,navError,altError,page2Products:null,overlap:null};
+            if(navError)fail(handle,`page 1 navigation failed: ${navError}`);
+            if(altError)fail(handle,`alternate page 2 navigation failed: ${altError}`);
+            if(page1Hrefs.length>50)fail(handle,`page 1 rendered ${page1Hrefs.length} unique products (>50)`);
+            if(shouldHaveNext&&!next)fail(handle,'Shopify page 2 has products but V3 pager has no Next/Page 2 link');
+            if(!shouldHaveNext&&next)fail(handle,'V3 pager exposes Next/Page 2 even though Shopify page 2 is empty');
+            if(mainData.sqRefineV3PaginationRepairError)fail(handle,`pagination repair error: ${mainData.sqRefineV3PaginationRepairError}`);
+            if(errors.length)fail(handle,`${errors.length} page errors on page 1`);
+            if(shouldHaveNext&&next){
+              try{
+                await Promise.all([page.waitForLoadState('domcontentloaded').catch(()=>{}),page.goto(next.href,{waitUntil:'domcontentloaded',timeout:90000})]);
+                await waitV3(page);
+                const page2Hrefs=await hrefs(page,cardSelector);
+                row.page2Products=page2Hrefs.length;
+                row.overlap=page2Hrefs.filter(x=>page1Hrefs.includes(x));
+                if(!/sq_view_page=2/.test(page.url()))fail(handle,`Next did not land on sq_view_page=2: ${page.url()}`);
+                if(page2Hrefs.length<1)fail(handle,'Page 2 loaded with no visible product links');
+                if(row.overlap.length)fail(handle,`Page 2 repeats ${row.overlap.length} Page 1 products`);
+                const prev=await page.locator('#MainContent .sq-refine-v3-pager a').filter({hasText:/Previous/i}).count();
+                if(!prev)fail(handle,'Page 2 has no Previous link');
+              }catch(e){fail(handle,`Page 2 navigation/check failed: ${String(e)}`)}
+            }
+            const routeFailed=report.failures.some(x=>x.startsWith(`${handle}:`));
+            if(handle==='flashlights-lighting'||routeFailed){
+              await page.screenshot({path:`out/${handle}.png`,fullPage:true}).catch(()=>{});
+            }
+            report.checked.push(row);
+            await page.close();
+          }
+          await browser.close();
+          report.summary={routes:report.checked.length,withSecondPage:report.checked.filter(x=>x.shouldHaveNext).length,failures:report.failures.length};
+          fs.writeFileSync('out/pagination-report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          if(report.failures.length)process.exitCode=2;
+          EOF
+          node pagination-cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine-v3-pagination-chromium-cert
+          path: out
+          retention-days: 14
