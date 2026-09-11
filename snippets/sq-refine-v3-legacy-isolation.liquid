@@ -1,5 +1,24 @@
 {% assign sq_v3_isolation_roots = 'accessories-gifts-collectibles,airsoft-milsim,apparel,armed-forces-gear,art,body-armor-ballistic-protection,literature,child-safety-shop,dive-scuba,firearm-accessories,first-aid-medical-ifak,flags-patriotic-decor,flashlights-lighting,footwear-gloves-eyewear,k9-dog-gear,knives-axes-cutlery,morale-patches-tactical-id,outdoor-preparedness-gear,patriotic-american-heritage,safety-rescue-climbing,sta-brite-insignia,tactical-gear,thin-line,uniforms,watches,zippos-lighters-torches,stateside-quartermaster-logo-merch,army-national-guard-series,air-national-guard-series,products-built-for-the-line-u-s-army,products-built-for-the-line-u-s-navy,products-built-for-the-line-u-s-air-force,products-built-for-the-line-u-s-marine-corps,products-built-for-the-line-u-s-coast-guard,products-built-for-the-line-u-s-space-force,rotc-series,jrotc-series,military-schools-academies,law-enforcement-corrections,firefighting-ems-search-rescue' | split: ',' %}
 {% if request.page_type == 'collection' and sq_v3_isolation_roots contains collection.handle %}
+<style data-sq-refine-v3-first-paint-isolation>
+/* V3 owns these roots. Hide the obsolete server-rendered taxonomy/button trees
+   before MainContent is parsed so customers never see them flash before V3 is ready.
+   Product grids are deliberately not targeted. State Guard is excluded by Liquid. */
+#MainContent [class*="button-tree"],
+#MainContent [class*="root-categories"],
+#MainContent [class*="third-level"],
+#MainContent [class*="branch-grid"],
+#MainContent [class*="type-grid"],
+#MainContent [class*="program-tree"],
+#MainContent [class*="category-grid"],
+#MainContent [class*="navigation-grid"],
+#MainContent .sqbfl,
+#MainContent [data-sq-refine-v3-hidden-nav="true"]{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+</style>
 <script data-sq-refine-v3-legacy-isolation="{{ collection.handle | escape }}">
 window.__sqGlobalRefineAuthorityV2=true;
 window.__sqGlobalRefineVisibleSurfaceFix=true;
