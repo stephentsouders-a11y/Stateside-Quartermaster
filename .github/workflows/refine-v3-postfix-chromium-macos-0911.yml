@@ -1,0 +1,38 @@
+name: Refine V3 post-fix Chromium macOS proof
+on:
+  push:
+    paths:
+      - '.github/workflows/refine-v3-postfix-chromium-macos-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install chromium >/dev/null 2>&1
+      - name: Chromium structural proof
+        run: |
+          cat > /tmp/proof.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const BASE='https://www.statesideqm.com',THEME='158561894555';
+          const routes=[['Flags','/collections/flags-patriotic-decor'],['Airsoft','/collections/airsoft-milsim'],['Child Safety','/collections/child-safety-shop'],['First Aid','/collections/first-aid-medical-ifak'],['Outdoor','/collections/outdoor-preparedness-gear'],['Firearm','/collections/firearm-accessories'],['Morale','/collections/morale-patches-tactical-id'],['Uniforms','/collections/uniforms'],['Body Armor','/collections/body-armor-ballistic-protection'],['Flashlights','/collections/flashlights-lighting'],['Safety Rescue','/collections/safety-rescue-climbing'],['Books','/collections/literature'],['Footwear','/collections/footwear-gloves-eyewear'],['DIVE','/collections/dive-scuba'],['Knives','/collections/knives-axes-cutlery'],['Army','/collections/products-built-for-the-line-u-s-army'],['Marines','/collections/products-built-for-the-line-u-s-marine-corps'],['JROTC','/collections/jrotc-series'],['ROTC','/collections/rotc-series'],['Coast Guard','/collections/products-built-for-the-line-u-s-coast-guard'],['Thin Line','/collections/thin-line']];
+          const browser=await chromium.launch({headless:true});let failures=0;
+          for(const [name,path] of routes)for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
+            const c=await browser.newContext({viewport});const p=await c.newPage();let status=null;const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);try{const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});status=r?.status()??null}catch{}
+            let s={};const end=Date.now()+12000;while(Date.now()<end){s=await p.evaluate(()=>{const v=e=>{if(!e)return false;const r=e.getBoundingClientRect(),x=getComputedStyle(e);return r.width>2&&r.height>2&&x.display!=='none'&&x.visibility!=='hidden'&&Number(x.opacity||1)>0};const m=document.querySelector('#MainContent'),all=m?[...m.querySelectorAll('.product-grid')]:[],g=all.filter(x=>v(x)&&[...x.querySelectorAll(':scope>.product-grid__item')].some(y=>v(y)&&y.querySelector('a[href*="/products/"]')));return{rescue:!!document.querySelector('[data-sq-refine-v3-visible-grid-rescue]'),ready:m?.dataset.sqRefineV3Ready||null,grids:g.length,cards:g[0]?[...g[0].querySelectorAll(':scope>.product-grid__item')].filter(v).length:0,all:all.map((x,i)=>({i,inResults:!!x.closest('.sq-refine-v3-results'),visible:v(x),cards:x.querySelectorAll(':scope>.product-grid__item').length,visibleCards:[...x.querySelectorAll(':scope>.product-grid__item')].filter(v).length,auth:x.classList.contains('sq-v3-authoritative-grid'),dup:x.getAttribute('data-sq-refine-v3-duplicate-surface'),display:getComputedStyle(x).display}))}});if(status===200&&s.rescue&&s.grids===1&&s.cards>0)break;await p.waitForTimeout(150)}
+            const ok=status===200&&s.rescue&&s.grids===1&&s.cards>0;console.log(`${ok?'PASS':'FAIL'} ${device} ${name} status=${status} rescue=${s.rescue} grids=${s.grids} cards=${s.cards}`);if(!ok){failures++;console.log('DETAIL '+JSON.stringify(s))}await c.close();
+          }
+          await browser.close();console.log(`MACOS_PROOF failures=${failures} checks=${routes.length*2}`);if(failures)process.exit(2);
+          EOF
+          node /tmp/proof.mjs
