@@ -1,0 +1,52 @@
+name: Refine V3 other40 exhaustive Chromium certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/scripts/refine-v3-other40-exhaustive-cert.mjs'
+      - '.github/workflows/refine-v3-other40-exhaustive-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SHARD: ${{ matrix.shard }}
+      SHARDS: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Exhaustive checkbox, reset, page-size, responsive and page-error certification
+        run: node .github/scripts/refine-v3-other40-exhaustive-cert.mjs
+      - name: Hard gate page errors and incomplete checkbox coverage
+        if: always()
+        run: |
+          REPORT="other40-exhaustive/shard-${SHARD}/report.json"
+          test -f "$REPORT" || { echo "Missing report"; exit 1; }
+          PAGE_ERRORS=$(jq '[.routes[] | select(.type=="v3") | .desktop.pageErrors[], .mobile.pageErrors[]] | length' "$REPORT")
+          FAILED_INTERACTIONS=$(jq '[.routes[] | select(.type=="v3") | .desktop.interactions.items[], .mobile.interactions.items[] | select(.pass!=true)] | length' "$REPORT")
+          COUNT=$(jq '.interactionCount' "$REPORT")
+          PASSED=$(jq '.interactionPassed' "$REPORT")
+          echo "pageErrors=$PAGE_ERRORS checkboxInteractions=$PASSED/$COUNT failedInteractions=$FAILED_INTERACTIONS"
+          test "$PAGE_ERRORS" -eq 0
+          test "$FAILED_INTERACTIONS" -eq 0
+          test "$COUNT" -eq "$PASSED"
+      - name: Upload exhaustive certification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: other40-exhaustive-shard-${{ matrix.shard }}
+          path: other40-exhaustive/shard-${{ matrix.shard }}
+          if-no-files-found: warn
