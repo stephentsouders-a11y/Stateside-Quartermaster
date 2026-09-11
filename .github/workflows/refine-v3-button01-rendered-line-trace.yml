@@ -20,7 +20,7 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Print rendered source around replaceState line
+      - name: Print rendered source around Availability cleanup
         run: |
           node <<'NODE'
           const { chromium } = await import('playwright');
@@ -32,8 +32,6 @@ jobs:
           const html=await p.content();
           const lines=html.split('\n');
           console.log('LINE_COUNT',lines.length);
-          for(let i=2405;i<=2450;i++) console.log(String(i+1).padStart(5,'0')+': '+(lines[i]||''));
-          const hits=[]; lines.forEach((l,i)=>{if(/replaceState|filter\.v\.availability|availability/i.test(l))hits.push({line:i+1,text:l.slice(0,1200)})});
-          console.log('HITS',JSON.stringify(hits.slice(0,200),null,2));
+          for(let i=2135;i<=2205;i++) console.log(String(i+1).padStart(5,'0')+': '+(lines[i]||''));
           await b.close();
           NODE
