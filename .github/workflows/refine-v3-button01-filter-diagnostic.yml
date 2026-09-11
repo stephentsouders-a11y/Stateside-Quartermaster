@@ -1,0 +1,86 @@
+name: REFINE V3 Button 01 Filter Event Diagnostic
+
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths:
+      - '.github/workflows/refine-v3-button01-filter-diagnostic.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Diagnose Type and Availability event paths
+        run: |
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          const BASE='https://www.statesideqm.com';
+          const URL=BASE+'/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          async function ready(p){
+            await p.waitForLoadState('domcontentloaded',{timeout:90000}).catch(()=>{});
+            await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:60000});
+            await p.waitForSelector('#MainContent .sq-refine-v3-sidebar',{state:'visible',timeout:20000});
+            await sleep(800);
+          }
+          async function run(label,wanted){
+            const browser=await chromium.launch({headless:true});
+            const ctx=await browser.newContext({viewport:{width:1440,height:1000}});
+            const p=await ctx.newPage();
+            await p.goto(URL,{waitUntil:'domcontentloaded',timeout:90000});await ready(p);
+            const det=p.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group').filter({has:p.locator(':scope>summary',{hasText:label})}).first();
+            if(await det.getAttribute('open')===null)await det.locator(':scope>summary').click();
+            const row=wanted?det.locator('.sq-refine-v3-choice',{hasText:wanted}).first():det.locator('.sq-refine-v3-choice').filter({has:p.locator('input:not(:checked)')}).first();
+            const inp=row.locator('input').first();
+            const before=p.url();
+            const pre=await inp.evaluate(i=>({
+              script:!!document.querySelector('script[data-sq-refine-v3-button01-filter-owner-v2]'),
+              owner:window.__sqButton01WindowOwnerV2||false,
+              mainConnected:document.getElementById('MainContent')?.isConnected||false,
+              inputConnected:i.isConnected,
+              group:i.closest('details')?.querySelector(':scope>summary')?.textContent?.trim(),
+              label:i.closest('label')?.querySelector('span')?.textContent?.trim(),
+              name:i.dataset.filterName||i.dataset.sqPolishParam||'',
+              value:i.dataset.filterValue||i.dataset.sqPolishValue||i.value||'',
+              checked:i.checked,
+              inputRect:(()=>{const r=i.getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height}})(),
+              rowRect:(()=>{const r=i.closest('label').getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height}})()
+            }));
+            await p.evaluate(()=>{
+              window.__diag=[];
+              const add=(where,phase)=>(e)=>{const t=e.target;window.__diag.push({where,phase,target:t?.tagName||'',cls:t?.className||'',type:t?.type||'',defaultPrevented:e.defaultPrevented})};
+              window.addEventListener('click',add('window','capture'),true);
+              document.addEventListener('click',add('document','capture'),true);
+              document.addEventListener('click',add('document','bubble'),false);
+              window.addEventListener('click',add('window','bubble'),false);
+            });
+            let rowError=null;
+            try{await row.click({noWaitAfter:true,timeout:10000});}catch(e){rowError=String(e)}
+            for(let i=0;i<40&&p.url()===before;i++)await sleep(150);
+            let state={};
+            if(!p.isClosed())state=await p.evaluate(()=>({url:location.href,owned:window.__sqButton01LastOwnedClick||null,diag:window.__diag||[]})).catch(()=>({url:p.url()}));
+            console.log(JSON.stringify({label,mode:'visible-row-click',before,pre,rowError,after:p.url(),state},null,2));
+            if(p.url()===before){
+              await inp.evaluate(i=>i.click()).catch(()=>{});
+              for(let i=0;i<40&&p.url()===before;i++)await sleep(150);
+              const afterProgrammatic=await p.evaluate(()=>({url:location.href,owned:window.__sqButton01LastOwnedClick||null,diag:window.__diag||[]})).catch(()=>({url:p.url()}));
+              console.log(JSON.stringify({label,mode:'dom-input-click',after:p.url(),state:afterProgrammatic},null,2));
+            }
+            await browser.close();
+          }
+          await run('Shop by Type',null);
+          await run('Availability','In stock');
+          NODE
