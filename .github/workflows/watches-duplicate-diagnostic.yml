@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - '.github/workflows/watches-duplicate-diagnostic.yml'
+      - 'snippets/sq-refine-v3-legacy-isolation.liquid'
+      - 'snippets/sq-state-guard-audit-overlay.liquid'
   workflow_dispatch:
 permissions:
   contents: read
