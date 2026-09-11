@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 # Definitive 41-button alphabetical certification. State Guard is intentionally excluded/frozen.
-# Fresh latest-code certification trigger: storefront/controller 8661612 plus page-policy 8a440787, unpublished audit theme 158561894555.
+# Fresh browser certification requested 2026-09-11 for category-source fix dfc28837, unpublished audit theme 158561894555.
 jobs:
   certify:
     strategy:
