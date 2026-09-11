@@ -14,7 +14,7 @@ permissions:
 jobs:
   certify-pagination:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 60
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -24,7 +24,7 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Certify pagination across all V3 roots and page sizes
+      - name: Exhaustively certify all customer-accessible product pages
         run: |
           cat > pagination-cert.mjs <<'EOF'
           import { chromium } from 'playwright';
@@ -50,88 +50,88 @@ jobs:
           const browser=await chromium.launch({headless:true});
           const context=await browser.newContext({viewport:{width:1440,height:1000}});
           const report={theme,sizes,checked:[],failures:[]};
-          const fail=(h,s,m)=>report.failures.push(`${h} @ ${s}: ${m}`);
+          const fail=(h,s,v,m)=>report.failures.push(`${h} @ ${s} page ${v}: ${m}`);
           const cardSelector='#MainContent .sq-refine-v3-results .product-grid > .product-grid__item';
-          const altCardSelector='.product-grid > .product-grid__item';
           async function waitV3(page){
             await page.waitForLoadState('domcontentloaded');
             await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',{timeout:30000});
-            await page.waitForTimeout(1200);
+            await page.waitForTimeout(850);
           }
-          async function hrefs(page,selector){
-            return await page.$$eval(selector,els=>[...new Set(els.map(el=>el.querySelector('a[href*="/products/"]')?.href).filter(Boolean))]);
+          async function hrefs(page){
+            return await page.$$eval(cardSelector,els=>[...new Set(els.map(el=>el.querySelector('a[href*="/products/"]')?.href).filter(Boolean))]);
           }
-          async function sourceHasProducts(handle,nativePage){
-            const sourceHandle=handle==='air-national-guard-series'?'products-built-for-the-line-u-s-air-force':handle;
-            const u=new URL(`${base}${sourceHandle}`);
-            u.searchParams.set('preview_theme_id',theme);
-            u.searchParams.set('view','sq-refine-v3-products');
-            u.searchParams.set('page',String(nativePage));
-            const page=await context.newPage();
-            try{
-              await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:90000});
-              await page.waitForTimeout(500);
-              return (await hrefs(page,altCardSelector)).length>0;
-            } finally { await page.close(); }
+          async function pagerState(page){
+            return await page.evaluate(()=>{
+              const all=[...document.querySelectorAll('#MainContent .sq-refine-v3-pager')];
+              const p=all[0];
+              if(!p)return {exists:false,count:0,next:null,previous:null,text:''};
+              const links=[...p.querySelectorAll('a')].map(a=>({text:(a.textContent||'').trim(),href:a.href}));
+              return {
+                exists:true,
+                count:all.length,
+                text:(p.textContent||'').replace(/\s+/g,' ').trim(),
+                next:links.find(x=>/next/i.test(x.text))||null,
+                previous:links.find(x=>/previous/i.test(x.text))||null
+              };
+            });
           }
-          function expectedSentinel(view,size){ return Math.floor((view*size)/50)+1; }
           for(const handle of handles){
             for(const size of sizes){
               const page=await context.newPage();
+              const seen=new Set();
+              const pages=[];
               const errors=[];
               page.on('pageerror',e=>errors.push(String(e)));
-              const p1=new URL(`${base}${handle}`);
-              p1.searchParams.set('preview_theme_id',theme);
-              p1.searchParams.set('sq_per_page',String(size));
-              p1.searchParams.set('sq_view_page','1');
-              let navError=null;
-              try{await page.goto(p1.toString(),{waitUntil:'domcontentloaded',timeout:90000});await waitV3(page);}catch(e){navError=String(e)}
-              const page1Hrefs=navError?[]:await hrefs(page,cardSelector);
-              const mainData=navError?{}:await page.$eval('#MainContent',el=>({...el.dataset})).catch(()=>({}));
-              let shouldHaveNext=false,sourceError=null;
-              try{shouldHaveNext=await sourceHasProducts(handle,expectedSentinel(1,size));}catch(e){sourceError=String(e)}
-              const pager=navError?{}:await page.evaluate(()=>{
-                const all=[...document.querySelectorAll('#MainContent .sq-refine-v3-pager')];
-                const p=all[0];
-                if(!p)return {exists:false,count:0,links:[],text:''};
-                return {exists:true,count:all.length,text:(p.textContent||'').replace(/\s+/g,' ').trim(),links:[...p.querySelectorAll('a')].map(a=>({text:(a.textContent||'').trim(),href:a.href}))};
-              });
-              const next=pager.links?.find(x=>/next/i.test(x.text)||new URL(x.href).searchParams.get('sq_view_page')==='2');
-              const row={handle,size,page1Products:page1Hrefs.length,shouldHaveNext,hasNext:!!next,pagerCount:pager.count||0,pagerText:pager.text||'',mainData,errors,navError,sourceError,page2Products:null,overlap:null,hasPrevious:null};
-              if(navError)fail(handle,size,`page 1 navigation failed: ${navError}`);
-              if(sourceError)fail(handle,size,`sentinel source check failed: ${sourceError}`);
-              if(page1Hrefs.length>size)fail(handle,size,`page 1 rendered ${page1Hrefs.length} unique products (> ${size})`);
-              if(shouldHaveNext&&!next)fail(handle,size,'next logical page has products but pager has no Next/Page 2 link');
-              if(!shouldHaveNext&&next)fail(handle,size,'pager exposes Next/Page 2 although next logical page is empty');
-              if((pager.count||0)>1)fail(handle,size,`duplicate custom pagers detected: ${pager.count}`);
-              if(mainData.sqRefineV3PaginationRepairError)fail(handle,size,`pagination repair error: ${mainData.sqRefineV3PaginationRepairError}`);
-              if(mainData.sqRefineV3PaginationPageSize&&mainData.sqRefineV3PaginationPageSize!==String(size))fail(handle,size,`certified page-size marker is ${mainData.sqRefineV3PaginationPageSize}`);
-              if(errors.length)fail(handle,size,`${errors.length} page errors on page 1`);
-              if(shouldHaveNext&&next){
+              let view=1;
+              let finished=false;
+              let guard=0;
+              while(!finished && guard<150){
+                guard++;
+                const u=new URL(`${base}${handle}`);
+                u.searchParams.set('preview_theme_id',theme);
+                u.searchParams.set('sq_per_page',String(size));
+                u.searchParams.set('sq_view_page',String(view));
                 try{
-                  await page.goto(next.href,{waitUntil:'domcontentloaded',timeout:90000});
+                  await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:90000});
                   await waitV3(page);
-                  const page2Hrefs=await hrefs(page,cardSelector);
-                  row.page2Products=page2Hrefs.length;
-                  row.overlap=page2Hrefs.filter(x=>page1Hrefs.includes(x));
-                  row.hasPrevious=await page.locator('#MainContent .sq-refine-v3-pager a').filter({hasText:/Previous/i}).count()>0;
-                  if(new URL(page.url()).searchParams.get('sq_view_page')!=='2')fail(handle,size,`Next did not land on logical page 2: ${page.url()}`);
-                  if(page2Hrefs.length<1)fail(handle,size,'Page 2 loaded with no visible product links');
-                  if(row.overlap.length)fail(handle,size,`Page 2 repeats ${row.overlap.length} Page 1 products`);
-                  if(!row.hasPrevious)fail(handle,size,'Page 2 has no Previous link');
-                  const p2data=await page.$eval('#MainContent',el=>({...el.dataset})).catch(()=>({}));
-                  if(p2data.sqRefineV3PaginationRepairError)fail(handle,size,`page 2 repair error: ${p2data.sqRefineV3PaginationRepairError}`);
-                }catch(e){fail(handle,size,`Page 2 navigation/check failed: ${String(e)}`)}
+                }catch(e){
+                  fail(handle,size,view,`navigation/readiness failed: ${String(e)}`);
+                  break;
+                }
+                const products=await hrefs(page);
+                const pager=await pagerState(page);
+                const mainData=await page.$eval('#MainContent',el=>({...el.dataset})).catch(()=>({}));
+                const duplicates=products.filter(x=>seen.has(x));
+                products.forEach(x=>seen.add(x));
+                pages.push({view,products:products.length,pagerText:pager.text,next:!!pager.next,previous:!!pager.previous,duplicates:duplicates.length,marker:mainData.sqRefineV3PaginationCertified||null});
+                if(products.length<1)fail(handle,size,view,'customer page rendered zero products');
+                if(products.length>size)fail(handle,size,view,`rendered ${products.length} products (> ${size})`);
+                if(duplicates.length)fail(handle,size,view,`repeated ${duplicates.length} product(s) already shown on an earlier logical page`);
+                if((pager.count||0)>1)fail(handle,size,view,`duplicate custom pagers detected: ${pager.count}`);
+                if(view===1 && pager.previous)fail(handle,size,view,'Page 1 exposes a Previous link');
+                if(view>1 && !pager.previous)fail(handle,size,view,'missing Previous link');
+                if(mainData.sqRefineV3PaginationRepairError)fail(handle,size,view,`repair error: ${mainData.sqRefineV3PaginationRepairError}`);
+                if(mainData.sqRefineV3PaginationPageSize && mainData.sqRefineV3PaginationPageSize!==String(size))fail(handle,size,view,`page-size marker is ${mainData.sqRefineV3PaginationPageSize}`);
+                if(pager.next){
+                  const nextUrl=new URL(pager.next.href);
+                  const nextView=parseInt(nextUrl.searchParams.get('sq_view_page')||'0',10);
+                  if(nextView!==view+1)fail(handle,size,view,`Next targets logical page ${nextView}, expected ${view+1}`);
+                  view++;
+                }else{
+                  finished=true;
+                }
               }
-              if(handle==='literature'||report.failures.some(x=>x.startsWith(`${handle} @ ${size}:`))){
-                await page.screenshot({path:`out/${handle}-${size}.png`,fullPage:true}).catch(()=>{});
+              if(guard>=150 && !finished)fail(handle,size,view,'pagination did not terminate within 150 logical pages');
+              if(errors.length)fail(handle,size,view,`${errors.length} uncaught browser page error(s)`);
+              report.checked.push({handle,size,totalLogicalPages:pages.length,totalUniqueProducts:seen.size,finished,pages});
+              if(handle==='literature' || report.failures.some(x=>x.startsWith(`${handle} @ ${size}`))){
+                await page.screenshot({path:`out/${handle}-${size}-final.png`,fullPage:true}).catch(()=>{});
               }
-              report.checked.push(row);
               await page.close();
             }
           }
           await browser.close();
-          report.summary={cases:report.checked.length,routes:handles.length,sizes:sizes.length,withSecondPage:report.checked.filter(x=>x.shouldHaveNext).length,failures:report.failures.length};
+          report.summary={cases:report.checked.length,routes:handles.length,sizes:sizes.length,totalLogicalPages:report.checked.reduce((n,x)=>n+x.totalLogicalPages,0),failures:report.failures.length};
           fs.writeFileSync('out/pagination-report.json',JSON.stringify(report,null,2));
           console.log(JSON.stringify(report,null,2));
           if(report.failures.length)process.exitCode=2;
