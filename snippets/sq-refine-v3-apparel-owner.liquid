@@ -6,34 +6,24 @@ Keeps the Apparel collection under one Refine Products owner and suppresses dupl
 html[data-sq-apparel-pending] #MainContent .product-grid{opacity:0!important}
 #MainContent .product-grid[data-sq-apparel-duplicate="true"]{display:none!important}
 </style>
-<script data-sq-apparel-single-owner="20260911-v2">
+<script data-sq-apparel-single-owner="20260911-v3">
 (function(){
-  if(window.__sqApparelSingleOwnerV2)return;
-  window.__sqApparelSingleOwnerV2=true;
+  if(window.__sqApparelSingleOwnerV3)return;
+  window.__sqApparelSingleOwnerV3=true;
   window.__sqCollectionFacetSidebarV1=true;
   window.__sqZeroInventoryPreservationV1=true;
   window.__sqSoldOutPreservationHardGate=true;
   var html=document.documentElement;
   html.setAttribute('data-sq-apparel-pending','');
   var fallback=setTimeout(function(){html.removeAttribute('data-sq-apparel-pending')},20000);
-  function productSignature(grid){
-    return Array.from(grid.querySelectorAll('.product-grid__item')).map(function(item){
-      return item.getAttribute('data-product-id') || item.querySelector('a[href*="/products/"]')?.getAttribute('href') || item.textContent.trim().slice(0,120);
-    }).filter(Boolean).join('|');
-  }
-  function suppressDuplicateGrids(main,ownerGrid){
-    if(!ownerGrid)return 0;
-    var ownerSignature=productSignature(ownerGrid);
+  function suppressNativeGrids(main){
     var removed=0;
     main.querySelectorAll('.product-grid').forEach(function(candidate){
-      if(candidate===ownerGrid)return;
-      var signature=productSignature(candidate);
-      if(signature && ownerSignature && signature===ownerSignature){
-        candidate.setAttribute('data-sq-apparel-duplicate','true');
-        candidate.hidden=true;
-        candidate.setAttribute('aria-hidden','true');
-        removed++;
-      }
+      if(candidate.closest('.sq-refine-v3-results'))return;
+      candidate.setAttribute('data-sq-apparel-duplicate','true');
+      candidate.hidden=true;
+      candidate.setAttribute('aria-hidden','true');
+      removed++;
     });
     return removed;
   }
@@ -46,13 +36,13 @@ html[data-sq-apparel-pending] #MainContent .product-grid{opacity:0!important}
       var results=main.querySelector('.sq-refine-v3-results');
       var grid=results&&results.querySelector('.product-grid');
       if(!results||!grid)return;
-      var duplicates=suppressDuplicateGrids(main,grid);
+      var duplicates=suppressNativeGrids(main);
       main.dataset.sqApparelDuplicateGrids=String(duplicates);
-      main.dataset.sqApparelRepair='single-owner-v2';
+      main.dataset.sqApparelRepair='single-owner-v3';
       clearTimeout(fallback);
       html.removeAttribute('data-sq-apparel-pending');
       if(observer)observer.disconnect();
-      var guard=new MutationObserver(function(){suppressDuplicateGrids(main,grid)});
+      var guard=new MutationObserver(function(){suppressNativeGrids(main)});
       guard.observe(main,{childList:true,subtree:true});
       window.setTimeout(function(){guard.disconnect()},12000);
     }
