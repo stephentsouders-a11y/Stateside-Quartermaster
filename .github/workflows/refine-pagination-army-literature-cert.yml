@@ -1,0 +1,92 @@
+name: Refine Army Literature pagination Chromium certification
+on:
+  push:
+    paths:
+      - '.github/workflows/refine-pagination-army-literature-cert.yml'
+      - 'snippets/sq-refine-v3-pagination-repair.liquid'
+      - 'snippets/sq-refine-v3.liquid'
+      - 'layout/theme.liquid'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify-pagination:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Chromium certify Army literature pagination
+        run: |
+          cat > pagination-cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const theme='158561894555';
+          const base='https://www.statesideqm.com/collections/literature-u-s-army?sq_root=literature&sq_per_page=50&sq_view_page=1&preview_theme_id='+theme;
+          const browser=await chromium.launch({headless:true});
+          const report={theme,url:base,devices:[],failures:[]};
+          for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
+            const ctx=await browser.newContext({viewport});
+            const page=await ctx.newPage();
+            const errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error'&&!m.text().includes("Refused to frame 'https://shop.app/'")&&!m.text().includes('Failed to load resource: the server responded with a status of 403'))errors.push(m.text())});
+            await page.goto(base,{waitUntil:'domcontentloaded',timeout:90000});
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:90000}).catch(()=>{});
+            await page.waitForTimeout(2500);
+            const first=await page.evaluate(()=>{
+              const main=document.querySelector('#MainContent');
+              const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0};
+              const grids=[...document.querySelectorAll('#MainContent .product-grid')].filter(visible);
+              const cards=[...document.querySelectorAll('#MainContent .sq-refine-v3-results .product-grid > *')].filter(visible);
+              const sizeInputs=[...document.querySelectorAll('#MainContent .sq-refine-v3-page-size input')].map(i=>({value:i.value,checked:i.checked}));
+              const next=[...document.querySelectorAll('#MainContent .sq-refine-v3-pager a')].find(a=>/next/i.test(a.textContent||''));
+              return {ready:main?.dataset.sqRefineV3Ready||null,error:main?.dataset.sqRefineV3Error||null,repairError:main?.dataset.sqRefineV3PaginationRepairError||null,certified:main?.dataset.sqRefineV3PaginationCertified||null,pageSize:main?.dataset.sqRefineV3PaginationPageSize||null,visibleGrids:grids.length,products:cards.length,sizeInputs,nextHref:next?.href||null};
+            });
+            const fail=m=>report.failures.push(`${device}: ${m}`);
+            if(first.ready!=='true')fail(`V3 not ready (${first.error||'no ready flag'})`);
+            if(first.repairError)fail(`pagination repair error: ${first.repairError}`);
+            if(first.visibleGrids!==1)fail(`expected one visible grid, got ${first.visibleGrids}`);
+            if(first.products!==50)fail(`expected exactly 50 visible products on page 1, got ${first.products}`);
+            const vals=first.sizeInputs.map(x=>String(x.value));
+            for(const v of ['50','100','250'])if(!vals.includes(v))fail(`page-size option ${v} missing`);
+            if(!first.sizeInputs.some(x=>String(x.value)==='50'&&x.checked))fail('50 page-size option not selected');
+            if(!first.nextHref)fail('Next link missing despite more than 50 Army literature products');
+            let second=null;
+            if(first.nextHref){
+              await page.goto(first.nextHref,{waitUntil:'domcontentloaded',timeout:90000});
+              await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:90000}).catch(()=>{});
+              await page.waitForTimeout(2500);
+              second=await page.evaluate(()=>{
+                const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0};
+                const cards=[...document.querySelectorAll('#MainContent .sq-refine-v3-results .product-grid > *')].filter(visible);
+                const prev=[...document.querySelectorAll('#MainContent .sq-refine-v3-pager a')].find(a=>/previous/i.test(a.textContent||''));
+                return {url:location.href,products:cards.length,prevHref:prev?.href||null};
+              });
+              if(!second.url.includes('sq_view_page=2'))fail(`Next did not navigate to logical page 2: ${second.url}`);
+              if(second.products<1)fail('page 2 has no visible products');
+              if(!second.prevHref)fail('Previous link missing on page 2');
+            }
+            report.devices.push({device,first,second,errors});
+            if(errors.length)fail(`${errors.length} browser errors: ${errors.join(' || ')}`);
+            await page.screenshot({path:`out/${device}-army-literature-pagination.png`,fullPage:true});
+            await ctx.close();
+          }
+          await browser.close();
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          if(report.failures.length)process.exitCode=2;
+          EOF
+          node pagination-cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: army-literature-pagination-chromium-cert
+          path: out
+          retention-days: 14
