@@ -1,0 +1,62 @@
+{% doc %}
+Restores the Refine V3 layout on ROTC, JROTC, and Military Schools & Academies when older education-series CSS or runtime rules hide the newly assembled V3 surface. This snippet is intentionally limited to those three V3 routes and does not affect State Guard.
+{% enddoc %}
+{% assign sq_v3_education_visibility = false %}
+{% if request.page_type == 'collection' %}
+  {% if collection.handle == 'rotc-series' or collection.handle == 'jrotc-series' or collection.handle == 'military-schools-academies' %}
+    {% assign sq_v3_education_visibility = true %}
+  {% endif %}
+{% endif %}
+{% if sq_v3_education_visibility %}
+<style data-sq-refine-v3-education-visibility-rescue>
+html body #MainContent.sq-refine-v3-active .sq-refine-v3-layout{
+  display:grid!important;
+  visibility:visible!important;
+  opacity:1!important;
+  content-visibility:visible!important;
+}
+html body #MainContent.sq-refine-v3-active .sq-refine-v3-sidebar,
+html body #MainContent.sq-refine-v3-active .sq-refine-v3-results,
+html body #MainContent.sq-refine-v3-active .sq-refine-v3-page-size{
+  visibility:visible!important;
+  opacity:1!important;
+  content-visibility:visible!important;
+}
+html body #MainContent.sq-refine-v3-active .sq-refine-v3-sidebar{display:block!important}
+html body #MainContent.sq-refine-v3-active .sq-refine-v3-results{display:block!important}
+@media (min-width:901px){
+  html body #MainContent.sq-refine-v3-active .sq-refine-v3-layout{
+    grid-template-columns:270px minmax(0,1fr)!important;
+  }
+}
+</style>
+<script data-sq-refine-v3-education-visibility-runtime>
+(function(){
+  var main=document.getElementById('MainContent');if(!main)return;
+  function expose(){
+    if(main.dataset.sqRefineV3Ready!=='true')return false;
+    var layout=main.querySelector('.sq-refine-v3-layout'),side=main.querySelector('.sq-refine-v3-sidebar'),results=main.querySelector('.sq-refine-v3-results');
+    if(!layout||!side||!results)return false;
+    [layout,side,results].forEach(function(el){
+      el.hidden=false;el.removeAttribute('aria-hidden');
+      el.style.setProperty('visibility','visible','important');
+      el.style.setProperty('opacity','1','important');
+    });
+    layout.style.setProperty('display','grid','important');
+    side.style.setProperty('display','block','important');
+    results.style.setProperty('display','block','important');
+    for(var p=layout.parentElement;p&&p!==main;p=p.parentElement){
+      p.hidden=false;p.removeAttribute('aria-hidden');
+      p.style.setProperty('visibility','visible','important');
+      p.style.setProperty('opacity','1','important');
+      if(getComputedStyle(p).display==='none')p.style.setProperty('display','block','important');
+    }
+    main.dataset.sqRefineV3EducationVisibility='restored';
+    return true;
+  }
+  if(expose())return;
+  var tries=0,t=setInterval(function(){if(expose()||++tries>120)clearInterval(t)},100);
+  window.addEventListener('load',expose,{once:true});
+})();
+</script>
+{% endif %}
