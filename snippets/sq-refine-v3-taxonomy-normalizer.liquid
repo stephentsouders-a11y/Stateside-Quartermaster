@@ -1,5 +1,5 @@
 {% doc %}
-Normalizes Refine V3 taxonomy after the authoritative sidebar is rendered. It removes duplicate concepts from Shop by Type when a higher structural group already owns that concept. Body Armor also promotes accessory/component families from Type into a dedicated Shop by Subcategory disclosure, removes verified zero-membership facet leakage, and restores selected subcategory state after canonical product-type navigation. State Guard is deliberately excluded.
+Normalizes Refine V3 taxonomy after the authoritative sidebar is rendered. Branch-owned concepts are removed from Category, and exact higher-level concepts are removed from Shop by Type. Body Armor also promotes accessory/component families into Shop by Subcategory, removes verified zero-membership facet leakage, and restores selected subcategory state after canonical product-type navigation. State Guard is deliberately excluded.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 <script data-sq-refine-v3-taxonomy-normalizer>
@@ -16,10 +16,20 @@ Normalizes Refine V3 taxonomy after the authoritative sidebar is rendered. It re
     var side=document.querySelector('#MainContent .sq-refine-v3-sidebar');if(!side)return false;
     var groups=[].slice.call(side.querySelectorAll('details.sq-refine-v3-group'));
     if(!groups.length)return false;
+
+    var category=detailsBy(side,'Shop by Category'),branch=detailsBy(side,'Shop by Branch');
+    if(category&&branch){
+      var branchKeys=new Set([].slice.call(branch.querySelectorAll('.sq-refine-v3-choice')).map(function(c){return key(choiceLabel(c))}).filter(Boolean));
+      [].slice.call(category.querySelectorAll('.sq-refine-v3-choice')).forEach(function(c){if(branchKeys.has(key(choiceLabel(c)))&&!c.querySelector('input:checked'))c.remove()});
+      removeEmpty(category);
+    }
+
+    groups=[].slice.call(side.querySelectorAll('details.sq-refine-v3-group'));
     var higher=new Set();
     groups.forEach(function(d){var s=key(summary(d));if(s===key('Shop by Category')||s===key('Shop by Subcategory')||s===key('Shop by Branch'))[].slice.call(d.querySelectorAll('.sq-refine-v3-choice')).forEach(function(c){var k=key(choiceLabel(c));if(k)higher.add(k)})});
     var type=detailsBy(side,'Shop by Type');
     if(type){[].slice.call(type.querySelectorAll('.sq-refine-v3-choice')).forEach(function(c){var k=key(choiceLabel(c));if(k&&higher.has(k)&&!c.querySelector('input:checked'))c.remove()});removeEmpty(type)}
+
     if(root==='body-armor-ballistic-protection'){
       type=detailsBy(side,'Shop by Type');
       if(type){
