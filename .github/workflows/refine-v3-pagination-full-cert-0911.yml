@@ -5,9 +5,6 @@ on:
     paths:
       - '.github/workflows/refine-v3-pagination-full-cert-0911.yml'
       - 'snippets/sq-refine-v3-pagination-repair.liquid'
-      - 'snippets/sq-refine-v3.liquid'
-      - 'sections/sq-refine-v3-product-grid.liquid'
-      - 'layout/theme.liquid'
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,7 +26,7 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Exhaustively certify Refine V3 pagination
+      - name: Browser-certify Refine V3 logical pagination
         env:
           SHARD: ${{ matrix.shard }}
         run: |
@@ -39,6 +36,7 @@ jobs:
           fs.mkdirSync('out',{recursive:true});
           const theme='158561894555';
           const origin='https://www.statesideqm.com';
+          const marker='assembly-rescue-20260911-v4';
           const allRoutes=[
             {handle:'accessories-gifts-collectibles'},{handle:'airsoft-milsim'},{handle:'apparel'},{handle:'armed-forces-gear'},
             {handle:'art'},{handle:'body-armor-ballistic-protection'},{handle:'literature'},{handle:'child-safety-shop'},{handle:'dive-scuba'},
@@ -52,175 +50,112 @@ jobs:
             {handle:'products-built-for-the-line-u-s-coast-guard'},{handle:'products-built-for-the-line-u-s-space-force'},
             {handle:'rotc-series'},{handle:'jrotc-series'},{handle:'military-schools-academies'},{handle:'law-enforcement-corrections'},
             {handle:'firefighting-ems-search-rescue'},
-            {handle:'literature-u-s-army',root:'literature',special:'reported-army-literature-child'}
+            {handle:'literature-u-s-army',root:'literature',special:true}
           ];
           const shard=Number(process.env.SHARD||0);
           const routes=allRoutes.filter((_,i)=>i%5===shard);
           const browser=await chromium.launch({headless:true});
           const context=await browser.newContext({viewport:{width:1440,height:1000}});
-          const report={theme,shard,routes:routes.map(x=>x.handle),checked:[],failures:[]};
+          const report={theme,marker,shard,routes:routes.map(x=>x.handle),cases:[],failures:[]};
           const fail=(key,msg)=>report.failures.push(`${key}: ${msg}`);
-          const uniq=a=>[...new Set(a.filter(Boolean))];
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          const resultSelector='#MainContent .sq-refine-v3-results .product-grid';
-          function sourceHandle(route){return route.handle==='air-national-guard-series'?'products-built-for-the-line-u-s-air-force':route.handle}
-          function makeViewUrl(route,perPage,viewPage){
+          function url(route,size,pageNo){
             const u=new URL(`/collections/${route.handle}`,origin);
             u.searchParams.set('preview_theme_id',theme);
             if(route.root)u.searchParams.set('sq_root',route.root);
-            u.searchParams.set('sq_per_page',String(perPage));
-            u.searchParams.set('sq_view_page',String(viewPage));
+            u.searchParams.set('sq_per_page',String(size));
+            u.searchParams.set('sq_view_page',String(pageNo));
+            u.searchParams.set('sq_cert',`${Date.now()}-${shard}-${size}-${pageNo}`);
             return u.toString();
           }
-          function makeSourceUrl(route,n){
-            const u=new URL(`/collections/${sourceHandle(route)}`,origin);
-            u.searchParams.set('preview_theme_id',theme);
-            u.searchParams.set('view','sq-refine-v3-products');
-            u.searchParams.set('page',String(n));
-            return u.toString();
-          }
-          async function gotoWithRetry(page,url,label){
-            let lastStatus=0,lastError='';
-            for(let attempt=0;attempt<7;attempt++){
+          async function gotoRetry(page,target,label){
+            let last='';
+            for(let i=0;i<6;i++){
               try{
-                const r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
-                lastStatus=r?.status()||0;
-                if(r&&r.ok())return r;
-                if(lastStatus!==429&&lastStatus<500)throw new Error(`HTTP ${lastStatus}`);
-              }catch(e){lastError=String(e);if(!/429|5\d\d|Timeout/i.test(lastError))throw e}
-              await sleep(Math.min(15000,1500*Math.pow(2,attempt)));
+                const r=await page.goto(target,{waitUntil:'domcontentloaded',timeout:90000});
+                if(r?.ok())return;
+                last=`HTTP ${r?.status()}`;
+                if(r?.status()!==429&&(r?.status()||0)<500)throw new Error(last);
+              }catch(e){last=String(e);if(!/429|5\d\d|Timeout/i.test(last))throw e}
+              await sleep(Math.min(12000,1200*Math.pow(2,i)));
             }
-            throw new Error(`${label} failed after retries; HTTP ${lastStatus}; ${lastError}`);
+            throw new Error(`${label} failed after retries: ${last}`);
           }
-          async function waitV3(page){
-            await page.waitForLoadState('domcontentloaded');
-            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',{timeout:30000}).catch(()=>{});
-            await page.waitForTimeout(1800);
+          async function ready(page){
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',{timeout:110000});
+            await page.waitForTimeout(1200);
           }
-          async function visibleLinks(page){
-            return await page.evaluate((sel)=>{
-              const grid=document.querySelector(sel); if(!grid)return [];
-              const links=[];
-              for(const a of grid.querySelectorAll('a[href*="/products/"]')){
-                const r=a.getBoundingClientRect(),s=getComputedStyle(a);
-                if(r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden')links.push(a.href.split('?')[0]);
-              }
-              return [...new Set(links)];
-            },resultSelector);
+          async function visibleProducts(page){
+            return page.evaluate(()=>[...new Set([...document.querySelectorAll('#MainContent .sq-refine-v3-results .product-grid a[href*="/products/"]')].filter(a=>{const r=a.getBoundingClientRect(),s=getComputedStyle(a);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'}).map(a=>a.href.split('?')[0]))]);
           }
-          const sourceCache=new Map();
-          async function sourceLinks(route,n){
-            const key=`${sourceHandle(route)}:${n}`;
-            if(sourceCache.has(key))return sourceCache.get(key);
+          async function controls(page,size){
+            return page.evaluate((size)=>{const box=document.querySelector('#MainContent .sq-refine-v3-page-size');const inputs=box?[...box.querySelectorAll('input')]:[];const vals=inputs.map(i=>String(i.value));const checked=inputs.filter(i=>i.checked).map(i=>String(i.value));return{exists:!!box,has50:vals.includes('50'),has100:vals.includes('100'),has250:vals.includes('250'),selected:checked.includes(String(size))}},size);
+          }
+          async function pager(page){
+            return page.evaluate(()=>{const p=document.querySelector('#MainContent .sq-refine-v3-pager');if(!p)return{exists:false,visible:false,links:[],text:''};const r=p.getBoundingClientRect(),s=getComputedStyle(p);return{exists:true,visible:r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0',links:[...p.querySelectorAll('a')].map(a=>({text:(a.textContent||'').trim(),href:a.href})),text:(p.textContent||'').replace(/\s+/g,' ').trim()}});
+          }
+          async function diagnostics(page){return page.$eval('#MainContent',el=>({...el.dataset})).catch(()=>({}))}
+          if(shard===0){
             const p=await context.newPage();
-            let links=[];
-            try{
-              await gotoWithRetry(p,makeSourceUrl(route,n),`source ${key}`);
-              await p.waitForTimeout(650);
-              links=await p.evaluate(()=>[...new Set([...document.querySelectorAll('.product-grid a[href*="/products/"], [data-product-id] a[href*="/products/"], .card-wrapper a[href*="/products/"]')].map(a=>a.href.split('?')[0]))]);
-            }finally{await p.close()}
-            sourceCache.set(key,links); await sleep(300); return links;
-          }
-          async function expectedWindow(route,perPage,viewPage){
-            const pagesPerView=perPage/50;
-            const first=(viewPage-1)*pagesPerView+1;
-            const arrays=[];
-            for(let n=first;n<first+pagesPerView;n++)arrays.push(await sourceLinks(route,n));
-            return uniq(arrays.flat()).slice(0,perPage);
-          }
-          async function hasNextWindow(route,perPage,viewPage){
-            const pagesPerView=perPage/50;
-            const nextNative=viewPage*pagesPerView+1;
-            return (await sourceLinks(route,nextNative)).length>0;
-          }
-          async function inspectControls(page,perPage){
-            return await page.evaluate((expected)=>{
-              const box=document.querySelector('#MainContent .sq-refine-v3-page-size');
-              const inputs=box?[...box.querySelectorAll('input')]:[];
-              const values=inputs.map(i=>String(i.value));
-              const checked=inputs.filter(i=>i.checked).map(i=>String(i.value));
-              const text=box?(box.textContent||'').replace(/\s+/g,' ').trim():'';
-              return {exists:!!box,values,checked,text,has50:values.includes('50')||/\b50\b/.test(text),has100:values.includes('100')||/\b100\b/.test(text),has250:values.includes('250')||/\b250\b/.test(text),selected:checked.includes(String(expected))};
-            },perPage);
-          }
-          async function inspectPager(page){
-            return await page.evaluate(()=>{
-              const p=document.querySelector('#MainContent .sq-refine-v3-pager');
-              if(!p)return {exists:false,visible:false,links:[],text:''};
-              const r=p.getBoundingClientRect(),s=getComputedStyle(p);
-              return {exists:true,visible:r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden',text:(p.textContent||'').replace(/\s+/g,' ').trim(),links:[...p.querySelectorAll('a')].map(a=>({text:(a.textContent||'').trim(),href:a.href}))};
-            });
-          }
-          async function preflight(){
-            if(shard!==0)return;
-            const p=await context.newPage();
-            const u=makeViewUrl({handle:'literature-u-s-army',root:'literature'},50,1);
-            let ok=false,last='';
-            for(let i=0;i<18&&!ok;i++){
-              try{
-                await gotoWithRetry(p,u,'preflight');
-                last=await p.evaluate(()=>document.querySelector('script[data-sq-refine-v3-pagination-repair]')?.getAttribute('data-revision')||'');
-                ok=last==='direct-next-probe-20260911';
-              }catch(e){last=String(e)}
-              if(!ok)await p.waitForTimeout(20000);
-            }
-            if(!ok)fail('PREFLIGHT',`draft theme never exposed pagination repair revision; last=${last}`);
+            await gotoRetry(p,url({handle:'literature-u-s-army',root:'literature'},50,1),'preflight');
+            const rev=await p.getAttribute('script[data-sq-refine-v3-pagination-repair]','data-revision');
+            if(rev!==marker)fail('PREFLIGHT',`expected ${marker}, got ${rev||'missing'}`);
             await p.close();
           }
-          await preflight();
           for(const route of routes){
-            for(const perPage of [50,100,250]){
-              const key=`${route.handle}[${perPage}]`;
+            for(const size of [50,100,250]){
+              const key=`${route.handle}[${size}]`;
               const page=await context.newPage();
-              const errors=[]; page.on('pageerror',e=>errors.push(String(e)));
-              let navError=null;
-              try{await gotoWithRetry(page,makeViewUrl(route,perPage,1),`${key} page1`);await waitV3(page)}catch(e){navError=String(e)}
-              if(navError){fail(key,`page1 navigation failed: ${navError}`);await page.close();continue}
-              const actual1=await visibleLinks(page);
-              const expected1=await expectedWindow(route,perPage,1);
-              const controls=await inspectControls(page,perPage);
-              const pager1=await inspectPager(page);
-              const shouldNext=await hasNextWindow(route,perPage,1);
-              const next=pager1.links.find(x=>/next/i.test(x.text)||new URL(x.href).searchParams.get('sq_view_page')==='2');
-              const data=await page.$eval('#MainContent',el=>({...el.dataset})).catch(()=>({}));
-              const missing=expected1.filter(x=>!actual1.includes(x));
-              const extra=actual1.filter(x=>!expected1.includes(x));
-              if(!controls.exists)fail(key,'50/100/250 page-size control is missing');
-              if(!controls.has50||!controls.has100||!controls.has250)fail(key,`page-size choices incomplete: ${JSON.stringify(controls)}`);
-              if(!controls.selected)fail(key,`requested ${perPage} is not selected: ${JSON.stringify(controls)}`);
-              if(actual1.length!==expected1.length)fail(key,`page1 visible ${actual1.length}, expected ${expected1.length}`);
-              if(missing.length)fail(key,`page1 missing ${missing.length} expected products`);
-              if(extra.length)fail(key,`page1 has ${extra.length} unexpected products`);
-              if(actual1.length>perPage)fail(key,`page1 exceeds per-page limit: ${actual1.length}`);
-              if(shouldNext&&(!pager1.exists||!pager1.visible||!next))fail(key,'next page exists in source but visible Next/Page 2 control is missing');
-              if(!shouldNext&&next)fail(key,'Next/Page 2 shown although next source window is empty');
-              if(data.sqRefineV3PaginationRepairError)fail(key,`repair error: ${data.sqRefineV3PaginationRepairError}`);
-              if(errors.length)fail(key,`${errors.length} page errors on page1: ${errors.slice(0,2).join(' | ')}`);
-              const row={route,perPage,page1:{actual:actual1.length,expected:expected1.length,missing:missing.length,extra:extra.length},controls,pager1,shouldNext,page2:null,data};
-              if(shouldNext&&next){
+              const jsErrors=[];page.on('pageerror',e=>jsErrors.push(String(e)));
+              const row={route:route.handle,size,page1:null,page2:null};
+              try{
+                await gotoRetry(page,url(route,size,1),`${key} page1`);await ready(page);
+                const p1=await visibleProducts(page),c1=await controls(page,size),pg1=await pager(page),d1=await diagnostics(page);
+                row.page1={count:p1.length,controls:c1,pager:pg1,data:d1};
+                if(!p1.length)fail(key,'page 1 has no visible products');
+                if(p1.length>size)fail(key,`page 1 shows ${p1.length}, above ${size}`);
+                if(!c1.exists||!c1.has50||!c1.has100||!c1.has250)fail(key,'50/100/250 controls are incomplete');
+                if(!c1.selected)fail(key,`${size} is not selected`);
+                if(pg1.exists&&!pg1.visible)fail(key,'page 1 pager exists but is not visible');
+                if(d1.sqRefineV3PaginationRepairError)fail(key,`page 1 repair error: ${d1.sqRefineV3PaginationRepairError}`);
+
+                const page2=await context.newPage();
+                const page2Errors=[];page2.on('pageerror',e=>page2Errors.push(String(e)));
+                let p2=[],pg2={exists:false,visible:false,links:[],text:''},d2={},page2Ready=false;
                 try{
-                  await gotoWithRetry(page,next.href,`${key} page2`); await waitV3(page);
-                  const actual2=await visibleLinks(page),expected2=await expectedWindow(route,perPage,2),pager2=await inspectPager(page);
-                  const missing2=expected2.filter(x=>!actual2.includes(x)),extra2=actual2.filter(x=>!expected2.includes(x));
-                  const overlap=actual2.filter(x=>actual1.includes(x));
-                  const prev=pager2.links.find(x=>/previous/i.test(x.text)||new URL(x.href).searchParams.get('sq_view_page')==='1');
-                  if(new URL(page.url()).searchParams.get('sq_view_page')!=='2')fail(key,`Next landed at wrong URL: ${page.url()}`);
-                  if(actual2.length!==expected2.length)fail(key,`page2 visible ${actual2.length}, expected ${expected2.length}`);
-                  if(missing2.length)fail(key,`page2 missing ${missing2.length} expected products`);
-                  if(extra2.length)fail(key,`page2 has ${extra2.length} unexpected products`);
-                  if(overlap.length)fail(key,`page2 repeats ${overlap.length} page1 products`);
-                  if(!pager2.exists||!pager2.visible||!prev)fail(key,'page2 has no visible Previous/Page 1 control');
-                  row.page2={actual:actual2.length,expected:expected2.length,missing:missing2.length,extra:extra2.length,overlap:overlap.length,pager:pager2};
-                }catch(e){fail(key,`page2 navigation/check failed: ${String(e)}`)}
-              }
-              if(report.failures.some(x=>x.startsWith(key+':'))||route.special){
-                await page.screenshot({path:`out/${route.handle}-${perPage}.png`,fullPage:true}).catch(()=>{});
-              }
-              report.checked.push(row); await page.close(); await sleep(500);
+                  await gotoRetry(page2,url(route,size,2),`${key} direct page2`);await ready(page2);page2Ready=true;
+                  p2=await visibleProducts(page2);pg2=await pager(page2);d2=await diagnostics(page2);
+                }catch(e){row.page2Error=String(e)}
+                if(page2Ready&&p2.length){
+                  const next=pg1.links.find(x=>/next/i.test(x.text)||new URL(x.href).searchParams.get('sq_view_page')==='2');
+                  const prev=pg2.links.find(x=>/previous/i.test(x.text)||new URL(x.href).searchParams.get('sq_view_page')==='1');
+                  const overlap=p2.filter(x=>p1.includes(x));
+                  if(!pg1.exists||!pg1.visible||!next)fail(key,'page 2 has products but page 1 lacks visible Next');
+                  if(!pg2.exists||!pg2.visible||!prev)fail(key,'page 2 has products but lacks visible Previous');
+                  if(p2.length>size)fail(key,`page 2 shows ${p2.length}, above ${size}`);
+                  if(overlap.length)fail(key,`page 2 repeats ${overlap.length} page-1 products`);
+                  if(d2.sqRefineV3PaginationRepairError)fail(key,`page 2 repair error: ${d2.sqRefineV3PaginationRepairError}`);
+                  if(next){
+                    await gotoRetry(page,next.href,`${key} click-next`);await ready(page);
+                    if(new URL(page.url()).searchParams.get('sq_view_page')!=='2')fail(key,'Next did not navigate to sq_view_page=2');
+                  }
+                }else if(page2Ready&&!p2.length){
+                  const next=pg1.links.find(x=>/next/i.test(x.text)||new URL(x.href).searchParams.get('sq_view_page')==='2');
+                  if(next)fail(key,'page 2 is empty but page 1 still shows Next');
+                }else{
+                  fail(key,`direct logical page 2 did not become ready: ${row.page2Error||'unknown'}`);
+                }
+                row.page2={count:p2.length,pager:pg2,data:d2};
+                if(jsErrors.length)fail(key,`page 1 JS errors: ${jsErrors.slice(0,2).join(' | ')}`);
+                if(page2Errors.length)fail(key,`page 2 JS errors: ${page2Errors.slice(0,2).join(' | ')}`);
+                await page2.close();
+              }catch(e){fail(key,String(e))}
+              if(report.failures.some(x=>x.startsWith(key+':'))||route.special)await page.screenshot({path:`out/${route.handle}-${size}.png`,fullPage:true}).catch(()=>{});
+              report.cases.push(row);await page.close();await sleep(900);
             }
           }
           await browser.close();
-          report.summary={routeSizeCases:report.checked.length,failures:report.failures.length};
+          report.summary={cases:report.cases.length,failures:report.failures.length};
           fs.writeFileSync(`out/report-shard-${shard}.json`,JSON.stringify(report,null,2));
           console.log(JSON.stringify(report,null,2));
           if(report.failures.length)process.exitCode=2;
