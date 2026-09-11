@@ -4,7 +4,7 @@ on:
   push:
     branches: [refine-restart-v3]
     paths:
-      - '.github/scripts/refine-v3-button01-visual-audit.mjs'
+      - '.github/scripts/refine-v3-button01-visual-audit-v2.mjs'
       - '.github/workflows/refine-v3-button01-visual-audit.yml'
   workflow_dispatch:
 
@@ -25,7 +25,7 @@ jobs:
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
       - name: Run button 01 forensic Chromium audit
-        run: node .github/scripts/refine-v3-button01-visual-audit.mjs
+        run: node .github/scripts/refine-v3-button01-visual-audit-v2.mjs
       - name: Upload visual evidence
         if: always()
         uses: actions/upload-artifact@v4
