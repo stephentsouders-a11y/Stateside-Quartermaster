@@ -1,7 +1,7 @@
 {% doc %}
 Dispatches the existing color/pattern engine to Uniforms, Body Armor, and Safety / Rescue / Climbing without changing State Guard.
 {% enddoc %}
-{% if request.page_type == 'collection' and collection.handle == 'body-armor-ballistic-protection' or request.page_type == 'collection' and collection.handle == 'safety-rescue-climbing' %}
+{% if request.page_type == 'collection' and collection.handle == 'safety-rescue-climbing' %}
 <script data-sq-color-root-shim>
 (function(){var u=new URL(location.href);if(!u.searchParams.has('sq_root')){window.__sqColorInjectedRoot=true;u.searchParams.set('sq_root','uniforms');history.replaceState(history.state,'',u.pathname+u.search+u.hash)}})();
 </script>
