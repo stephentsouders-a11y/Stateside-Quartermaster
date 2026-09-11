@@ -21,7 +21,7 @@ permissions:
 jobs:
   certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -30,68 +30,155 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Chromium certify Collectibles & Cards child route
+      - name: Chromium certify affected Refine Products routes
         run: |
           cat > certify.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'fs';
           fs.mkdirSync('out',{recursive:true});
           const theme='158561894555';
-          const root=`https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=${theme}`;
-          const child=`https://www.statesideqm.com/collections/collectibles-cards?sq_root=accessories-gifts-collectibles&preview_theme_id=${theme}`;
-          const report={root,child,runs:[],failures:[]};
-          for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
-            const browser=await chromium.launch({headless:true});
-            const page=await browser.newPage({viewport});
-            const errors=[];
-            page.on('pageerror',e=>errors.push(String(e)));
-            page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
-            await page.goto(child,{waitUntil:'domcontentloaded',timeout:90000});
-            await page.waitForTimeout(3000);
-            const audit=await page.evaluate(()=>{
-              const main=document.querySelector('#MainContent');
-              const side=main?.querySelector('.sq-refine-v3-sidebar');
-              const results=main?.querySelector('.sq-refine-v3-results');
-              const cards=[...(results?.querySelectorAll('.product-grid > *')||[])].filter(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'});
-              const sideRect=side?.getBoundingClientRect();
-              const resultsRect=results?.getBoundingClientRect();
-              const checked=[...(side?.querySelectorAll('input[type="checkbox"]:checked')||[])].map(i=>i.closest('label')?.innerText?.replace(/\s+/g,' ').trim()||i.value);
-              const columns=[...new Set(cards.slice(0,10).map(e=>Math.round(e.getBoundingClientRect().left)))].length;
-              return {hasSide:!!side,hasResults:!!results,sideTop:sideRect?.top??null,resultsTop:resultsRect?.top??null,sideLeft:sideRect?.left??null,resultsLeft:resultsRect?.left??null,checked,products:cards.length,columns,rescued:main?.querySelector('.sq-refine-v3-layout')?.dataset.sqRefineV3ChildRescued||null,duplicateVisibleGrids:[...document.querySelectorAll('#MainContent .product-grid')].filter(g=>{const r=g.getBoundingClientRect(),s=getComputedStyle(g);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'}).length};
-            });
-            await page.screenshot({path:`out/${device}-child.png`,fullPage:true});
-            report.runs.push({device,audit,errors});
-            if(!audit.hasSide) report.failures.push(`${device}: sidebar missing`);
-            if(!audit.hasResults) report.failures.push(`${device}: results missing`);
-            if(audit.products<1) report.failures.push(`${device}: no visible products`);
-            if(!audit.checked.some(x=>/Collectibles\s*&\s*Cards/i.test(x))) report.failures.push(`${device}: Collectibles & Cards not checked`);
-            if(device==='desktop'){
-              if(audit.sideTop===null||audit.resultsTop===null||Math.abs(audit.sideTop-audit.resultsTop)>80) report.failures.push(`desktop: sidebar pushed away from results (${audit.sideTop} vs ${audit.resultsTop})`);
-              if(audit.sideLeft===null||audit.resultsLeft===null||audit.sideLeft>=audit.resultsLeft) report.failures.push('desktop: sidebar is not left of results');
-              if(audit.columns!==3) report.failures.push(`desktop: expected 3 product columns, got ${audit.columns}`);
-            }
-            if(device==='mobile'&&audit.columns!==2) report.failures.push(`mobile: expected 2 product columns, got ${audit.columns}`);
-            if(audit.duplicateVisibleGrids!==1) report.failures.push(`${device}: expected one visible product grid, got ${audit.duplicateVisibleGrids}`);
-            if(errors.length) report.failures.push(`${device}: ${errors.length} browser console/page errors`);
-            await browser.close();
-          }
+          const base='https://www.statesideqm.com/collections/';
+          const routes=[
+            {handle:'accessories-gifts-collectibles'},
+            {handle:'collectibles-cards',root:'accessories-gifts-collectibles',checked:/Collectibles\s*&\s*Cards/i},
+            {handle:'thin-line'},
+            {handle:'tactical-gear',color:true},
+            {handle:'literature'},
+            {handle:'k9-dog-gear',color:true},
+            {handle:'patriotic-american-heritage',color:true},
+            {handle:'apparel',policy:'apparel'},
+            {handle:'child-safety-shop',color:true},
+            {handle:'watches'},
+            {handle:'morale-patches-tactical-id',color:true},
+            {handle:'safety-rescue-climbing',color:true},
+            {handle:'zippos-lighters-torches'},
+            {handle:'body-armor-ballistic-protection',color:true},
+            {handle:'armed-forces-gear',policy:'afg'},
+            {handle:'footwear-gloves-eyewear',color:true},
+            {handle:'sta-brite-insignia'},
+            {handle:'uniforms',color:true},
+            {handle:'flags-patriotic-decor',scrollWhite:true}
+          ];
+          const devices=[['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]];
+          const report={theme,routes:[],failures:[]};
+          const visible=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0};
           const browser=await chromium.launch({headless:true});
-          const page=await browser.newPage({viewport:{width:1440,height:1000}});
-          await page.goto(root,{waitUntil:'domcontentloaded',timeout:90000});
-          await page.waitForTimeout(2500);
-          const choice=page.locator('#MainContent .sq-refine-v3-sidebar label').filter({hasText:'Collectibles & Cards'}).first();
+          for(const [device,viewport] of devices){
+            const context=await browser.newContext({viewport});
+            for(const spec of routes){
+              const page=await context.newPage();
+              const errors=[];
+              page.on('pageerror',e=>errors.push(`pageerror: ${String(e)}`));
+              page.on('console',m=>{if(m.type()==='error')errors.push(`console: ${m.text()}`)});
+              await page.addInitScript(()=>{
+                window.__sqLegacyPaints=[];
+                const selectors=['[class*="button-tree"]','[class*="root-categories"]','[class*="subcategory"]','[class*="third-level"]','[class*="branch-grid"]','[class*="type-grid"]','[class*="program-tree"]','[class*="category-grid"]','[class*="navigation-grid"]'];
+                let pending=false;
+                const sample=()=>{
+                  pending=false;
+                  for(const sel of selectors){
+                    for(const el of document.querySelectorAll(sel)){
+                      if(el.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results'))continue;
+                      const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+                      if(r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0){
+                        window.__sqLegacyPaints.push({t:Math.round(performance.now()),selector:sel,text:(el.innerText||'').replace(/\s+/g,' ').trim().slice(0,100)});
+                        return;
+                      }
+                    }
+                  }
+                };
+                const schedule=()=>{if(!pending){pending=true;requestAnimationFrame(sample)}};
+                new MutationObserver(schedule).observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden']});
+                requestAnimationFrame(sample);
+                setTimeout(sample,100);setTimeout(sample,250);setTimeout(sample,500);setTimeout(sample,1000);setTimeout(sample,1800);
+              });
+              const params=new URLSearchParams({preview_theme_id:theme});
+              if(spec.root)params.set('sq_root',spec.root);
+              const url=`${base}${spec.handle}?${params}`;
+              let navigationError=null;
+              try{
+                await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
+                await page.waitForTimeout(3200);
+              }catch(e){navigationError=String(e)}
+              const audit=await page.evaluate(()=>{
+                const main=document.querySelector('#MainContent');
+                const side=main?.querySelector('.sq-refine-v3-sidebar');
+                const results=main?.querySelector('.sq-refine-v3-results');
+                const isVisible=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0};
+                const cards=[...(results?.querySelectorAll('.product-grid > *')||[])].filter(isVisible);
+                const grids=[...document.querySelectorAll('#MainContent .product-grid')].filter(isVisible);
+                const sideRect=side?.getBoundingClientRect(),resultsRect=results?.getBoundingClientRect();
+                const checked=[...(side?.querySelectorAll('input[type="checkbox"]:checked')||[])].map(i=>i.closest('label')?.innerText?.replace(/\s+/g,' ').trim()||i.value);
+                const summaries=[...(side?.querySelectorAll(':scope > details > summary')||[])].map(s=>s.textContent.replace(/\s+/g,' ').trim());
+                const columns=[...new Set(cards.slice(0,12).map(e=>Math.round(e.getBoundingClientRect().left)))].length;
+                return {
+                  hasSide:!!side,hasResults:!!results,products:cards.length,columns,visibleGrids:grids.length,checked,summaries,
+                  sideTop:sideRect?.top??null,resultsTop:resultsRect?.top??null,sideLeft:sideRect?.left??null,resultsLeft:resultsRect?.left??null,
+                  rescued:main?.querySelector('.sq-refine-v3-layout')?.dataset.sqRefineV3ChildRescued||null,
+                  legacyPaints:(window.__sqLegacyPaints||[]).slice(0,10),
+                  sideBackground:side?getComputedStyle(side).backgroundColor:null
+                };
+              });
+              if(spec.scrollWhite&&audit.hasSide){
+                await page.evaluate(()=>window.scrollTo(0,Math.min(1200,document.documentElement.scrollHeight-window.innerHeight)));
+                await page.waitForTimeout(500);
+                audit.sideBackgroundAfterScroll=await page.$eval('.sq-refine-v3-sidebar',e=>getComputedStyle(e).backgroundColor);
+              }
+              const row={device,handle:spec.handle,url:page.url(),navigationError,audit,errors};
+              report.routes.push(row);
+              const fail=m=>report.failures.push(`${device}/${spec.handle}: ${m}`);
+              if(navigationError)fail(`navigation failed: ${navigationError}`);
+              if(!audit.hasSide)fail('sidebar missing');
+              if(!audit.hasResults)fail('results missing');
+              if(audit.products<1)fail('no visible products');
+              if(audit.visibleGrids!==1)fail(`expected one visible product grid, got ${audit.visibleGrids}`);
+              if(device==='desktop'&&audit.hasSide&&audit.hasResults){
+                if(audit.sideTop===null||audit.resultsTop===null||Math.abs(audit.sideTop-audit.resultsTop)>80)fail(`sidebar pushed away from results (${audit.sideTop} vs ${audit.resultsTop})`);
+                if(audit.sideLeft===null||audit.resultsLeft===null||audit.sideLeft>=audit.resultsLeft)fail('sidebar is not left of results');
+                if(audit.columns!==3)fail(`expected 3 product columns, got ${audit.columns}`);
+              }
+              if(device==='mobile'&&audit.products>0&&audit.columns!==2)fail(`expected 2 product columns, got ${audit.columns}`);
+              if(spec.root&&audit.rescued!=='true')fail('child-route rescue marker missing');
+              if(spec.checked&&!audit.checked.some(x=>spec.checked.test(x)))fail('expected structural choice is not checked');
+              if(spec.color&&!audit.summaries.some(x=>/^Shop by Color \/ Pattern$/i.test(x)))fail('Shop by Color / Pattern missing');
+              if(spec.policy==='afg'){
+                const got=audit.summaries.map(x=>x.toLowerCase());
+                const allowed=['shop by branch','availability','type'];
+                if(got.length!==3||!allowed.every(x=>got.includes(x)))fail(`Armed Forces Gear filter policy wrong: ${audit.summaries.join(' | ')}`);
+              }
+              if(spec.policy==='apparel'){
+                const norm=audit.summaries.map(x=>x.toLowerCase());
+                const need=['shop by category','shop by type','shop by manufacturer / artist','availability'];
+                if(norm.length!==4||!need.every(x=>norm.includes(x)))fail(`Apparel filter policy wrong: ${audit.summaries.join(' | ')}`);
+              }
+              if(audit.legacyPaints.length)fail(`legacy navigation painted during load: ${JSON.stringify(audit.legacyPaints[0])}`);
+              if(spec.scrollWhite&&audit.sideBackgroundAfterScroll&&!/rgb\(255, 255, 255\)|rgba\(255, 255, 255, 1\)/.test(audit.sideBackgroundAfterScroll))fail(`sidebar changed from white after scroll: ${audit.sideBackgroundAfterScroll}`);
+              if(errors.length)fail(`${errors.length} browser console/page errors`);
+              const thisRouteFailed=report.failures.some(f=>f.startsWith(`${device}/${spec.handle}:`));
+              if(spec.root||thisRouteFailed)await page.screenshot({path:`out/${device}-${spec.handle}.png`,fullPage:true});
+              await page.close();
+            }
+            await context.close();
+          }
+          const clickContext=await browser.newContext({viewport:{width:1440,height:1000}});
+          const clickPage=await clickContext.newPage();
+          const root=`${base}accessories-gifts-collectibles?preview_theme_id=${theme}`;
+          await clickPage.goto(root,{waitUntil:'domcontentloaded',timeout:90000});
+          await clickPage.waitForTimeout(2500);
+          const choice=clickPage.locator('#MainContent .sq-refine-v3-sidebar label').filter({hasText:'Collectibles & Cards'}).first();
           if(await choice.count()){
             await choice.click();
-            await page.waitForLoadState('domcontentloaded');
-            await page.waitForTimeout(2000);
-            const u=page.url();
+            await clickPage.waitForLoadState('domcontentloaded');
+            await clickPage.waitForTimeout(2000);
+            const u=clickPage.url();
             report.clickUrl=u;
-            if(!u.includes('/collections/collectibles-cards')||!u.includes('sq_root=accessories-gifts-collectibles')) report.failures.push(`click path wrong: ${u}`);
-          } else report.failures.push('root: Collectibles & Cards choice not found');
+            if(!u.includes('/collections/collectibles-cards')||!u.includes('sq_root=accessories-gifts-collectibles'))report.failures.push(`click-path: wrong destination ${u}`);
+          }else report.failures.push('click-path: Collectibles & Cards choice not found on root');
+          await clickContext.close();
           await browser.close();
           fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
           console.log(JSON.stringify(report,null,2));
-          if(report.failures.length) process.exitCode=2;
+          if(report.failures.length)process.exitCode=2;
           EOF
           node certify.mjs
       - uses: actions/upload-artifact@v4
