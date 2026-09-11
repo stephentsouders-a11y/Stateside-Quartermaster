@@ -64,3 +64,4 @@ jobs:
           name: refine-v3-42-shard-${{ matrix.shard }}
           path: out
           retention-days: 14
+# current-head certification trigger 2026-09-11
