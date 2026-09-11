@@ -1,0 +1,28 @@
+name: Refine V3 Logo Merch grid diagnostic
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/refine-v3-logo-merch-grid-diagnostic.yml']
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Inspect Logo Merch product geometry
+        run: |
+          cat > test.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const b=await chromium.launch({headless:true}),p=await b.newPage({viewport:{width:1440,height:1000}}),u=new URL('https://www.statesideqm.com/collections/stateside-quartermaster-logo-merch');u.searchParams.set('preview_theme_id','158561894555');
+          let r;for(let i=0;i<5;i++){r=await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:80000}).catch(()=>null);if(r?.status()===200)break;await new Promise(x=>setTimeout(x,2500*(i+1)))}
+          await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:60000});await p.waitForSelector('.sq-refine-v3-sidebar',{state:'visible',timeout:20000});await p.waitForTimeout(1500);
+          const d=await p.evaluate(()=>{const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'},grids=[...document.querySelectorAll('.sq-refine-v3-results .product-grid')].filter(vis);return grids.map(g=>{const cards=[...g.querySelectorAll(':scope > .product-grid__item')].filter(x=>vis(x)&&x.querySelector('a[href*="/products/"]')),rr=cards.map(x=>x.getBoundingClientRect());return{classes:g.className,display:getComputedStyle(g).display,template:getComputedStyle(g).gridTemplateColumns,count:cards.length,row:rr.length?rr.filter(x=>Math.abs(x.y-rr[0].y)<4).length:0,widths:rr.slice(0,8).map(r=>Math.round(r.width)),xy:rr.slice(0,8).map(r=>[Math.round(r.x),Math.round(r.y)]),titles:cards.slice(0,8).map(x=>(x.textContent||'').replace(/\s+/g,' ').trim().slice(0,120))}})});console.log('LOGO MERCH',JSON.stringify(d));await b.close();if(!d.length)process.exit(1);
+          EOF
+          node test.mjs
