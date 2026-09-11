@@ -21,6 +21,46 @@
   pointer-events:none!important;
 }
 </style>
+{% if collection.handle == 'accessories-gifts-collectibles' %}
+<style data-sq-refine-v3-accessories-prepaint-isolation>
+/* Accessories has a legacy standalone manufacturer browser that is rendered by
+   the collection template before V3 builds the Refine Products sidebar. Keep it
+   out of first paint; manufacturer choices remain available inside V3. */
+#MainContent .sq-maker-browser{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+</style>
+<script data-sq-refine-v3-accessories-prepaint-guard>
+/* A late taxonomy helper can transiently insert an obsolete Shop by Branch group
+   into Accessories. Remove that direct V3 sidebar child in a MutationObserver
+   microtask, before the browser paints the mutation. */
+(function(){
+  if(window.__sqAccessoriesPrepaintGuard)return;
+  window.__sqAccessoriesPrepaintGuard=true;
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim().toLowerCase()}
+  function prune(root){
+    if(!root||!root.querySelectorAll)return;
+    root.querySelectorAll('#MainContent .sq-refine-v3-sidebar > details.sq-refine-v3-group').forEach(function(d){
+      var s=d.querySelector(':scope > summary');
+      if(s&&clean(s.textContent)==='shop by branch')d.remove();
+    });
+  }
+  var observer=new MutationObserver(function(records){
+    var relevant=false;
+    for(var i=0;i<records.length&&!relevant;i++){
+      var r=records[i];
+      if(r.type==='childList'&&r.addedNodes&&r.addedNodes.length)relevant=true;
+    }
+    if(relevant)prune(document);
+  });
+  observer.observe(document.documentElement,{childList:true,subtree:true});
+  prune(document);
+  document.addEventListener('DOMContentLoaded',function(){prune(document)},{once:true});
+})();
+</script>
+{% endif %}
 <script data-sq-refine-v3-legacy-isolation="{{ collection.handle | escape }}">
 window.__sqGlobalRefineAuthorityV2=true;
 window.__sqGlobalRefineVisibleSurfaceFix=true;
