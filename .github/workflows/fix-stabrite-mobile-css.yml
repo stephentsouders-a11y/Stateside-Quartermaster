@@ -1,0 +1,32 @@
+name: Fix Sta-Brite mobile CSS syntax
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-stabrite-mobile-css.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Repair exact malformed mobile grid rule
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('snippets/sq-sta-brite-refine-root-v2.liquid')
+          s=p.read_text()
+          bad='grid-template-columns:repeat(2,minmax(0,1fr);gap:12px'
+          good='grid-template-columns:repeat(2,minmax(0,1fr));gap:12px'
+          if bad not in s:
+              raise SystemExit('Expected malformed rule not found; refusing broad edit')
+          s=s.replace(bad,good,1)
+          p.write_text(s)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snippets/sq-sta-brite-refine-root-v2.liquid
+          git commit -m 'Fix Sta-Brite mobile grid CSS syntax'
+          git push
