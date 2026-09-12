@@ -1,0 +1,36 @@
+name: Sep12 spinner source diagnostic
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-spinner-source-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Trace unresolved loading text
+        run: |
+          cat > diag.mjs <<'EOF'
+          import { chromium } from 'playwright'; import fs from 'fs';
+          const base='https://www.statesideqm.com',theme='158561894555';
+          const routes=['medical-first-aid','armyng-vietnam','shield-republic-apparel','space-force-insignia-ranks-awards','literature-field-manuals-reference-guides','packs-pouches-carry-gear-molle-pouches-organizers','pew-pews'];
+          const browser=await chromium.launch({headless:true});const rows=[];
+          for(const h of routes){const page=await browser.newPage({viewport:{width:1440,height:1000}});const u=new URL('/collections/'+h,base);u.searchParams.set('preview_theme_id',theme);const rec={handle:h,status:null,nodes:[],scripts:[],requests:[]};page.on('response',r=>{if(r.status()>=400||/collections\/.+(products\.json|view=|section_id)/.test(r.url()))rec.requests.push({status:r.status(),url:r.url()})});try{const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});rec.status=r?.status()??null;await page.waitForTimeout(5000);rec.nodes=await page.evaluate(()=>{const rx=/checking items|loading items|counting items|building the customer-facing product tree|organizing .* products/i;return [...document.querySelectorAll('#MainContent *')].filter(e=>e.children.length===0&&rx.test((e.textContent||'').trim())).slice(0,60).map(e=>{let p=e;const chain=[];for(let i=0;i<5&&p;i++,p=p.parentElement)chain.push({tag:p.tagName,cls:p.className||'',id:p.id||'',attrs:[...p.attributes].filter(a=>a.name.startsWith('data-sq')).map(a=>[a.name,a.value])});return{text:(e.textContent||'').trim(),chain}})});rec.scripts=await page.evaluate(()=>{const needles=/checking items|loading items|counting items|building the customer-facing product tree|organizing/i;return [...document.querySelectorAll('script:not([src])')].map((s,i)=>({i,mark:[...s.attributes].filter(a=>a.name.startsWith('data-sq')).map(a=>a.name+'='+a.value).join(' '),text:s.textContent||''})).filter(x=>needles.test(x.text)).map(x=>({i:x.i,mark:x.mark,excerpt:x.text.match(/.{0,250}(checking items|loading items|counting items|building the customer-facing product tree|organizing).{0,500}/i)?.[0]||x.text.slice(0,800)})).slice(0,30)});await page.screenshot({path:`${h}.png`,fullPage:false}).catch(()=>{})}catch(e){rec.error=String(e)}rows.push(rec);await page.close();await new Promise(r=>setTimeout(r,2500))}await browser.close();fs.mkdirSync('out',{recursive:true});fs.writeFileSync('out/results.json',JSON.stringify(rows,null,2));for(const r of rows)console.log('\n### '+r.handle+' '+r.status+'\n'+JSON.stringify({nodes:r.nodes,scripts:r.scripts,requests:r.requests.slice(-30)},null,2));
+          EOF
+          node diag.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep12-spinner-source
+          path: |
+            out
+            *.png
+          retention-days: 7
