@@ -2,9 +2,11 @@
   "status": "FAIL",
   "theme": "158561894555",
   "publication": "UNPUBLISHED",
-  "sourceCommit": "9ed47d9e52357f9357adfb72d118d92b66baf143",
-  "started": "2026-09-11T20:09:45.142Z",
-  "checks": [],
+  "sourceCommit": "37640d3b6c075c28feef82281a7ac5719062d4d7",
+  "started": "2026-09-12T01:38:39.333Z",
+  "checks": [
+    "Desktop exact heading, 10 canonical tag-backed options, one sidebar, unique baseline grid"
+  ],
   "pageErrors": [],
   "tests": [],
   "browserVersion": "140.0.7339.16",
@@ -15,7 +17,7 @@
     "Shop by Manufacturers",
     "Availability"
   ],
-  "mode": "tags-v3-native",
+  "mode": "native-v4",
   "options": [
     {
       "label": "Black",
@@ -53,19 +55,9 @@
       "handle": "sq-color-pattern-orange"
     },
     {
-      "label": "Other Color / Pattern",
-      "tag": "SQ Color/Pattern: Other Color / Pattern",
-      "handle": "sq-color-pattern-other-color-pattern"
-    },
-    {
       "label": "Pink",
       "tag": "SQ Color/Pattern: Pink",
       "handle": "sq-color-pattern-pink"
-    },
-    {
-      "label": "Purple",
-      "tag": "SQ Color/Pattern: Purple",
-      "handle": "sq-color-pattern-purple"
     },
     {
       "label": "Red",
@@ -76,14 +68,10 @@
       "label": "White",
       "tag": "SQ Color/Pattern: White",
       "handle": "sq-color-pattern-white"
-    },
-    {
-      "label": "Yellow / Gold",
-      "tag": "SQ Color/Pattern: Yellow / Gold",
-      "handle": "sq-color-pattern-yellow-gold"
     }
   ],
-  "failure": "AssertionError [ERR_ASSERTION]: Exact canonical options and order\n+ actual - expected\n... Skipped lines\n\n  [\n    'Black',\n    'Blue',\n    'Brown / Tan',\n    'Camouflage',\n...\n    'Orange',\n+   'Other Color / Pattern',\n    'Pink',\n+   'Purple',\n    'Red',\n    'White',\n+   'Yellow / Gold'\n  ]\n\n    at file:///tmp/morale-verify/test.mjs:50:10",
-  "failureUrl": "https://www.statesideqm.com/collections/morale-patches-tactical-id",
-  "finished": "2026-09-11T20:09:58.079Z"
+  "baselineVisibleCount": 50,
+  "failure": "AssertionError [ERR_ASSERTION]: Draft preview theme retained\n+ actual - expected\n\n+ null\n- '158561894555'\n\n    at select (file:///tmp/morale-verify/test.mjs:36:429)\n    at async file:///tmp/morale-verify/test.mjs:48:64",
+  "failureUrl": "https://www.statesideqm.com/collections/morale-patches-tactical-id/sq-color-pattern-gray",
+  "finished": "2026-09-12T01:39:06.938Z"
 }
