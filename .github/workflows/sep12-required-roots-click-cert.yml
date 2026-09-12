@@ -1,0 +1,92 @@
+name: Sep12 required roots click certification
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-required-roots-click-cert.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        route:
+          - home
+          - accessories-gifts-collectibles
+          - airsoft-milsim
+          - apparel
+          - armed-forces-gear
+          - art
+          - body-armor-ballistic-protection
+          - literature
+          - child-safety-shop
+          - dive-scuba
+          - firearm-accessories
+          - first-aid-medical-ifak
+          - flags-patriotic-decor
+          - flashlights-lighting
+          - footwear-gloves-eyewear
+          - k9-dog-gear
+          - knives-axes-cutlery
+          - morale-patches-tactical-id
+          - outdoor-preparedness-gear
+          - patriotic-american-heritage
+          - safety-rescue-climbing
+          - sta-brite-insignia
+          - tactical-gear
+          - thin-line
+          - uniforms
+          - watches
+          - zippos-lighters-torches
+          - state-guard-series
+          - state-guard-series-ohio
+          - stateside-quartermaster-logo-merch
+          - army-national-guard-series
+          - air-national-guard-series
+          - products-built-for-the-line-u-s-army
+          - products-built-for-the-line-u-s-navy
+          - products-built-for-the-line-u-s-air-force
+          - products-built-for-the-line-u-s-marine-corps
+          - products-built-for-the-line-u-s-coast-guard
+          - products-built-for-the-line-u-s-space-force
+          - rotc-series
+          - jrotc-series
+          - military-schools-academies
+          - law-enforcement-corrections
+          - firefighting-ems-search-rescue
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Click every required-root navigation control in candidate Chromium
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          ROUTE: ${{ matrix.route }}
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';import fs from 'fs';
+          const BASE=process.env.BASE,THEME=process.env.THEME,route=process.env.ROUTE,OUT='out';fs.mkdirSync(`${OUT}/video`,{recursive:true});fs.mkdirSync(`${OUT}/screens`,{recursive:true});
+          const candidate=raw=>{const u=new URL(raw,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()};
+          const base=candidate(route==='home'?'/':`/collections/${route}`);
+          async function settle(page){await page.waitForLoadState('domcontentloaded').catch(()=>{});await page.locator('body').waitFor({state:'attached',timeout:15000});await page.waitForTimeout(500)}
+          const browser=await chromium.launch({headless:true}),ctx=await browser.newContext({viewport:{width:1440,height:1000},recordVideo:{dir:`${OUT}/video`,size:{width:960,height:667}}}),page=await ctx.newPage();page.setDefaultTimeout(10000);page.setDefaultNavigationTimeout(30000);const rec={route,base,controls:[],errors:[]};page.on('pageerror',e=>rec.errors.push(String(e.message||e)));
+          try{const r=await page.goto(base,{waitUntil:'domcontentloaded'});rec.status=r?.status()??null;await settle(page);rec.title=await page.title();rec.h1=((await page.locator('h1').first().textContent().catch(()=>''))||'').trim();rec.sidebarCount=await page.locator('#MainContent .sq-refine-v3-sidebar:visible,#MainContent .sq-global-refine-sidebar:visible').count().catch(()=>0);rec.horizontalFacets=await page.locator('#MainContent .facets-block-wrapper--horizontal:visible').count().catch(()=>0);rec.loading=await page.locator('text=/loading items|checking items|building the customer-facing product tree|organizing .* products/i').count().catch(()=>0);rec.brokenImages=await page.locator('#MainContent img').evaluateAll(xs=>xs.filter(x=>x.complete&&x.naturalWidth===0).map(x=>x.alt||x.src).slice(0,20)).catch(()=>[]);rec.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+4).catch(()=>false);
+            const controls=await page.locator('#MainContent a:visible,#MainContent button:visible').evaluateAll(es=>es.map((e,i)=>({i,tag:e.tagName,label:(e.getAttribute('aria-label')||e.textContent||'').replace(/\s+/g,' ').trim().slice(0,180),href:e.tagName==='A'?e.href:'',disabled:!!e.disabled||e.getAttribute('aria-disabled')==='true',cls:typeof e.className==='string'?e.className:''})).filter(x=>x.label||x.href).filter(x=>!/add to cart|quick add|buy now|sold out/i.test(x.label)).slice(0,350));rec.controlCount=controls.length;
+            for(const c of controls){const out={label:c.label,tag:c.tag,href:c.href,outcome:'PASS'};try{await page.goto(base,{waitUntil:'domcontentloaded'});await settle(page);let loc;if(c.tag==='A'&&c.href){loc=page.locator(`#MainContent a[href="${CSS.escape(new URL(c.href).pathname+new URL(c.href).search)}"],#MainContent a[href="${CSS.escape(c.href)}"]`).first();if(!await loc.count()){loc=page.locator('#MainContent a:visible').filter({hasText:c.label}).first()}}else{loc=page.locator('#MainContent button:visible').filter({hasText:c.label}).first()}if(!await loc.count()){out.outcome='FAIL_NOT_FOUND';rec.controls.push(out);continue}if(await loc.isDisabled().catch(()=>false)){out.outcome='PASS_DISABLED';rec.controls.push(out);continue}await loc.scrollIntoViewIfNeeded();const before=page.url();await loc.click({timeout:8000});await page.waitForTimeout(600);out.after=page.url();const txt=((await page.locator('body').innerText().catch(()=>''))||'').slice(0,6000),title=await page.title();if(/something went wrong|internal server error|page not found|404 not found/i.test(title+' '+txt))out.outcome='FAIL_ERROR_PAGE';else if(c.tag==='A'&&c.href&&out.after===before)out.outcome='FAIL_NO_NAV';}catch(e){out.outcome='FAIL_EXCEPTION';out.error=String(e)}rec.controls.push(out);fs.writeFileSync(`${OUT}/progress.json`,JSON.stringify(rec,null,2))}
+            await page.goto(base,{waitUntil:'domcontentloaded'}).catch(()=>{});await settle(page);await page.screenshot({path:`${OUT}/screens/${route}.png`,fullPage:true}).catch(()=>{});
+          }catch(e){rec.fatal=String(e)}
+          rec.failedControls=rec.controls.filter(x=>x.outcome.startsWith('FAIL_')).length;rec.fail=rec.status!==200||rec.loading>0||rec.brokenImages.length>0||rec.overflow||rec.failedControls>0||!!rec.fatal||(route==='state-guard-series'&&rec.sidebarCount>0)||(route==='accessories-gifts-collectibles'&&rec.sidebarCount>1)||rec.horizontalFacets>0;fs.writeFileSync(`${OUT}/result.json`,JSON.stringify(rec,null,2));console.log(JSON.stringify({route,status:rec.status,controls:rec.controlCount,failedControls:rec.failedControls,sidebarCount:rec.sidebarCount,horizontalFacets:rec.horizontalFacets,loading:rec.loading,brokenImages:rec.brokenImages.length,overflow:rec.overflow,fail:rec.fail},null,2));const v=page.video();await ctx.close();if(v){try{const p=await v.path();fs.renameSync(p,`${OUT}/video/${route}.webm`)}catch{}}await browser.close();if(rec.fail)process.exitCode=2;
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: required-root-${{ matrix.route }}
+          path: out
+          retention-days: 7
