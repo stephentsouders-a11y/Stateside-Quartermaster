@@ -1,12 +1,5 @@
 name: Child Safety exhaustive Refine Products Chromium certification
-on:
-  push:
-    paths:
-      - '.github/workflows/child-safety-refine-exhaustive.yml'
-      - 'snippets/sq-refine-v3*.liquid'
-      - 'snippets/sq-refine-taxonomy-panel.liquid'
-      - 'layout/theme.liquid'
-  workflow_dispatch:
+on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
@@ -32,85 +25,123 @@ jobs:
           const ROOT='child-safety-shop';
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
           const norm=s=>String(s||'').replace(/\s+/g,' ').trim().toLowerCase();
+          const report={theme:THEME,root:ROOT,rootProducts:[],discovered:[],controls:[],failures:[],consoleErrors:[],rateLimitRetries:0};
           const browser=await chromium.launch({headless:true});
           const context=await browser.newContext({viewport:{width:1440,height:1100}});
-          const report={theme:THEME,root:ROOT,rootProducts:[],controls:[],failures:[],consoleErrors:[]};
-          const rootProducts=await context.request.get(`${BASE}/collections/${ROOT}/products.json?limit=250`).then(r=>r.json()).then(j=>j.products||[]);
-          const rootHandles=new Set(rootProducts.map(p=>p.handle));
-          report.rootProducts=rootProducts.map(p=>({handle:p.handle,title:p.title,vendor:p.vendor,tags:p.tags||[],available:(p.variants||[]).some(v=>v.available)}));
-          const rootUrl=()=>`${BASE}/collections/${ROOT}?preview_theme_id=${THEME}`;
+          const page=await context.newPage();
+          page.on('console',m=>{if(m.type()==='error'&&!/shop\.app|monorail|analytics|favicon/i.test((m.location()?.url||'')+' '+m.text()))report.consoleErrors.push(m.text())});
+          page.on('pageerror',e=>report.consoleErrors.push(String(e)));
+
+          async function requestJson(url,tries=6){
+            let last='';
+            for(let i=0;i<tries;i++){
+              try{
+                const r=await context.request.get(url,{timeout:30000});
+                if(r.status()===429){report.rateLimitRetries++;await sleep(3000*(i+1));continue}
+                if(!r.ok()){last=`HTTP ${r.status()}`;await sleep(1500*(i+1));continue}
+                return await r.json();
+              }catch(e){last=String(e);await sleep(1500*(i+1))}
+            }
+            throw new Error(`request failed ${url}: ${last}`);
+          }
           async function productMeta(handle){
-            try{const r=await context.request.get(`${BASE}/products/${handle}.js`);return r.ok()?await r.json():null}catch{return null}
+            try{return await requestJson(`${BASE}/products/${handle}.js`,4)}catch{return null}
           }
-          async function openRoot(page){
-            await page.goto(rootUrl(),{waitUntil:'domcontentloaded',timeout:90000});
-            await page.waitForTimeout(2200);
-            await page.locator('#MainContent .sq-refine-v3-sidebar').waitFor({state:'attached',timeout:20000});
-            await page.locator('#MainContent .sq-refine-v3-results').waitFor({state:'attached',timeout:20000});
+          async function openRoot(){
+            const url=`${BASE}/collections/${ROOT}?preview_theme_id=${THEME}`;
+            let last='';
+            for(let i=0;i<6;i++){
+              try{
+                const r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
+                if(r?.status()===429){report.rateLimitRetries++;await sleep(4000*(i+1));continue}
+                if(r && !r.ok()){last=`HTTP ${r.status()}`;await sleep(2500*(i+1));continue}
+                await page.waitForTimeout(1800);
+                await page.locator('#MainContent .sq-refine-v3-sidebar').waitFor({state:'attached',timeout:20000});
+                await page.locator('#MainContent .sq-refine-v3-results').waitFor({state:'attached',timeout:20000});
+                return;
+              }catch(e){last=String(e);await sleep(2500*(i+1))}
+            }
+            throw new Error(`unable to open Child Safety preview after retries: ${last}`);
           }
-          async function visibleHandles(page){
+          async function visibleHandles(){
             return page.locator('#MainContent .sq-refine-v3-results a[href*="/products/"]').evaluateAll(as=>[...new Set(as.filter(a=>{const r=a.getBoundingClientRect(),s=getComputedStyle(a);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'}).map(a=>{try{return new URL(a.href).pathname.match(/^\/products\/([^/?#]+)/)?.[1]}catch{return null}}).filter(Boolean))]);
           }
-          const page=await context.newPage();
-          page.on('console',m=>{if(m.type()==='error'&&!/shop\.app|monorail|analytics/i.test((m.location()?.url||'')+' '+m.text()))report.consoleErrors.push(m.text())});
-          page.on('pageerror',e=>report.consoleErrors.push(String(e)));
-          await openRoot(page);
-          const baseHandles=await visibleHandles(page);
+          async function readControls(){
+            return page.locator('#MainContent .sq-refine-v3-sidebar input').evaluateAll(els=>els.map(el=>{
+              const label=el.closest('label');const details=el.closest('details');const summary=details?.querySelector(':scope > summary');
+              return {type:el.type||'',name:el.name||'',value:el.value||'',label:(label?.innerText||el.getAttribute('aria-label')||el.value||'').replace(/\s+/g,' ').trim(),group:(summary?.innerText||'').replace(/\s+/g,' ').trim(),disabled:el.disabled,checked:el.checked};
+            }).filter(x=>!x.disabled&&['checkbox','radio'].includes(x.type)));
+          }
+          async function findControl(spec){
+            const all=page.locator('#MainContent .sq-refine-v3-sidebar input');
+            for(let i=0;i<await all.count();i++){
+              const el=all.nth(i);
+              const info=await el.evaluate(e=>{const l=e.closest('label'),d=e.closest('details'),s=d?.querySelector(':scope > summary');return {type:e.type,name:e.name||'',value:e.value||'',label:(l?.innerText||e.getAttribute('aria-label')||e.value||'').replace(/\s+/g,' ').trim(),group:(s?.innerText||'').replace(/\s+/g,' ').trim()}});
+              if(info.type===spec.type&&info.name===spec.name&&info.value===spec.value&&info.label===spec.label&&info.group===spec.group)return el;
+            }
+            return null;
+          }
+
+          const rootData=await requestJson(`${BASE}/collections/${ROOT}/products.json?limit=250`);
+          const rootProducts=rootData.products||[];
+          const rootHandles=new Set(rootProducts.map(p=>p.handle));
+          report.rootProducts=rootProducts.map(p=>({handle:p.handle,title:p.title,vendor:p.vendor,tags:p.tags||[],available:(p.variants||[]).some(v=>v.available)}));
+          if(rootHandles.size!==5)report.failures.push(`expected 5 Child Safety products, collection API returned ${rootHandles.size}`);
+
+          await openRoot();
+          const baseHandles=await visibleHandles();
           if(baseHandles.length!==rootHandles.size)report.failures.push(`root visible product count ${baseHandles.length} != collection count ${rootHandles.size}`);
           for(const h of baseHandles)if(!rootHandles.has(h))report.failures.push(`foreign product on root: ${h}`);
-          const controls=await page.locator('#MainContent .sq-refine-v3-sidebar input, #MainContent .sq-refine-v3-sidebar button').evaluateAll(els=>els.map((el,index)=>{
-            if(el.tagName==='BUTTON')return {index,kind:'button',type:el.type||'',name:el.name||'',value:el.value||'',label:(el.innerText||el.textContent||'').replace(/\s+/g,' ').trim(),disabled:el.disabled};
-            const label=el.closest('label');const details=el.closest('details');const summary=details?.querySelector(':scope > summary');
-            return {index,kind:'input',type:el.type||'',name:el.name||'',value:el.value||'',label:(label?.innerText||el.getAttribute('aria-label')||el.value||'').replace(/\s+/g,' ').trim(),group:(summary?.innerText||'').replace(/\s+/g,' ').trim(),disabled:el.disabled,checked:el.checked,dataset:{...el.dataset}};
-          }).filter(x=>!x.disabled && ((x.kind==='input'&&['checkbox','radio'].includes(x.type))||(x.kind==='button'&&/clear|reset/i.test(x.label)))));
-          report.discovered=controls;
-          for(const spec of controls){
-            if(spec.kind==='button')continue;
-            await openRoot(page);
-            const locator=page.locator('#MainContent .sq-refine-v3-sidebar input').filter({has:page.locator('xpath=..')});
-            const all=page.locator('#MainContent .sq-refine-v3-sidebar input');
-            const count=await all.count();let target=null;
-            for(let i=0;i<count;i++){
-              const el=all.nth(i);const info=await el.evaluate(e=>{const l=e.closest('label'),d=e.closest('details'),s=d?.querySelector(':scope > summary');return {type:e.type,name:e.name||'',value:e.value||'',label:(l?.innerText||e.getAttribute('aria-label')||e.value||'').replace(/\s+/g,' ').trim(),group:(s?.innerText||'').replace(/\s+/g,' ').trim()}});
-              if(info.type===spec.type&&info.name===spec.name&&info.value===spec.value&&info.label===spec.label&&info.group===spec.group){target=el;break}
-            }
+          report.discovered=await readControls();
+          const requiredGroups=['shop by category','shop by type','shop by color / pattern','shop by manufacturers','availability'];
+          const groups=new Set(report.discovered.map(c=>norm(c.group)));
+          for(const g of requiredGroups)if(!groups.has(g))report.failures.push(`missing required refine group: ${g}`);
+
+          for(const spec of report.discovered){
+            await openRoot();
+            const target=await findControl(spec);
             if(!target){report.failures.push(`control vanished: ${spec.group} / ${spec.label}`);continue}
-            const detail=target.locator('xpath=ancestor::details[1]');if(await detail.count())await detail.evaluate(d=>d.open=true);
+            const detail=target.locator('xpath=ancestor::details[1]');
+            if(await detail.count())await detail.evaluate(d=>d.open=true);
             await target.scrollIntoViewIfNeeded();
-            const before=page.url();
-            if(spec.type==='radio'&&spec.checked){report.controls.push({...spec,skipped:'default radio already selected'});continue}
+            if(spec.type==='radio'&&spec.checked){report.controls.push({...spec,passed:true,skipped:'default radio already selected'});continue}
             await target.check({force:true,timeout:10000}).catch(async()=>target.click({force:true,timeout:10000}));
-            await page.waitForLoadState('domcontentloaded').catch(()=>{});await sleep(1400);
-            const after=page.url();
-            const handles=await visibleHandles(page).catch(()=>[]);
-            const row={...spec,before,after,visible:handles,passed:true,reasons:[]};
+            await page.waitForLoadState('domcontentloaded').catch(()=>{});
+            await sleep(1200);
+            const handles=await visibleHandles().catch(()=>[]);
+            const row={...spec,url:page.url(),visible:handles,passed:true,reasons:[]};
             if(!handles.length){row.passed=false;row.reasons.push('no visible products')}
             for(const h of handles)if(!rootHandles.has(h)){row.passed=false;row.reasons.push(`foreign product ${h}`)}
             const g=norm(spec.group),label=norm(spec.label),value=String(spec.value||'');
             if(/category|type|subcategory|branch/.test(g)){
-              let child='';try{const u=new URL(after);const m=u.pathname.match(/^\/collections\/([^/?#]+)/);if(m&&m[1]!==ROOT)child=m[1]}catch{}
-              if(!child && /^sq-/.test(value))child=value;
+              let child='';
+              try{const u=new URL(page.url());const m=u.pathname.match(/^\/collections\/([^/?#]+)/);if(m&&m[1]!==ROOT)child=m[1]}catch{}
+              if(!child&&/^sq-/.test(value))child=value;
               if(child){
-                try{const r=await context.request.get(`${BASE}/collections/${child}/products.json?limit=250`);if(r.ok()){const j=await r.json(),allowed=new Set((j.products||[]).map(p=>p.handle));for(const h of handles)if(!allowed.has(h)){row.passed=false;row.reasons.push(`product ${h} not in structural destination ${child}`)}}}catch{}
+                try{const j=await requestJson(`${BASE}/collections/${child}/products.json?limit=250`,4);const allowed=new Set((j.products||[]).map(p=>p.handle));for(const h of handles)if(!allowed.has(h)){row.passed=false;row.reasons.push(`${h} not in structural destination ${child}`)}}catch(e){row.passed=false;row.reasons.push(`unable to validate destination ${child}: ${e}`)}
               }
             }
             if(/manufacturer|artist|brand/.test(g)){
               const expected=norm(value||spec.label.replace(/\(\d+\).*$/,''));
-              for(const h of handles){const p=await productMeta(h);if(p&&norm(p.vendor)!==expected){row.passed=false;row.reasons.push(`${h} vendor ${p.vendor} != ${expected}`)}}
+              for(const h of handles){const p=await productMeta(h);if(!p){row.passed=false;row.reasons.push(`unable to load ${h}`);continue}if(norm(p.vendor)!==expected){row.passed=false;row.reasons.push(`${h} vendor ${p.vendor} != ${expected}`)}}
             }
             if(/availability/.test(g)&&/available|in stock/.test(label+' '+norm(value))){
               for(const h of handles){const p=await productMeta(h);if(p&&!p.available){row.passed=false;row.reasons.push(`${h} is not available`)}}
             }
             if(/color|pattern|camo/.test(g)){
               const expected=norm(value||spec.label.replace(/\(\d+\).*$/,''));
-              for(const h of handles){const p=await productMeta(h);if(!p)continue;const hay=norm([...(p.tags||[]),...(p.options||[]).flatMap(o=>o.values||[]),...(p.variants||[]).flatMap(v=>[v.option1,v.option2,v.option3])].join(' | '));if(expected&& !hay.includes(expected)){row.passed=false;row.reasons.push(`${h} lacks color/pattern ${expected}`)}}
+              for(const h of handles){const p=await productMeta(h);if(!p)continue;const hay=norm([...(p.tags||[]),...(p.options||[]).flatMap(o=>o.values||[]),...(p.variants||[]).flatMap(v=>[v.option1,v.option2,v.option3])].join(' | '));if(expected&&!hay.includes(expected)){row.passed=false;row.reasons.push(`${h} lacks color/pattern ${expected}`)}}
             }
             if(!row.passed)report.failures.push(`${spec.group} / ${spec.label}: ${row.reasons.join('; ')}`);
             report.controls.push(row);
           }
-          await openRoot(page);
+
+          await openRoot();
           const clear=page.locator('#MainContent .sq-refine-v3-sidebar button').filter({hasText:/clear|reset/i}).first();
-          if(await clear.count()){await clear.click({force:true}).catch(()=>{});await sleep(700);const h=await visibleHandles(page);if(h.length!==rootHandles.size)report.failures.push(`clear/reset restored ${h.length}, expected ${rootHandles.size}`)}
+          if(await clear.count()){
+            await clear.click({force:true}).catch(()=>{});await sleep(700);
+            const h=await visibleHandles();if(h.length!==rootHandles.size)report.failures.push(`clear/reset restored ${h.length}, expected ${rootHandles.size}`);
+          }
           await page.screenshot({path:'out/child-safety-final.png',fullPage:true});
           report.consoleErrors=[...new Set(report.consoleErrors)];
           if(report.consoleErrors.length)report.failures.push(`${report.consoleErrors.length} browser console/page errors`);
