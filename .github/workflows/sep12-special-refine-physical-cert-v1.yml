@@ -1,0 +1,60 @@
+name: Sep12 special Refine physical certificate v1
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-special-refine-physical-cert-v1.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Physically certify special Refine controls
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > special-refine.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const BASE=process.env.BASE,THEME=process.env.THEME,OUT='out';fs.mkdirSync(`${OUT}/video`,{recursive:true});fs.mkdirSync(`${OUT}/screens`,{recursive:true});
+          const cases=[
+            {route:'state-guard-series-ohio',selector:'#MainContent .sqsg-refine-choice input[type=checkbox]',row:'.sqsg-refine-choice',sidebar:'#MainContent .sqsg-refine-sidebar:visible'},
+            {route:'sta-brite-insignia',selector:'#MainContent .sq-stabrite-refine__choice input[type=checkbox]',row:'.sq-stabrite-refine__choice',sidebar:'#MainContent .sq-global-refine-sidebar:visible'}
+          ];
+          const browser=await chromium.launch({headless:true}),results=[];
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const candidate=route=>{const u=new URL('/collections/'+route,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()};
+          async function center(page,loc){await loc.scrollIntoViewIfNeeded();const b=await loc.boundingBox();if(!b)throw new Error('no bounding box');await page.mouse.click(b.x+b.width/2,b.y+b.height/2)}
+          async function load(page,route){const r=await page.goto(candidate(route),{waitUntil:'domcontentloaded',timeout:40000});await page.locator('#MainContent').waitFor({state:'attached',timeout:15000});await sleep(3200);return r}
+          for(const cfg of cases){
+            const ctx=await browser.newContext({viewport:{width:1365,height:900},recordVideo:{dir:`${OUT}/video`,size:{width:960,height:633}}}),page=await ctx.newPage();page.setDefaultTimeout(18000);const rec={route:cfg.route,checks:[],failures:[]};
+            try{
+              const rr=await load(page,cfg.route);rec.status=rr.status();rec.sidebarCount=await page.locator(cfg.sidebar).count();rec.controlCount=await page.locator(cfg.selector).count();if(rec.status!==200)rec.failures.push(`HTTP_${rec.status}`);if(rec.sidebarCount!==1)rec.failures.push(`SIDEBAR_COUNT_${rec.sidebarCount}`);if(rec.controlCount===0)rec.failures.push('NO_CONTROLS');
+              for(let i=0;i<rec.controlCount;i++){
+                const c={index:i,outcome:'PASS'};
+                try{
+                  await load(page,cfg.route);let inputs=page.locator(cfg.selector);if(await inputs.count()<=i)throw new Error('control missing before text click');let input=inputs.nth(i),row=input.locator('xpath=..'),text=row.locator('span').first();c.label=((await text.innerText().catch(()=>''))||await input.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim();const u0=page.url(),ch0=await input.isChecked();await center(page,text);await sleep(650);const u1=page.url(),ch1=await input.isChecked().catch(()=>null);if(u1!==u0||ch1!==ch0)c.outcome='FAIL_TEXT_ACTIVATED';
+                  await load(page,cfg.route);inputs=page.locator(cfg.selector);if(await inputs.count()<=i)throw new Error('control missing before box click');input=inputs.nth(i);const start=page.url();await center(page,input);await sleep(2200);c.afterUrl=page.url();c.afterChecked=await input.isChecked().catch(()=>null);if(c.afterUrl===start&&c.afterChecked!==true&&c.outcome==='PASS')c.outcome='FAIL_CHECKBOX_NO_ACTION';const body=((await page.locator('#MainContent').innerText().catch(()=>''))||'').slice(0,12000),title=await page.title();if(/something went wrong|internal server error|page not found|404 not found/i.test(title+' '+body))c.outcome='FAIL_ERROR_PAGE';
+                }catch(e){c.outcome='FAIL_EXCEPTION';c.error=String(e)}rec.checks.push(c);fs.writeFileSync(`${OUT}/${cfg.route}-progress.json`,JSON.stringify(rec,null,2));
+              }
+              rec.failedControls=rec.checks.filter(x=>x.outcome!=='PASS').length;if(rec.failedControls)rec.failures.push(`FAILED_CONTROLS_${rec.failedControls}`);await load(page,cfg.route).catch(()=>{});await page.screenshot({path:`${OUT}/screens/${cfg.route}.png`,fullPage:true}).catch(()=>{});
+            }catch(e){rec.failures.push('FATAL');rec.error=String(e)}rec.pass=rec.failures.length===0;results.push(rec);const v=page.video();await ctx.close();if(v){try{const p=await v.path();fs.renameSync(p,`${OUT}/video/${cfg.route}.webm`)}catch{}}
+          }
+          await browser.close();const summary={total:results.length,passed:results.filter(x=>x.pass).length,failed:results.filter(x=>!x.pass).length,results:results.map(x=>({route:x.route,controlCount:x.controlCount,failedControls:x.failedControls,failures:x.failures}))};fs.writeFileSync(`${OUT}/summary.json`,JSON.stringify(summary,null,2));console.log(JSON.stringify(summary,null,2));if(summary.failed)process.exitCode=2;
+          EOF
+          node special-refine.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: special-refine-physical-v1
+          path: out
+          retention-days: 7
