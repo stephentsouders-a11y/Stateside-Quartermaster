@@ -1,0 +1,81 @@
+{% doc %}
+Ensures supported Stateside Quartermaster root collections expose exactly one Refine Products interface. When the custom SQ Refine sidebar is present, duplicate SQ sidebars are removed and Shopify/theme-native facet drawers/forms are suppressed so two filter systems cannot render at once.
+{% enddoc %}
+{% if request.page_type == 'collection' %}
+{% assign sq_refine_roots = 'accessories-gifts-collectibles|airsoft-milsim|apparel|armed-forces-gear|art|body-armor-ballistic-protection|literature|child-safety-shop|dive-scuba|firearm-accessories|first-aid-medical-ifak|flags-patriotic-decor|flashlights-lighting|footwear-gloves-eyewear|k9-dog-gear|knives-axes-cutlery|morale-patches-tactical-id|outdoor-preparedness-gear|patriotic-american-heritage|safety-rescue-climbing|sta-brite-insignia|tactical-gear|thin-line|uniforms|watches|zippos-lighters-torches|stateside-quartermaster-logo-merch|army-national-guard-series|air-national-guard-series|state-guard-series|products-built-for-the-line-u-s-army|products-built-for-the-line-u-s-navy|products-built-for-the-line-u-s-air-force|products-built-for-the-line-u-s-marine-corps|products-built-for-the-line-u-s-coast-guard|products-built-for-the-line-u-s-space-force|rotc-series|jrotc-series|military-schools-academies|law-enforcement-corrections|firefighting-ems-search-rescue' | split: '|' %}
+{% if sq_refine_roots contains collection.handle %}
+<style data-sq-single-refine-authority>
+  body.sq-single-refine-authority #MainContent .facets-block-wrapper--horizontal .facets__filters-wrapper,
+  body.sq-single-refine-authority #MainContent .facets-toggle__wrapper,
+  body.sq-single-refine-authority #MainContent theme-drawer#filters-drawer,
+  body.sq-single-refine-authority #MainContent #filters-drawer,
+  body.sq-single-refine-authority #MainContent .facets-block-wrapper--vertical,
+  body.sq-single-refine-authority #MainContent .facets__form-vertical,
+  body.sq-single-refine-authority #MainContent facet-filters-form:not(.sq-global-refine-sidebar facet-filters-form),
+  body.sq-single-refine-authority #MainContent .mobile-facets__wrapper,
+  body.sq-single-refine-authority #MainContent .mobile-facets__open-wrapper {
+    display:none!important;
+    visibility:hidden!important;
+    pointer-events:none!important;
+  }
+</style>
+<script data-sq-single-refine-authority data-root-handle="{{ collection.handle | escape }}">
+(function(){
+  if(window.__sqSingleRefineAuthority)return;
+  window.__sqSingleRefineAuthority=true;
+  var root=document.getElementById('MainContent');
+  if(!root)return;
+  var nativeSelectors=[
+    '.facets-block-wrapper--horizontal .facets__filters-wrapper',
+    '.facets-toggle__wrapper',
+    'theme-drawer#filters-drawer',
+    '#filters-drawer',
+    '.facets-block-wrapper--vertical',
+    '.facets__form-vertical',
+    'facet-filters-form',
+    '.mobile-facets__wrapper',
+    '.mobile-facets__open-wrapper'
+  ];
+  function visible(el){
+    if(!el)return false;
+    var s=getComputedStyle(el),r=el.getBoundingClientRect();
+    return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2;
+  }
+  function enforce(){
+    var sidebars=[].slice.call(root.querySelectorAll('.sq-global-refine-sidebar'));
+    if(!sidebars.length){document.body.classList.remove('sq-single-refine-authority');return;}
+    sidebars.sort(function(a,b){return b.querySelectorAll('details,input').length-a.querySelectorAll('details,input').length;});
+    var keeper=sidebars[0];
+    sidebars.slice(1).forEach(function(el){
+      el.setAttribute('data-sq-duplicate-refine-removed','true');
+      el.remove();
+    });
+    document.body.classList.add('sq-single-refine-authority');
+    nativeSelectors.forEach(function(sel){
+      root.querySelectorAll(sel).forEach(function(el){
+        if(el===keeper||keeper.contains(el)||el.contains(keeper))return;
+        el.setAttribute('aria-hidden','true');
+        el.setAttribute('data-sq-native-refine-suppressed','true');
+        el.style.setProperty('display','none','important');
+      });
+    });
+    keeper.setAttribute('data-sq-refine-authority','single');
+  }
+  function certifyState(){
+    var custom=[].slice.call(root.querySelectorAll('.sq-global-refine-sidebar')).filter(visible);
+    var native=[];
+    nativeSelectors.forEach(function(sel){
+      root.querySelectorAll(sel).forEach(function(el){if(!custom.some(function(c){return c===el||c.contains(el)||el.contains(c);})&&visible(el))native.push(el);});
+    });
+    document.documentElement.dataset.sqRefineCustomVisible=String(custom.length);
+    document.documentElement.dataset.sqRefineNativeVisible=String(native.length);
+  }
+  var timer=null;
+  function run(){enforce();certifyState();}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();
+  window.addEventListener('load',run,{once:true});
+  new MutationObserver(function(){clearTimeout(timer);timer=setTimeout(run,40);}).observe(root,{childList:true,subtree:true});
+})();
+</script>
+{% endif %}
+{% endif %}
