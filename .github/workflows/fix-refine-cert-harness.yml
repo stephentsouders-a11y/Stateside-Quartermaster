@@ -18,25 +18,34 @@ jobs:
           from pathlib import Path
           p=Path('.github/workflows/sep12-refine-coordinate-cert.yml')
           s=p.read_text()
+          changed=False
           old="if(!main){out.outcome='FAIL_DEST_NO_MAIN';continue}"
           new="if(!main)throw new Error('destination missing #MainContent')"
-          if old not in s:
-              raise SystemExit('Expected unrecorded continue branch not found')
-          s=s.replace(old,new,1)
+          if old in s:
+              s=s.replace(old,new,1); changed=True
           old2="rec.fail=rec.status!==200||!!rec.refineError||rec.sidebarCount!==1||rec.nativeHorizontalFacets>0||rec.controlCount===0||!!rec.fatal||rec.failedChecks>0;"
           new2="rec.unrecordedControls=Math.max(0,(rec.controlCount||0)-rec.checks.length);rec.fail=rec.status!==200||!!rec.refineError||rec.sidebarCount!==1||rec.nativeHorizontalFacets>0||rec.controlCount===0||rec.unrecordedControls>0||!!rec.fatal||rec.failedChecks>0;"
-          if old2 not in s:
-              raise SystemExit('Expected root fail expression not found')
-          s=s.replace(old2,new2,1)
+          if old2 in s:
+              s=s.replace(old2,new2,1); changed=True
           old3="checkboxNoNav:results.reduce((n,r)=>n+r.checks.filter(c=>c.outcome==='FAIL_CHECKBOX_NO_NAV').length,0),semanticCandidates:"
           new3="checkboxNoNav:results.reduce((n,r)=>n+r.checks.filter(c=>c.outcome==='FAIL_CHECKBOX_NO_NAV').length,0),unrecordedControls:results.reduce((n,r)=>n+(r.unrecordedControls||0),0),semanticCandidates:"
-          if old3 not in s:
-              raise SystemExit('Expected summary expression not found')
-          s=s.replace(old3,new3,1)
-          p.write_text(s)
+          if old3 in s:
+              s=s.replace(old3,new3,1); changed=True
+          old4="await page.waitForFunction(s=>location.href!==s,start,{timeout:12000}).catch(()=>{});out.checkboxAfterUrl=page.url();"
+          new4="await page.waitForFunction(s=>location.href!==s,start,{timeout:12000}).catch(()=>{});await page.waitForLoadState('domcontentloaded',{timeout:12000}).catch(()=>{});await page.waitForTimeout(350);out.checkboxAfterUrl=page.url();"
+          if old4 in s:
+              s=s.replace(old4,new4,1); changed=True
+          if not changed:
+              print('Refine certification harness already repaired')
+          else:
+              p.write_text(s)
           PY
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/sep12-refine-coordinate-cert.yml
-          git commit -m 'Require recorded result for every Refine control'
-          git push
+          if git diff --quiet -- .github/workflows/sep12-refine-coordinate-cert.yml; then
+            echo 'No harness changes required'
+          else
+            git add .github/workflows/sep12-refine-coordinate-cert.yml
+            git commit -m 'Require complete stable Refine control certification'
+            git push
+          fi
