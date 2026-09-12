@@ -1,0 +1,10 @@
+{% liquid
+  assign sq_skip_afg_child_route_counts = false
+  if request.page_type == 'collection' and collection.handle contains 'armed-forces-gear-u-s-'
+    assign sq_skip_afg_child_route_counts = true
+  endif
+%}
+{% unless sq_skip_afg_child_route_counts %}
+  {% render 'sq-bfl-downstream-audit-fix-pre-afg-count-fix-20260909' %}
+  {% render 'sq-stale-count-placeholder-guard' %}
+{% endunless %}
