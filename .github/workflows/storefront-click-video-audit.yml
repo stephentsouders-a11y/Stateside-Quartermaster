@@ -7,75 +7,55 @@ permissions:
   contents: read
 jobs:
   audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - run: |
-          npm init -y
-          npm install playwright@1.55.0 fast-xml-parser@4.5.0
-          npx playwright install --with-deps chromium
-      - name: Run live storefront click audit with video
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 fast-xml-parser@4.5.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Run candidate storefront click audit with video
         env:
           BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          SHARD: ${{ matrix.shard }}
+          SHARDS: '8'
         run: |
           cat > click-audit.mjs <<'EOF'
           import { chromium } from 'playwright';
           import { XMLParser } from 'fast-xml-parser';
           import fs from 'fs';
           import crypto from 'crypto';
-          const BASE=process.env.BASE;
-          const parser=new XMLParser({ignoreAttributes:false});
-          const OUT='out'; fs.mkdirSync(`${OUT}/videos`,{recursive:true}); fs.mkdirSync(`${OUT}/screens`,{recursive:true});
-          const sha=s=>crypto.createHash('sha1').update(s).digest('hex').slice(0,12);
-          const norm=raw=>{try{const u=new URL(raw,BASE); if(u.origin!==new URL(BASE).origin)return null; if(!u.pathname.startsWith('/collections/')&&u.pathname!=='/')return null; ['page','sort_by'].forEach(k=>u.searchParams.delete(k)); u.hash=''; return u.pathname+(u.search?u.search:'')}catch{return null}};
-          async function getSeeds(){const seeds=new Set(['/']); try{const x=parser.parse(await (await fetch(`${BASE}/sitemap.xml`)).text()); let maps=x?.sitemapindex?.sitemap||[]; if(!Array.isArray(maps))maps=[maps]; for(const m of maps){if(!/sitemap_collections/i.test(m.loc||''))continue; const sx=parser.parse(await (await fetch(m.loc)).text()); let urls=sx?.urlset?.url||[]; if(!Array.isArray(urls))urls=[urls]; for(const r of urls){const n=norm(r.loc); if(n)seeds.add(n)}}}catch{} return [...seeds]}
-          const browser=await chromium.launch({headless:true});
-          const queue=await getSeeds(), seen=new Set(), results=[]; let qi=0;
-          while(qi<queue.length && seen.size<1400){
-            const path=queue[qi++]; if(seen.has(path))continue; seen.add(path);
-            const ctx=await browser.newContext({viewport:{width:1365,height:768},recordVideo:{dir:`${OUT}/videos`,size:{width:960,height:540}}});
-            const page=await ctx.newPage(); page.setDefaultTimeout(15000); page.setDefaultNavigationTimeout(30000);
-            const rec={path,buttons:[],errors:[]};
-            page.on('pageerror',e=>rec.errors.push(`pageerror:${e.message}`));
-            page.on('console',m=>{if(m.type()==='error')rec.errors.push(`console:${m.text()}`)});
-            try{
-              const res=await page.goto(new URL(path,BASE).toString(),{waitUntil:'domcontentloaded'}); rec.status=res?.status()??null;
-              await page.waitForTimeout(800);
-              rec.pageTitle=(await page.title()).trim();
-              rec.h1=await page.locator('h1').first().textContent().catch(()=>null);
-              rec.spinner=await page.locator('text=/loading items|building the customer-facing product tree|checking items|organizing .* products/i').count().catch(()=>0);
-              rec.sidebarCount=await page.locator('#MainContent .sq-global-refine-sidebar:visible').count().catch(()=>0);
-              rec.brokenImages=await page.locator('#MainContent img').evaluateAll(imgs=>imgs.filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.alt||i.src).slice(0,20)).catch(()=>[]);
-              rec.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+4).catch(()=>false);
-              rec.textLinkInsideSidebar=await page.locator('#MainContent .sq-global-refine-sidebar a:visible').evaluateAll(as=>as.filter(a=>{const r=a.getBoundingClientRect(); const p=a.parentElement?.getBoundingClientRect(); return p&&r.width>0&&r.height>0&&r.width>p.width*.85}).map(a=>({text:(a.textContent||'').trim(),href:a.getAttribute('href')})).slice(0,50)).catch(()=>[]);
-              const items=await page.locator('#MainContent a:visible').evaluateAll(as=>as.map((a,i)=>({i,text:(a.textContent||'').replace(/\s+/g,' ').trim().slice(0,180),href:a.href,cls:a.className||'',role:a.getAttribute('role')||'',aria:a.getAttribute('aria-label')||''})).filter(x=>x.href&&(/button|card|pagination|next|previous|sq-|sg-|refine/i.test(`${x.cls} ${x.role} ${x.aria} ${x.text}`)||x.href.includes('/collections/'))).slice(0,450));
-              for(const item of items){
-                const dest=norm(item.href); if(dest&&!seen.has(dest)&&!queue.includes(dest))queue.push(dest);
-                const before=page.url(); let outcome='PASS', after=null, err=null;
-                try{
-                  const loc=page.locator('#MainContent a:visible').filter({hasText:item.text}).first();
-                  if(await loc.count()){await loc.scrollIntoViewIfNeeded(); await loc.click({timeout:8000}); await page.waitForTimeout(500); after=page.url(); const title=await page.title(); const body=(await page.locator('body').innerText().catch(()=>'' )).slice(0,5000); if(/something went wrong|internal server error|there was a problem|404 not found/i.test(title+' '+body))outcome='FAIL_ERROR_PAGE'; if(after===before&&item.href!==before&&item.href!==before+'#')outcome='FAIL_NO_NAV'; if(page.url()!==before){await page.goBack({waitUntil:'domcontentloaded'}).catch(()=>page.goto(before,{waitUntil:'domcontentloaded'})); await page.waitForTimeout(250)}} else outcome='FAIL_NOT_FOUND';
-                }catch(e){outcome='FAIL_EXCEPTION'; err=String(e); await page.goto(before,{waitUntil:'domcontentloaded'}).catch(()=>{})}
-                rec.buttons.push({label:item.text||item.aria||'(unlabeled)',href:item.href,outcome,after,error:err});
-              }
-              await page.screenshot({path:`${OUT}/screens/${String(seen.size).padStart(4,'0')}-${sha(path)}.png`,fullPage:true}).catch(()=>{});
-            }catch(e){rec.errors.push(`fatal:${String(e)}`)}
-            const v=page.video(); await ctx.close(); if(v){try{const old=await v.path(); fs.renameSync(old,`${OUT}/videos/${String(seen.size).padStart(4,'0')}-${sha(path)}.webm`)}catch{}}
-            rec.failedButtons=rec.buttons.filter(b=>b.outcome!=='PASS').length;
-            rec.fail=rec.status!==200||!rec.pageTitle||rec.spinner>0||rec.brokenImages.length>0||rec.overflow||rec.failedButtons>0||rec.errors.length>0;
-            results.push(rec); fs.writeFileSync(`${OUT}/progress.json`,JSON.stringify(results,null,2));
+          const BASE=process.env.BASE,THEME=process.env.THEME,shard=+process.env.SHARD,shards=+process.env.SHARDS;
+          const parser=new XMLParser({ignoreAttributes:false}),OUT='out';fs.mkdirSync(`${OUT}/videos`,{recursive:true});fs.mkdirSync(`${OUT}/screens`,{recursive:true});
+          const hash=s=>parseInt(crypto.createHash('sha1').update(s).digest('hex').slice(0,8),16),safe=s=>crypto.createHash('sha1').update(s).digest('hex').slice(0,12);
+          const route=raw=>{try{const u=new URL(raw,BASE);if(u.origin!==new URL(BASE).origin)return null;if(u.pathname!=='/'&&!u.pathname.startsWith('/collections/'))return null;u.searchParams.delete('preview_theme_id');u.hash='';return u.pathname+u.search}catch{return null}};
+          const preview=raw=>{const u=new URL(raw,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()};
+          async function seeds(){const set=new Set(['/']);try{const x=parser.parse(await (await fetch(`${BASE}/sitemap.xml`)).text());let maps=x?.sitemapindex?.sitemap||[];if(!Array.isArray(maps))maps=[maps];for(const m of maps){if(!/sitemap_collections/i.test(m.loc||''))continue;const sx=parser.parse(await (await fetch(m.loc)).text());let urls=sx?.urlset?.url||[];if(!Array.isArray(urls))urls=[urls];for(const r of urls){const n=route(r.loc);if(n)set.add(n)}}}catch{}return [...set].filter(p=>hash(p)%shards===shard).sort()}
+          async function settle(page){await page.waitForLoadState('domcontentloaded').catch(()=>{});await page.waitForTimeout(650)}
+          const browser=await chromium.launch({headless:true}),routes=await seeds(),results=[];
+          for(let ri=0;ri<routes.length;ri++){
+            const path=routes[ri],base=preview(path),ctx=await browser.newContext({viewport:{width:1365,height:768},recordVideo:{dir:`${OUT}/videos`,size:{width:960,height:540}}}),page=await ctx.newPage();page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(35000);
+            const rec={path,buttons:[],diagnosticErrors:[]};page.on('pageerror',e=>rec.diagnosticErrors.push(`pageerror:${e.message}`));page.on('console',m=>{if(m.type()==='error')rec.diagnosticErrors.push(`console:${m.text()}`)});
+            try{let res=await page.goto(base,{waitUntil:'domcontentloaded'});rec.status=res?.status()??null;await settle(page);rec.pageTitle=(await page.title()).trim();rec.h1=((await page.locator('h1').first().textContent().catch(()=>''))||'').trim();rec.spinner=await page.locator('text=/loading items|building the customer-facing product tree|checking items|organizing .* products/i').count().catch(()=>0);rec.sidebarCount=await page.locator('#MainContent .sq-refine-v3-sidebar:visible,#MainContent .sq-global-refine-sidebar:visible').count().catch(()=>0);rec.brokenImages=await page.locator('#MainContent img').evaluateAll(imgs=>imgs.filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.alt||i.src).slice(0,20)).catch(()=>[]);rec.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+4).catch(()=>false);
+              const items=await page.locator('#MainContent a:visible').evaluateAll(as=>as.map(a=>({text:(a.textContent||'').replace(/\s+/g,' ').trim().slice(0,180),href:a.href,cls:typeof a.className==='string'?a.className:'',role:a.getAttribute('role')||'',aria:a.getAttribute('aria-label')||''})).filter(x=>x.href&&(/button|card|pagination|next|previous|sq-|sg-/i.test(`${x.cls} ${x.role} ${x.aria} ${x.text}`)||x.href.includes('/collections/'))).slice(0,500));
+              for(let i=0;i<items.length;i++){const item=items[i],out={label:item.text||item.aria||'(unlabeled)',href:item.href,outcome:'PASS'};try{await page.goto(base,{waitUntil:'domcontentloaded'});await settle(page);const candidates=page.locator('#MainContent a:visible');const idx=await candidates.evaluateAll((as,item)=>as.findIndex(a=>a.href===item.href&&((a.textContent||'').replace(/\s+/g,' ').trim().slice(0,180)===(item.text||''))),item);if(idx<0){out.outcome='FAIL_NOT_FOUND'}else{const loc=candidates.nth(idx);await loc.scrollIntoViewIfNeeded();const start=page.url();await loc.click({timeout:9000});await page.waitForTimeout(550);out.after=page.url();const title=await page.title(),body=((await page.locator('body').innerText().catch(()=>''))||'').slice(0,7000);if(/something went wrong|internal server error|there was a problem|404 not found|page not found/i.test(title+' '+body))out.outcome='FAIL_ERROR_PAGE';else if(out.after===start&&item.href!==start&&item.href!==start+'#')out.outcome='FAIL_NO_NAV';else{const expected=route(item.href),actual=route(out.after);if(expected&&actual&&expected!==actual)out.outcome='FAIL_WRONG_DESTINATION'}}}catch(e){out.outcome='FAIL_EXCEPTION';out.error=String(e)}rec.buttons.push(out);fs.writeFileSync(`${OUT}/progress-${shard}.json`,JSON.stringify(results.concat([rec]),null,2))}
+              await page.goto(base,{waitUntil:'domcontentloaded'}).catch(()=>{});await settle(page);await page.screenshot({path:`${OUT}/screens/${String(ri+1).padStart(4,'0')}-${safe(path)}.png`,fullPage:true}).catch(()=>{});
+            }catch(e){rec.fatal=String(e)}const v=page.video();await ctx.close();if(v){try{const old=await v.path();fs.renameSync(old,`${OUT}/videos/${String(ri+1).padStart(4,'0')}-${safe(path)}.webm`)}catch{}}rec.failedButtons=rec.buttons.filter(b=>b.outcome!=='PASS').length;rec.fail=rec.status!==200||!rec.pageTitle||rec.spinner>0||rec.brokenImages.length>0||rec.overflow||rec.failedButtons>0||!!rec.fatal;results.push(rec);fs.writeFileSync(`${OUT}/results-${shard}.json`,JSON.stringify(results,null,2));
           }
-          await browser.close();
-          const summary={auditedRoutes:results.length,discoveredRoutes:queue.length,totalButtons:results.reduce((n,r)=>n+r.buttons.length,0),failedRoutes:results.filter(r=>r.fail).length,failedButtons:results.reduce((n,r)=>n+r.failedButtons,0),missingH1:results.filter(r=>!(r.h1||'').trim()).map(r=>r.path),duplicateSidebars:results.filter(r=>r.sidebarCount>1).map(r=>r.path),spinnerRoutes:results.filter(r=>r.spinner>0).map(r=>r.path),brokenImageRoutes:results.filter(r=>r.brokenImages.length>0).map(r=>r.path)};
-          fs.writeFileSync(`${OUT}/summary.json`,JSON.stringify(summary,null,2)); fs.writeFileSync(`${OUT}/results.json`,JSON.stringify(results,null,2)); console.log(JSON.stringify(summary,null,2)); if(summary.failedRoutes||summary.failedButtons)process.exitCode=2;
+          await browser.close();const summary={shard,auditedRoutes:results.length,totalButtons:results.reduce((n,r)=>n+r.buttons.length,0),failedRoutes:results.filter(r=>r.fail).length,failedButtons:results.reduce((n,r)=>n+r.failedButtons,0),missingH1:results.filter(r=>!r.h1).map(r=>r.path),duplicateSidebars:results.filter(r=>r.sidebarCount>1).map(r=>r.path),spinnerRoutes:results.filter(r=>r.spinner>0).map(r=>r.path),brokenImageRoutes:results.filter(r=>r.brokenImages?.length).map(r=>r.path),diagnosticConsoleErrorRoutes:results.filter(r=>r.diagnosticErrors?.length).length};fs.writeFileSync(`${OUT}/summary-${shard}.json`,JSON.stringify(summary,null,2));console.log(JSON.stringify(summary,null,2));if(summary.failedRoutes||summary.failedButtons)process.exitCode=2;
           EOF
           node click-audit.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: storefront-click-video-audit
+          name: storefront-click-video-${{ matrix.shard }}
           path: out
           retention-days: 7
