@@ -15,6 +15,13 @@ jobs:
   certify-pagination:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    env:
+      SHARD_INDEX: ${{ matrix.shard }}
+      SHARD_COUNT: 8
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -29,7 +36,10 @@ jobs:
           cat > pagination-cert.mjs <<'EOFJS'
           import { chromium } from 'playwright';
           import fs from 'fs';
-          fs.mkdirSync('out',{recursive:true});
+          const shard=Number(process.env.SHARD_INDEX||0);
+          const shardCount=Number(process.env.SHARD_COUNT||8);
+          const out=`out/shard-${shard}`;
+          fs.mkdirSync(out,{recursive:true});
           const theme='158561894555';
           const base='https://www.statesideqm.com/collections/';
           const sizes=[50,100,250];
@@ -46,12 +56,12 @@ jobs:
             'products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series','military-schools-academies',
             'law-enforcement-corrections','firefighting-ems-search-rescue'
           ];
-          const routes=roots.map(handle=>({handle,root:null}));
-          routes.push({handle:'literature-u-s-army',root:'literature'});
-          const browser=await chromium.launch({headless:true});
-          const context=await browser.newContext({viewport:{width:1440,height:1000}});
-          const report={theme,sizes,routes:routes.map(x=>x.handle),checked:[],source:[],failures:[]};
-          const fail=(h,s,v,m)=>report.failures.push(`${h} @ ${s ?? 'source'} page ${v}: ${m}`);
+          const allRoutes=roots.map(handle=>({handle,root:null}));
+          allRoutes.push({handle:'literature-u-s-army',root:'literature'});
+          const routes=allRoutes.filter((_,i)=>i%shardCount===shard);
+          const report={theme,shard,shardCount,sizes,routes:routes.map(x=>x.handle),checked:[],source:[],failures:[]};
+          const persist=()=>fs.writeFileSync(`${out}/pagination-report.json`,JSON.stringify(report,null,2));
+          const fail=(h,s,v,m)=>{const msg=`${h} @ ${s ?? 'source'} page ${v}: ${m}`;report.failures.push(msg);console.error(`FAIL ${msg}`);persist();};
           const norm=x=>{try{return new URL(x,'https://www.statesideqm.com').pathname.replace(/\/$/,'')}catch{return x}};
           const cardSelector='#MainContent .sq-refine-v3-results .product-grid > .product-grid__item';
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -61,21 +71,11 @@ jobs:
               try{
                 const r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
                 const status=r?.status()||0;
-                if(r?.ok()){
-                  await sleep(350);
-                  return r;
-                }
+                if(r?.ok()){await sleep(250);return r;}
                 last=new Error(`HTTP ${status}`);
-                if(status===429 || status>=500){
-                  await sleep(Math.min(15000,1000*Math.pow(2,attempt-1)));
-                  continue;
-                }
+                if(status===429||status>=500){await sleep(Math.min(12000,750*Math.pow(2,attempt-1)));continue;}
                 throw last;
-              }catch(e){
-                last=e;
-                if(attempt===7)break;
-                await sleep(Math.min(15000,1000*Math.pow(2,attempt-1)));
-              }
+              }catch(e){last=e;if(attempt===7)break;await sleep(Math.min(12000,750*Math.pow(2,attempt-1)));}
             }
             throw new Error(`${label}: ${String(last)}`);
           }
@@ -84,8 +84,8 @@ jobs:
             await page.waitForFunction(()=>{
               const d=document.querySelector('#MainContent')?.dataset||{};
               return d.sqRefineV3PaginationRepaired==='true'||!!d.sqRefineV3PaginationRepairError;
-            },{timeout:30000}).catch(()=>{});
-            await sleep(300);
+            },{timeout:12000}).catch(()=>{});
+            await sleep(200);
           }
           async function productPaths(page,selector){
             return await page.$$eval(selector,els=>[...new Set(els.map(el=>{
@@ -94,32 +94,19 @@ jobs:
               return el.querySelector('a[href*="/products/"]')?.href||'';
             }).filter(Boolean))]);
           }
-          async function customerHrefs(page){
-            return await productPaths(page,cardSelector);
-          }
+          const customerHrefs=page=>productPaths(page,cardSelector);
           async function sourceHrefs(page){
-            const handles=await productPaths(page,'[data-sq-refine-v3-fallback-host] .product-grid__item[data-product-handle], .product-grid__item[data-product-handle]');
+            const handles=await productPaths(page,'.product-grid__item[data-product-handle]');
             if(handles.length)return handles;
             return await page.$$eval('.product-grid a[href*="/products/"]',els=>[...new Set(els.map(a=>a.href).filter(Boolean))]);
-          }
-          async function sourceDiagnostic(page){
-            return await page.evaluate(()=>({
-              url:location.href,
-              title:document.title,
-              handleCards:document.querySelectorAll('[data-product-handle]').length,
-              gridItems:document.querySelectorAll('.product-grid__item').length,
-              productLinks:document.querySelectorAll('a[href*="/products/"]').length,
-              fallbackHosts:document.querySelectorAll('[data-sq-refine-v3-fallback-host]').length,
-              bodyText:(document.body?.innerText||'').slice(0,500)
-            }));
           }
           async function pagerState(page){
             return await page.evaluate(()=>{
               const all=[...document.querySelectorAll('#MainContent .sq-refine-v3-pager')];
               const p=all[0];
-              if(!p)return {exists:false,count:0,next:null,previous:null,text:''};
+              if(!p)return {count:0,next:null,previous:null,text:''};
               const links=[...p.querySelectorAll('a')].map(a=>({text:(a.textContent||'').trim(),href:a.href}));
-              return {exists:true,count:all.length,text:(p.textContent||'').replace(/\s+/g,' ').trim(),next:links.find(x=>/next/i.test(x.text))||null,previous:links.find(x=>/previous/i.test(x.text))||null};
+              return {count:all.length,text:(p.textContent||'').replace(/\s+/g,' ').trim(),next:links.find(x=>/next/i.test(x.text))||null,previous:links.find(x=>/previous/i.test(x.text))||null};
             });
           }
           function routeUrl(route){
@@ -128,14 +115,11 @@ jobs:
             if(route.root)u.searchParams.set('sq_root',route.root);
             return u;
           }
-          function sourcePath(route){
-            return route.handle==='air-national-guard-series'?'products-built-for-the-line-u-s-air-force':route.handle;
-          }
+          function sourcePath(route){return route.handle==='air-national-guard-series'?'products-built-for-the-line-u-s-air-force':route.handle;}
           async function enumerateSource(route){
             const page=await context.newPage();
             const expected=new Set();
             const counts=[];
-            const diagnostics=[];
             let terminated=false;
             try{
               for(let nativePage=1;nativePage<=150;nativePage++){
@@ -147,24 +131,25 @@ jobs:
                 await gotoWithRetry(page,u.toString(),`${route.handle} source page ${nativePage}`);
                 const links=(await sourceHrefs(page)).map(norm);
                 counts.push(links.length);
-                if(!links.length){
-                  diagnostics.push({nativePage,...await sourceDiagnostic(page)});
-                  terminated=true;
-                  break;
-                }
+                if(!links.length){terminated=true;break;}
                 links.forEach(x=>expected.add(x));
                 if(links.length<50){terminated=true;break;}
-                await sleep(400);
+                await sleep(250);
               }
               if(!terminated)fail(route.handle,null,150,'source enumeration did not terminate');
             }catch(e){fail(route.handle,null,counts.length+1,`source enumeration failed: ${String(e)}`)}
             await page.close();
-            report.source.push({handle:route.handle,totalUniqueProducts:expected.size,nativePageCounts:counts,diagnostics});
+            report.source.push({handle:route.handle,totalUniqueProducts:expected.size,nativePageCounts:counts});
+            persist();
             return expected;
           }
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1000}});
+          persist();
           for(const route of routes){
+            console.log(`ROUTE ${route.handle}`);
             const expected=await enumerateSource(route);
-            if(expected.size<1){fail(route.handle,null,1,'source contains zero products');await sleep(1200);continue;}
+            if(expected.size<1){fail(route.handle,null,1,'source contains zero products');continue;}
             for(const size of sizes){
               const page=await context.newPage();
               const seen=new Set();
@@ -172,15 +157,12 @@ jobs:
               const errors=[];
               page.on('pageerror',e=>errors.push(String(e)));
               let view=1,finished=false,guard=0;
-              while(!finished && guard<150){
+              while(!finished&&guard<150){
                 guard++;
                 const u=routeUrl(route);
                 u.searchParams.set('sq_per_page',String(size));
                 u.searchParams.set('sq_view_page',String(view));
-                try{
-                  await gotoWithRetry(page,u.toString(),`${route.handle} customer ${size} page ${view}`);
-                  await waitV3(page);
-                }catch(e){fail(route.handle,size,view,`navigation/readiness failed: ${String(e)}`);break}
+                try{await gotoWithRetry(page,u.toString(),`${route.handle} customer ${size} page ${view}`);await waitV3(page);}catch(e){fail(route.handle,size,view,`navigation/readiness failed: ${String(e)}`);break;}
                 const products=(await customerHrefs(page)).map(norm);
                 const pager=await pagerState(page);
                 const mainData=await page.$eval('#MainContent',el=>({...el.dataset})).catch(()=>({}));
@@ -191,19 +173,19 @@ jobs:
                 if(products.length>size)fail(route.handle,size,view,`rendered ${products.length} products (> ${size})`);
                 if(duplicates.length)fail(route.handle,size,view,`repeated ${duplicates.length} product(s)`);
                 if((pager.count||0)!==1)fail(route.handle,size,view,`expected exactly one pager, found ${pager.count||0}`);
-                if(view===1 && pager.previous)fail(route.handle,size,view,'Page 1 exposes Previous');
-                if(view>1 && !pager.previous)fail(route.handle,size,view,'missing Previous');
+                if(view===1&&pager.previous)fail(route.handle,size,view,'Page 1 exposes Previous');
+                if(view>1&&!pager.previous)fail(route.handle,size,view,'missing Previous');
                 if(mainData.sqRefineV3PaginationRepairError)fail(route.handle,size,view,`repair error: ${mainData.sqRefineV3PaginationRepairError}`);
                 if(mainData.sqRefineV3PaginationRepaired!=='true')fail(route.handle,size,view,'pagination repair marker missing');
                 if(mainData.sqRefineV3PaginationPageSize!==String(size))fail(route.handle,size,view,`page-size marker is ${mainData.sqRefineV3PaginationPageSize||'missing'}`);
                 if(pager.next){
-                  const nextUrl=new URL(pager.next.href);const nextView=Number(nextUrl.searchParams.get('sq_view_page'));
+                  const nextView=Number(new URL(pager.next.href).searchParams.get('sq_view_page'));
                   if(nextView!==view+1)fail(route.handle,size,view,`Next targets page ${nextView}, expected ${view+1}`);
                   view++;
                 }else finished=true;
-                await sleep(450);
+                await sleep(250);
               }
-              if(guard>=150 && !finished)fail(route.handle,size,view,'pagination did not terminate within 150 pages');
+              if(guard>=150&&!finished)fail(route.handle,size,view,'pagination did not terminate within 150 pages');
               if(errors.length)fail(route.handle,size,view,`${errors.length} uncaught browser page error(s)`);
               const missing=[...expected].filter(x=>!seen.has(x));
               const unexpected=[...seen].filter(x=>!expected.has(x));
@@ -211,22 +193,21 @@ jobs:
               if(unexpected.length)fail(route.handle,size,view,`${unexpected.length} customer product(s) absent from source set`);
               if(seen.size!==expected.size)fail(route.handle,size,view,`customer unique ${seen.size} != source unique ${expected.size}`);
               report.checked.push({handle:route.handle,root:route.root,size,sourceUniqueProducts:expected.size,totalLogicalPages:pages.length,totalUniqueProducts:seen.size,missing:missing.slice(0,25),unexpected:unexpected.slice(0,25),finished,pages});
-              if(route.handle==='literature-u-s-army'||report.failures.some(x=>x.startsWith(`${route.handle} @ ${size}`))){await page.screenshot({path:`out/${route.handle}-${size}-final.png`,fullPage:true}).catch(()=>{})}
+              persist();
+              if(route.handle==='literature-u-s-army'||report.failures.some(x=>x.startsWith(`${route.handle} @ ${size}`)))await page.screenshot({path:`${out}/${route.handle}-${size}-final.png`,fullPage:true}).catch(()=>{});
               await page.close();
-              await sleep(700);
             }
-            await sleep(1200);
           }
           await browser.close();
           report.summary={routes:routes.length,sizes:sizes.length,cases:report.checked.length,totalLogicalPages:report.checked.reduce((n,x)=>n+x.totalLogicalPages,0),failures:report.failures.length};
-          fs.writeFileSync('out/pagination-report.json',JSON.stringify(report,null,2));
-          console.log(JSON.stringify(report,null,2));
+          persist();
+          console.log(JSON.stringify(report.summary));
           if(report.failures.length)process.exitCode=2;
           EOFJS
           node pagination-cert.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: refine-v3-pagination-chromium-cert
-          path: out
+          name: refine-v3-pagination-chromium-cert-shard-${{ matrix.shard }}
+          path: out/shard-${{ matrix.shard }}
           retention-days: 14
