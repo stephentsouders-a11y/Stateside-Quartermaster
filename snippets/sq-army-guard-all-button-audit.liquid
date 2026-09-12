@@ -1,0 +1,65 @@
+{% doc %}
+Verifies every Army National Guard Series category/type destination at runtime,
+updates the displayed item count, hydrates only non-curated imagery, and preserves
+valid zero-count or sold-out type buttons. Inventory is never modified.
+{% enddoc %}
+{% liquid
+  assign sq_guard_handles_raw = 'army-national-guard-series|army-national-guard-uniforms|army-national-guard-rank-insignia-awards|army-national-guard-patches-unit-identification|army-national-guard-guard-specific|army-national-guard-headwear-complete|army-national-guard-uniform-accessories|army-national-guard-apparel-pt-gear|army-national-guard-footwear|army-national-guard-field-tactical-soldier-gear|army-national-guard-flags-displays-collectibles|army-national-guard-books-manuals-reference'
+  assign sq_guard_handles = sq_guard_handles_raw | split: '|'
+  assign sq_guard_audit = false
+  if request.page_type == 'collection' and sq_guard_handles contains collection.handle
+    assign sq_guard_audit = true
+  endif
+%}
+{% if sq_guard_audit %}
+<script data-sq-army-guard-all-button-audit>
+(function(){
+  var cache=new Map(),running=false,queued=false;
+  function norm(src){if(!src)return'';try{var u=new URL(src,location.origin);return u.origin+u.pathname;}catch(e){return String(src).split('?')[0];}}
+  function label(card){var el=card.querySelector('.sq-line-series-categories__name,.sq-third-level__name');return el?String(el.textContent||'').trim():'Army National Guard';}
+  function media(card){return card.querySelector('.sq-line-series-categories__media,.sq-third-level__media');}
+  function countNode(card){return card.querySelector('.sq-line-series-categories__meta,.sq-guard-type-count');}
+  function parse(html){
+    var doc=new DOMParser().parseFromString(html,'text/html');
+    var marker=doc.querySelector('[data-sq-army-route-count],[data-sq-air-force-route-count]');
+    var count=marker?parseInt(marker.getAttribute('data-sq-army-route-count')||marker.getAttribute('data-sq-air-force-route-count')||'',10):NaN;
+    var images=[],seen={};
+    doc.querySelectorAll('.product-grid__item img[src],#ResultsList img[src],collection-component img[src]').forEach(function(img){var src=img.getAttribute('src')||'',key=norm(src);if(!src||!key||seen[key])return;seen[key]=1;images.push(src);});
+    return{count:Number.isFinite(count)?count:null,images:images};
+  }
+  async function load(href){
+    var u=new URL(href,location.origin),key=u.pathname+u.search;if(cache.has(key))return cache.get(key);
+    var p=fetch(key,{credentials:'same-origin',headers:{'X-Requested-With':'XMLHttpRequest'}}).then(async function(r){if(!r.ok)throw new Error('HTTP '+r.status);var finalUrl=new URL(r.url||u.href,location.origin);if(finalUrl.pathname.replace(/\/$/,'')!==u.pathname.replace(/\/$/,''))throw new Error('redirect');return parse(await r.text());});cache.set(key,p);return p;
+  }
+  function valid(card){if(!card||card.hidden)return false;var href=card.getAttribute('href')||'';if(!href)return false;try{var u=new URL(href,location.origin);return u.origin===location.origin&&u.pathname.indexOf('/collections/')===0;}catch(e){return false;}}
+  function choose(list,used){for(var i=0;i<list.length;i++){var key=norm(list[i]);if(key&&!used[key])return list[i];}return list[0]||'';}
+  function applyImage(card,src,used){if(card.getAttribute('data-sq-guard-curated-image')==='true'||!src)return;var m=media(card);if(!m)return;var img=m.querySelector('img');if(!img){m.innerHTML='<img width="720" height="500" loading="lazy">';img=m.querySelector('img');}img.src=src;img.removeAttribute('srcset');img.removeAttribute('sizes');img.alt=label(card);used[norm(src)]=1;card.setAttribute('data-sq-guard-image-verified','true');}
+  function updateChoices(){document.querySelectorAll('.sq-guard-type-nav').forEach(function(root){var grid=root.querySelector('.sq-third-level__type-grid'),node=root.querySelector('[data-sq-guard-choice-count]');if(!grid)return;var n=grid.querySelectorAll('.sq-third-level__type').length;if(node)node.textContent=n+' '+(n===1?'choice':'choices');});}
+  async function verify(card,used){
+    var node=countNode(card),fallbackCount=parseInt(card.getAttribute('data-sq-server-count')||'',10),fallback=node?String(node.textContent||'').trim():'';
+    try{
+      var data=await load(card.href),n=data.count;
+      if(n===null&&Number.isFinite(fallbackCount))n=fallbackCount;
+      if(n!==null&&Number.isFinite(n)){
+        if(node)node.textContent=n+' '+(n===1?'item':'items');card.setAttribute('data-sq-item-count',String(n));card.setAttribute('data-sq-zero-count',n===0?'true':'false');card.removeAttribute('data-sq-count-error');
+        card.hidden=false;card.removeAttribute('aria-hidden');
+      }else{if(node)node.textContent=fallback&&fallback!=='Counting items...'?fallback:'View items';card.setAttribute('data-sq-count-error','true');}
+      applyImage(card,choose(data.images,used),used);card.setAttribute('data-sq-guard-route-verified','true');
+    }catch(e){if(node)node.textContent=Number.isFinite(fallbackCount)?fallbackCount+' '+(fallbackCount===1?'item':'items'):(fallback&&fallback!=='Counting items...'?fallback:'View items');card.setAttribute('data-sq-count-error','true');card.setAttribute('data-sq-guard-route-verified','false');card.hidden=false;card.removeAttribute('aria-hidden');}
+  }
+  async function audit(){
+    if(running){queued=true;return;}running=true;queued=false;
+    var cards=[].slice.call(document.querySelectorAll('.sq-guard-canonical .sq-line-series-categories__card,.sq-guard-type-nav .sq-third-level__type')).filter(valid),used={},cursor=0;
+    document.querySelectorAll('[data-sq-guard-curated-image="true"] img[src]').forEach(function(img){used[norm(img.currentSrc||img.src)]=1;});
+    async function worker(){while(cursor<cards.length)await verify(cards[cursor++],used);}
+    await Promise.all([worker(),worker(),worker(),worker()]);updateChoices();
+    var marker=document.querySelector('.sq-guard-canonical,.sq-guard-type-nav');if(marker){marker.setAttribute('data-sq-guard-all-buttons-audited','true');marker.setAttribute('data-sq-guard-audited-button-count',String(cards.length));}
+    running=false;if(queued)setTimeout(audit,120);
+  }
+  function schedule(){[350,1050,2200,4200].forEach(function(ms){setTimeout(audit,ms);});}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});else schedule();
+  window.addEventListener('sq:guard-types-built',function(){setTimeout(audit,80);});
+  window.addEventListener('load',function(){setTimeout(audit,650);},{once:true});
+})();
+</script>
+{% endif %}
