@@ -1,0 +1,73 @@
+name: Accessories Chromium macOS certification 0912
+on:
+  push:
+    paths:
+      - '.github/workflows/accessories-chromium-macos-cert-0912.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install chromium >/dev/null 2>&1
+      - name: Certify Accessories desktop and mobile
+        run: |
+          cat > /tmp/cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const url='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
+          const browser=await chromium.launch({headless:true});
+          const failures=[];
+          for(const [label,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
+            const context=await browser.newContext({viewport});
+            const page=await context.newPage();
+            const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+            let response=null,last=null;
+            for(let attempt=1;attempt<=3;attempt++){
+              try{response=await page.goto(url,{waitUntil:'commit',timeout:30000});await page.waitForSelector('#MainContent',{timeout:30000});break}catch(e){last=e;console.log('NAV_RETRY',label,attempt,String(e));await page.waitForTimeout(attempt*1000)}
+            }
+            if(!response){failures.push(label+' navigation '+String(last));await context.close();continue}
+            try{await page.waitForSelector('#MainContent .sq-refine-v3-sidebar',{timeout:30000})}catch(e){failures.push(label+' sidebar wait '+String(e))}
+            await page.waitForTimeout(1800);
+            const state=await page.evaluate(()=>{
+              const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};
+              const main=document.querySelector('#MainContent');
+              const sides=[...main.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis);
+              const grids=[...main.querySelectorAll('.product-grid')].filter(g=>vis(g)&&[...g.querySelectorAll(':scope > *')].some(c=>vis(c)&&c.querySelector('a[href*="/products/"]')));
+              const grid=grids.find(g=>g.closest('.sq-refine-v3-results'))||grids[0];
+              const cards=grid?[...grid.querySelectorAll(':scope > *')].filter(c=>vis(c)&&c.querySelector('a[href*="/products/"]')):[];
+              const side=sides[0];
+              const details=side?[...side.querySelectorAll('details.sq-refine-v3-group')]:[];
+              const type=details.find(d=>/^shop by type$/i.test((d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim()));
+              const options=type?[...type.querySelectorAll('input[type="checkbox"],a[href]')].filter(vis):[];
+              const title=side?.querySelector('.sq-refine-v3-sidebar__title');
+              return {sidebars:sides.length,grids:grids.length,cards:cards.length,type:!!type,typeOptions:options.length,repair:main?.dataset.sqAccessoriesRefineRepair||null,sideBg:side?getComputedStyle(side).backgroundColor:null,title:(title?.textContent||'').replace(/\s+/g,' ').trim(),titleBg:title?getComputedStyle(title).backgroundColor:null,groups:details.map(d=>(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim())};
+            });
+            console.log('STATE',label,JSON.stringify({status:response.status(),errors,state}));
+            if(response.status()!==200)failures.push(label+' HTTP '+response.status());
+            if(errors.length)failures.push(label+' pageerrors '+errors.join(' | '));
+            if(state.sidebars!==1)failures.push(label+' sidebar count '+state.sidebars);
+            if(state.grids!==1)failures.push(label+' grid count '+state.grids);
+            if(state.cards!==50)failures.push(label+' card count '+state.cards);
+            if(!state.type||state.typeOptions<1)failures.push(label+' missing Type facet/options '+JSON.stringify(state.groups));
+            if(state.repair!=='true')failures.push(label+' repair marker missing');
+            if(state.sideBg!=='rgb(255, 255, 255)'||state.title.toUpperCase()!=='REFINE PRODUCTS'||state.titleBg!=='rgb(8, 40, 63)')failures.push(label+' sidebar style '+JSON.stringify(state));
+            if(state.type&&state.typeOptions>0){
+              const clicked=await page.evaluate(()=>{const side=document.querySelector('#MainContent .sq-refine-v3-sidebar');const d=[...side.querySelectorAll('details.sq-refine-v3-group')].find(x=>/^shop by type$/i.test((x.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim()));const i=d?.querySelector('input[type="checkbox"]:not(:disabled)');if(i){i.click();return true}const a=d?.querySelector('a[href]');if(a){a.click();return true}return false});
+              if(!clicked)failures.push(label+' Type click unavailable');
+              else {await page.waitForTimeout(2500);const after=await page.evaluate(()=>({url:location.href,side:!!document.querySelector('#MainContent .sq-refine-v3-sidebar'),products:[...document.querySelectorAll('#MainContent a[href*="/products/"]')].length,repair:document.querySelector('#MainContent')?.dataset.sqAccessoriesRefineRepair||null}));console.log('AFTER',label,JSON.stringify(after));if(!after.side||after.products<1||after.repair!=='true')failures.push(label+' Type click state '+JSON.stringify(after));}
+            }
+            await context.close();
+          }
+          await browser.close();
+          if(failures.length){console.error('FAILURES\n'+failures.join('\n'));process.exit(2)}
+          console.log('ACCESSORIES_CHROMIUM_MACOS_CERT_PASS');
+          EOF
+          node /tmp/cert.mjs
