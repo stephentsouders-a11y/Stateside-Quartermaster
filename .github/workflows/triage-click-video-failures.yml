@@ -1,0 +1,45 @@
+name: Triage exhaustive click-video failures
+on:
+  push:
+    paths:
+      - '.github/workflows/triage-click-video-failures.yml'
+permissions:
+  actions: read
+  contents: read
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download prior click-video artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p prior out
+          gh run download 34708379476 --repo stephentsouders-a11y/Stateside-Quartermaster -n storefront-click-video-audit -D prior
+      - name: Build compact failure triage
+        run: |
+          node <<'EOF'
+          const fs=require('fs');
+          const results=JSON.parse(fs.readFileSync('prior/results.json','utf8'));
+          const challenge=/connection needs to be verified|verify you are human|just a moment|attention required|performing security verification|429/i;
+          const rows=[];
+          for(const r of results){
+            const errors=(r.errors||[]).join(' | ');
+            const infra=challenge.test(errors)||r.status===429||/429/.test(String(r.pageTitle||''));
+            const failedButtons=(r.buttons||[]).filter(b=>b.outcome!=='PASS').map(b=>({label:b.label,href:b.href,outcome:b.outcome,after:b.after,error:b.error}));
+            if(r.status!==200||r.spinner>0||(r.brokenImages||[]).length||r.overflow||failedButtons.length||(!String(r.h1||'').trim())||errors){rows.push({path:r.path,status:r.status,pageTitle:r.pageTitle,h1:r.h1,spinner:r.spinner,brokenImages:r.brokenImages,overflow:r.overflow,sidebarCount:r.sidebarCount,errors:r.errors,infra,failedButtons})}
+          }
+          const trueRows=rows.filter(r=>!r.infra);
+          const badButtons=trueRows.flatMap(r=>r.failedButtons.map(b=>({path:r.path,...b}))).filter(b=>!challenge.test(String(b.error||'')));
+          const summary={allRows:rows.length,infraRows:rows.filter(r=>r.infra).length,trueRows:trueRows.length,trueFailedButtons:badButtons.length,status500:trueRows.filter(r=>r.status>=500).map(r=>r.path),missingH1:trueRows.filter(r=>!String(r.h1||'').trim()).map(r=>r.path),spinnerRoutes:trueRows.filter(r=>r.spinner>0).map(r=>r.path),brokenImageRoutes:trueRows.filter(r=>(r.brokenImages||[]).length).map(r=>r.path),overflowRoutes:trueRows.filter(r=>r.overflow).map(r=>r.path)};
+          fs.writeFileSync('out/summary.json',JSON.stringify(summary,null,2));
+          fs.writeFileSync('out/triage.json',JSON.stringify(trueRows,null,2));
+          fs.writeFileSync('out/failed-buttons.json',JSON.stringify(badButtons,null,2));
+          console.log(JSON.stringify(summary,null,2));
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: click-video-triage
+          path: out
+          retention-days: 7
