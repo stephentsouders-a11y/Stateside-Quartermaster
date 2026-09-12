@@ -1,0 +1,107 @@
+name: Chest Rigs live Chromium certification macOS
+
+on:
+  push:
+    paths:
+      - '.github/workflows/chest-rigs-live-chromium-cert-macos.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium and Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install chromium >/dev/null 2>&1
+      - name: Certify live Tactical Gear Chest Rigs
+        run: |
+          cat > certify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out', { recursive: true });
+          const start='https://www.statesideqm.com/collections/packs-pouches-carry-gear-chest-rigs-load-carriage?sq_root=tactical-gear';
+          const expectedPath='/collections/packs-pouches-carry-gear-chest-rigs-load-carriage/sq-type-chest-rigs';
+          const report={start,expectedPath,failures:[],devices:[]};
+          const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
+          for (const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]) {
+            const browser=await chromium.launch({headless:true});
+            const context=await browser.newContext({viewport,recordVideo:{dir:'out',size:device==='desktop'?{width:1280,height:720}:{width:390,height:720}}});
+            const page=await context.newPage();
+            page.setDefaultNavigationTimeout(90000);
+            page.setDefaultTimeout(30000);
+            const pageErrors=[]; const consoleErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error') consoleErrors.push(m.text())});
+            const response=await page.goto(start,{waitUntil:'domcontentloaded'}).catch(()=>null);
+            await page.waitForTimeout(1500);
+            await page.screenshot({path:`out/${device}-before.png`,fullPage:true});
+            let clicked=false;
+            const labels=page.locator('label');
+            for(let i=0,n=await labels.count();i<n;i++){
+              const label=labels.nth(i); const text=clean(await label.innerText().catch(()=>''));
+              if(/^Chest Rigs(?:\s|$)/i.test(text)){
+                const input=label.locator('input[type="checkbox"]');
+                if(await input.count()){
+                  const before=page.url();
+                  await Promise.all([page.waitForURL(u=>u.href!==before,{timeout:20000}).catch(()=>null),input.first().click({force:true})]);
+                  clicked=true; break;
+                }
+              }
+            }
+            if(!clicked){
+              const link=page.getByRole('link',{name:/^Chest Rigs$/i}).first();
+              if(await link.count()){
+                await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:20000}).catch(()=>null),link.click()]);
+                clicked=true;
+              }
+            }
+            if(!clicked){
+              report.failures.push(`${device}: Chest Rigs control not found on live page`);
+              await page.goto(`https://www.statesideqm.com${expectedPath}?sq_root=tactical-gear&filter.v.availability=1`,{waitUntil:'domcontentloaded'}).catch(()=>null);
+            }
+            await page.waitForLoadState('domcontentloaded').catch(()=>{});
+            await page.waitForTimeout(1800);
+            const u=new URL(page.url());
+            const productTitles=await page.evaluate(()=>{
+              const sels=['.sq-refine-v3-results .product-grid > *','.product-grid > *','li.grid__item'];
+              let cards=[]; for(const s of sels){cards=[...document.querySelectorAll(s)]; if(cards.length)break;}
+              return cards.map(card=>{
+                const a=card.querySelector('a[href*="/products/"]');
+                const h=card.querySelector('h3,h2,.card__heading,.product-card__title');
+                return (h?.textContent||a?.textContent||'').replace(/\s+/g,' ').trim();
+              }).filter(Boolean);
+            });
+            const belts=productTitles.filter(t=>/\bbelt(s)?\b/i.test(t));
+            const chestLike=productTitles.filter(t=>/chest\s*rig|reaper\s*rig|rig\b/i.test(t));
+            if(u.pathname.replace(/\/$/,'')!==expectedPath) report.failures.push(`${device}: wrong path ${u.pathname}`);
+            if(u.searchParams.get('sq_root')!=='tactical-gear') report.failures.push(`${device}: sq_root missing or wrong (${u.searchParams.get('sq_root')})`);
+            if(belts.length) report.failures.push(`${device}: belt products leaked into Chest Rigs: ${belts.join(' | ')}`);
+            if(productTitles.length<1) report.failures.push(`${device}: no visible product titles found`);
+            if(chestLike.length<1) report.failures.push(`${device}: no chest-rig-like product title found`);
+            await page.screenshot({path:`out/${device}-after.png`,fullPage:true});
+            report.devices.push({device,httpStatus:response?.status()||null,clicked,url:u.href,productCount:productTitles.length,productTitles,belts,chestLike,pageErrors,consoleErrors});
+            const video=page.video();
+            await page.close(); await context.close();
+            if(video){const src=await video.path();fs.copyFileSync(src,`out/${device}.webm`)}
+            await browser.close();
+          }
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          if(report.failures.length) process.exitCode=2;
+          EOF
+          node certify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chest-rigs-live-chromium-cert-macos
+          path: out
+          retention-days: 14
