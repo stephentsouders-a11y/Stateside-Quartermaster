@@ -1,3 +1,4 @@
+# certification trigger
 name: Outdoor Refine fast Chromium certification
 on:
   push:
