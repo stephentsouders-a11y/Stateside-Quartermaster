@@ -1,0 +1,52 @@
+name: Sep12 Refine exact coverage v2
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-refine-exact-coverage-v2.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        route: [accessories-gifts-collectibles,airsoft-milsim,apparel,armed-forces-gear,art,body-armor-ballistic-protection,literature,child-safety-shop,dive-scuba,firearm-accessories,first-aid-medical-ifak,flags-patriotic-decor,flashlights-lighting,footwear-gloves-eyewear,k9-dog-gear,knives-axes-cutlery,morale-patches-tactical-id,outdoor-preparedness-gear,patriotic-american-heritage,safety-rescue-climbing,sta-brite-insignia,tactical-gear,thin-line,uniforms,watches,zippos-lighters-torches,state-guard-series-ohio,stateside-quartermaster-logo-merch,army-national-guard-series,air-national-guard-series,products-built-for-the-line-u-s-army,products-built-for-the-line-u-s-navy,products-built-for-the-line-u-s-air-force,products-built-for-the-line-u-s-marine-corps,products-built-for-the-line-u-s-coast-guard,products-built-for-the-line-u-s-space-force,rotc-series,jrotc-series,military-schools-academies,law-enforcement-corrections,firefighting-ems-search-rescue]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Physically click every Refine text and checkbox square
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          ROUTE: ${{ matrix.route }}
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';import fs from 'fs';
+          const BASE=process.env.BASE,THEME=process.env.THEME,route=process.env.ROUTE,OUT='out';fs.mkdirSync(`${OUT}/video`,{recursive:true});fs.mkdirSync(`${OUT}/screens`,{recursive:true});
+          const candidate=raw=>{const u=new URL(raw,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()},base=candidate(`/collections/${route}`);
+          async function settle(page){await page.waitForLoadState('domcontentloaded').catch(()=>{});await page.locator('#MainContent').waitFor({state:'attached',timeout:20000});await page.waitForFunction(()=>{const m=document.getElementById('MainContent');return m&&(m.dataset.sqRefineV3Ready==='true'||!!m.dataset.sqRefineV3Error)},null,{timeout:30000}).catch(()=>{});await page.waitForTimeout(350)}
+          async function fresh(page){await page.goto(base,{waitUntil:'domcontentloaded'});await settle(page);await page.locator('#MainContent details.sq-refine-v3-group').evaluateAll(ds=>ds.forEach(d=>d.open=true));await page.waitForTimeout(100)}
+          async function mouseCenter(page,loc){await loc.scrollIntoViewIfNeeded();const b=await loc.boundingBox();if(!b)throw new Error('no bounding box');await page.mouse.click(b.x+b.width/2,b.y+b.height/2)}
+          const browser=await chromium.launch({headless:true}),ctx=await browser.newContext({viewport:{width:1365,height:900},recordVideo:{dir:`${OUT}/video`,size:{width:960,height:633}}}),page=await ctx.newPage();page.setDefaultTimeout(15000);page.setDefaultNavigationTimeout(35000);const rec={route,base,checks:[],pageErrors:[]};page.on('pageerror',e=>rec.pageErrors.push(String(e.message||e)));
+          try{const rr=await page.goto(base,{waitUntil:'domcontentloaded'});rec.status=rr?.status()??null;await settle(page);rec.sidebarCount=await page.locator('#MainContent .sq-refine-v3-sidebar:visible').count();rec.horizontalFacets=await page.locator('#MainContent .facets-block-wrapper--horizontal:visible').count();rec.refineError=await page.locator('#MainContent').getAttribute('data-sq-refine-v3-error').catch(()=>null);await page.locator('#MainContent details.sq-refine-v3-group').evaluateAll(ds=>ds.forEach(d=>d.open=true));const inputs=page.locator('#MainContent .sq-refine-v3-choice input[type=checkbox]');rec.controlCount=await inputs.count();
+            for(let i=0;i<rec.controlCount;i++){const out={index:i,outcome:'PASS',semanticCandidates:[]};try{
+              await fresh(page);let xs=page.locator('#MainContent .sq-refine-v3-choice input[type=checkbox]');if(await xs.count()<=i)throw new Error(`control index ${i} missing before text test`);let input=xs.nth(i),row=input.locator('xpath=..'),text=row.locator('span').first();out.label=((await text.innerText().catch(()=>''))||await input.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim();out.group=((await input.locator('xpath=ancestor::details[1]/summary').innerText().catch(()=>''))||'').replace(/\s+/g,' ').trim();out.kind=await input.getAttribute('data-kind');out.target=await input.getAttribute('data-target');out.name=(await input.getAttribute('data-filter-name'))||(await input.getAttribute('name'));out.value=(await input.getAttribute('data-filter-value'))||(await input.getAttribute('value'));const beforeUrl=page.url(),beforeChecked=await input.isChecked();await mouseCenter(page,text);await page.waitForTimeout(600);out.textAfterUrl=page.url();out.textAfterChecked=await input.isChecked().catch(()=>null);if(out.textAfterUrl!==beforeUrl||out.textAfterChecked!==beforeChecked)out.outcome='FAIL_TEXT_ACTIVATED';
+              await fresh(page);xs=page.locator('#MainContent .sq-refine-v3-choice input[type=checkbox]');if(await xs.count()<=i)throw new Error(`control index ${i} missing before checkbox test`);input=xs.nth(i);const start=page.url();await mouseCenter(page,input);await Promise.race([page.waitForFunction(s=>location.href!==s,start,{timeout:12000}),page.waitForTimeout(12000)]).catch(()=>{});out.checkboxAfterUrl=page.url();out.checkboxAfterChecked=await input.isChecked().catch(()=>null);if(out.checkboxAfterUrl===start&&out.checkboxAfterChecked!==true&&out.outcome==='PASS')out.outcome='FAIL_CHECKBOX_NO_ACTION';
+              const verify=candidate(out.checkboxAfterUrl===start?(out.target||start):out.checkboxAfterUrl);out.verifyUrl=verify;const vr=await page.goto(verify,{waitUntil:'domcontentloaded'}).catch(()=>null);out.verifyStatus=vr?.status()??null;await settle(page).catch(()=>{});const body=((await page.locator('#MainContent').innerText().catch(()=>''))||'').slice(0,12000),title=await page.title();if(out.verifyStatus&&out.verifyStatus>=400)out.outcome='FAIL_DEST_STATUS';if(/something went wrong|internal server error|there was a problem|page not found|404 not found/i.test(title+' '+body))out.outcome='FAIL_ERROR_PAGE';const titles=await page.locator('#MainContent .product-grid__item:visible,#MainContent .card-wrapper:visible,#MainContent .product-card:visible').evaluateAll(es=>[...new Set(es.map(e=>(e.innerText||'').replace(/\s+/g,' ').trim().slice(0,220)).filter(Boolean))].slice(0,120)).catch(()=>[]);out.productSample=titles.length;const l=(out.label||'').toLowerCase(),bad=[];const add=(re,why)=>titles.forEach(t=>{if(re.test(t.toLowerCase()))bad.push({title:t,why})});if(/chest rigs?/.test(l))add(/\bbelt\b|buckle|waist belt|duty belt|web belt/,'belt-like product under Chest Rigs');if(/^belts?$/.test(l))add(/chest rig|plate carrier|body armor|helmet/,'carrier/armor product under Belts');if(/helmets?/.test(l))add(/\bboot|glove|belt|shirt|pants?|trouser|backpack|chest rig/,'non-helmet product under Helmets');if(/flashlight|lighting/.test(l))add(/shirt|pants?|trouser|boot|belt|patch|insignia|book/,'non-lighting product');if(/first aid|medical|ifak/.test(l))add(/shirt|pants?|trouser|boot|belt buckle|book|flag/,'obvious non-medical product');if(/footwear|boots?/.test(l))add(/shirt|pants?|trouser|belt|patch|insignia|chest rig|plate carrier/,'non-footwear product');if(/^gloves?$/.test(l))add(/shirt|pants?|trouser|boot|belt|patch|insignia|chest rig/,'non-glove product');if(/eyewear|glasses|goggles/.test(l))add(/shirt|pants?|trouser|boot|belt|patch|insignia|chest rig/,'non-eyewear product');out.semanticCandidates=bad.slice(0,50);if(out.semanticCandidates.length&&out.outcome==='PASS')out.outcome='FAIL_SEMANTIC_CANDIDATES';
+            }catch(e){out.outcome='FAIL_EXCEPTION';out.error=String(e)}rec.checks.push(out);fs.writeFileSync(`${OUT}/progress.json`,JSON.stringify(rec,null,2))}
+            await fresh(page).catch(()=>{});await page.screenshot({path:`${OUT}/screens/${route}.png`,fullPage:true}).catch(()=>{});
+          }catch(e){rec.fatal=String(e)}rec.testedControls=rec.checks.length;rec.failedControls=rec.checks.filter(x=>x.outcome!=='PASS').length;rec.coverageComplete=rec.testedControls===rec.controlCount;rec.fail=rec.status!==200||!!rec.refineError||rec.sidebarCount!==1||rec.horizontalFacets>0||rec.controlCount===0||!rec.coverageComplete||rec.failedControls>0||!!rec.fatal;fs.writeFileSync(`${OUT}/result.json`,JSON.stringify(rec,null,2));console.log(JSON.stringify({route:rec.route,status:rec.status,controlCount:rec.controlCount,testedControls:rec.testedControls,coverageComplete:rec.coverageComplete,failedControls:rec.failedControls,sidebarCount:rec.sidebarCount,horizontalFacets:rec.horizontalFacets,fail:rec.fail},null,2));const v=page.video();await ctx.close();if(v){try{const p=await v.path();fs.renameSync(p,`${OUT}/video/${route}.webm`)}catch{}}await browser.close();if(rec.fail)process.exitCode=2;
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine-exact-v2-${{ matrix.route }}
+          path: out
+          retention-days: 7
