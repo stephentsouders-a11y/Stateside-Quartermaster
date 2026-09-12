@@ -17,26 +17,41 @@ jobs:
           npm init -y
           npm install playwright@1.55.0
           npx playwright install --with-deps chromium
-      - name: Inspect live Refine markup
+      - name: Inspect candidate Refine markup
         run: |
           cat > diagnose.mjs <<'EOF'
           import { chromium } from 'playwright';
+          const theme='158561894555';
           const routes=[
             '/collections/tactical-gear',
             '/collections/accessories-gifts-collectibles',
             '/collections/k9-dog-gear',
             '/collections/uniforms',
             '/collections/watches',
-            '/collections/state-guard-series'
+            '/collections/state-guard-series',
+            '/collections/sta-brite-insignia'
           ];
           const browser=await chromium.launch({headless:true});
           for(const path of routes){
             const page=await browser.newPage({viewport:{width:1365,height:900}});
-            const res=await page.goto('https://www.statesideqm.com'+path,{waitUntil:'domcontentloaded'});
-            await page.waitForTimeout(1200);
-            const inventory=await page.locator('#MainContent input, #MainContent label, #MainContent button, #MainContent a, #MainContent [role=checkbox], #MainContent [class*=refine], #MainContent [class*=facet], #MainContent [class*=filter]').evaluateAll(es=>es.map(e=>({tag:e.tagName,type:e.getAttribute('type'),role:e.getAttribute('role'),cls:String(e.className||'').slice(0,180),text:(e.innerText||e.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim().slice(0,220),href:e.getAttribute('href'),checked:'checked' in e?e.checked:null})).filter(x=>/refine|filter|category|type|availability|shop by|chest rig|belt|helmet|flashlight|medical|footwear|glove|eyewear|knife|patch/i.test([x.cls,x.text,x.href].join(' '))).slice(0,220));
-            console.log('\n=== ROUTE '+path+' status='+res?.status()+' ===');
-            console.log(JSON.stringify(inventory,null,2));
+            const url='https://www.statesideqm.com'+path+(path.includes('?')?'&':'?')+'preview_theme_id='+theme;
+            const res=await page.goto(url,{waitUntil:'domcontentloaded'});
+            await page.waitForTimeout(1800);
+            const summary=await page.evaluate(()=>{
+              const root=document.querySelector('#MainContent');
+              const all=[...(root?.querySelectorAll('input, label, button, a, [role=checkbox], [class*=refine], [class*=facet], [class*=filter]')||[])];
+              const relevant=all.map(e=>({tag:e.tagName,type:e.getAttribute('type'),name:e.getAttribute('name'),role:e.getAttribute('role'),id:e.id||null,cls:String(e.className||'').slice(0,180),text:(e.innerText||e.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim().slice(0,220),href:e.getAttribute('href'),value:e.getAttribute('value'),checked:'checked' in e?e.checked:null})).filter(x=>/refine|filter|category|type|availability|shop by|chest rig|belt|helmet|flashlight|medical|footwear|glove|eyewear|knife|patch/i.test([x.id,x.cls,x.text,x.href,x.name,x.value].join(' ')));
+              return {
+                title:document.title,
+                h1:[...document.querySelectorAll('#MainContent h1')].map(e=>e.innerText.trim()),
+                refineText:(root?.innerText||'').includes('Refine Products'),
+                globalSidebar:document.querySelectorAll('#sq-global-refine-sidebar').length,
+                checkboxes:[...(root?.querySelectorAll('input[type=checkbox]')||[])].map(e=>({id:e.id,name:e.name,value:e.value,cls:e.className,visible:!!(e.offsetWidth||e.offsetHeight||e.getClientRects().length),label:(e.labels?.[0]?.innerText||'').replace(/\s+/g,' ').trim().slice(0,160)})),
+                relevant:relevant.slice(0,260)
+              };
+            });
+            console.log('\n=== ROUTE '+path+' status='+res?.status()+' url='+page.url()+' ===');
+            console.log(JSON.stringify(summary,null,2));
             await page.close();
           }
           await browser.close();
