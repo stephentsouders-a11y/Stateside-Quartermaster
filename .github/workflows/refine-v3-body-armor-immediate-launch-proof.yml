@@ -1,0 +1,112 @@
+name: Refine V3 Body Armor immediate launch proof
+on:
+  push:
+    paths:
+      - '.github/workflows/refine-v3-body-armor-immediate-launch-proof.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify immutable checkout
+        env:
+          CERT_SHA: ${{ github.sha }}
+        run: |
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          echo "CERT_SHA=$CERT_SHA"
+          echo "ACTUAL_SHA=$ACTUAL_SHA"
+          test "$ACTUAL_SHA" = "$CERT_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium Playwright
+        run: |
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Cold-load proof
+        run: |
+          cat > body-armor-proof.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const BASE='https://www.statesideqm.com';
+          const THEME='158561894555';
+          const browser=await chromium.launch({headless:true});
+          const visFn=`el=>{if(!el)return false;const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0}`;
+
+          async function visit(name,path,viewport){
+            const context=await browser.newContext({viewport});
+            const page=await context.newPage();
+            const pageErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e)));
+            const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);
+            const started=Date.now();
+            let response=null,navError=null,usable=null;
+            try{
+              response=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});
+              const deadline=Date.now()+15000;
+              while(Date.now()<deadline){
+                const ok=await page.evaluate(()=>{
+                  const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};
+                  const m=document.querySelector('#MainContent');if(!m)return false;
+                  return [...m.querySelectorAll('.sq-refine-v3-sidebar')].some(vis)&&[...m.querySelectorAll('.product-grid')].some(g=>vis(g)&&[...g.querySelectorAll(':scope > .product-grid__item')].some(c=>vis(c)&&c.querySelector('a[href*="/products/"]')));
+                });
+                if(ok){usable=Date.now()-started;break}
+                await page.waitForTimeout(100);
+              }
+              await page.waitForTimeout(700);
+            }catch(e){navError=String(e)}
+            const a=await page.evaluate(()=>{
+              const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};
+              const m=document.querySelector('#MainContent');
+              if(!m)return {main:false,sidebars:0,grids:0,cards:0,rescue:false};
+              const sides=[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis);
+              const grids=[...m.querySelectorAll('.product-grid')].filter(g=>vis(g)&&[...g.querySelectorAll(':scope > .product-grid__item')].some(c=>vis(c)&&c.querySelector('a[href*="/products/"]')));
+              const g=grids.find(x=>x.closest('.sq-refine-v3-results'))||grids[0];
+              const cards=g?[...g.querySelectorAll(':scope > .product-grid__item')].filter(c=>vis(c)&&c.querySelector('a[href*="/products/"]')):[];
+              const s=sides[0],t=s?.querySelector('.sq-refine-v3-sidebar__title');
+              return {main:true,sidebars:sides.length,grids:grids.length,cards:cards.length,rescue:m.dataset.sqRefineV3VisibleGridRescued==='true',body:s?getComputedStyle(s).backgroundColor:null,title:(t?.textContent||'').trim(),titleBg:t?getComputedStyle(t).backgroundColor:null};
+            }).catch(e=>({evalError:String(e)}));
+            const out={name,status:response?.status()??null,usable,pageErrors,navError,...a};
+            console.log('SAMPLE '+JSON.stringify(out));
+            await context.close();
+            return out;
+          }
+
+          function functionalFailures(r){
+            const f=[];
+            if(r.status!==200)f.push('HTTP '+r.status);
+            if(r.navError)f.push('navigation');
+            if(r.pageErrors?.length)f.push('pageerror');
+            if(r.sidebars!==1)f.push('sidebars '+r.sidebars);
+            if(r.grids!==1)f.push('grids '+r.grids);
+            if(r.cards!==50)f.push('cards '+r.cards);
+            if(!r.rescue)f.push('rescue false');
+            if(r.body!=='rgb(255, 255, 255)')f.push('sidebar body '+r.body);
+            if(r.title.toUpperCase()!=='REFINE PRODUCTS'||r.titleBg!=='rgb(8, 40, 63)')f.push('header');
+            return f;
+          }
+
+          const body=[];
+          for(let i=1;i<=3;i++)body.push(await visit('Body Armor desktop #'+i,'/collections/body-armor-ballistic-protection',{width:1440,height:1000}));
+          const thinDesktop=await visit('Thin Line desktop','/collections/thin-line',{width:1440,height:1000});
+          const thinMobile=await visit('Thin Line mobile','/collections/thin-line',{width:390,height:844});
+          const all=[...body,thinDesktop,thinMobile];
+          const failures=[];
+          for(const r of all)for(const f of functionalFailures(r))failures.push(`${r.name}: ${f}`);
+          const times=body.map(x=>x.usable).filter(Number.isFinite).sort((a,b)=>a-b);
+          const median=times.length===3?times[1]:null;
+          console.log('BODY_ARMOR_USABLE_SAMPLES '+JSON.stringify(body.map(x=>x.usable)));
+          console.log('BODY_ARMOR_MEDIAN '+median);
+          if(median==null||median>3500)failures.push('Body Armor median '+median+' > 3500');
+          if(thinDesktop.usable==null||thinDesktop.usable>3500)failures.push('Thin Line desktop usable '+thinDesktop.usable);
+          if(thinMobile.usable==null||thinMobile.usable>3500)failures.push('Thin Line mobile usable '+thinMobile.usable);
+          await browser.close();
+          if(failures.length){console.error('FAILURES\n'+failures.join('\n'));process.exit(2)}
+          console.log('PROOF_PASS Body Armor median='+median+' ThinLineDesktop='+thinDesktop.usable+' ThinLineMobile='+thinMobile.usable);
+          EOF
+          node body-armor-proof.mjs
