@@ -1,0 +1,30 @@
+{% if request.page_type == 'collection' %}
+<script data-sq-availability-link-scrubber>
+(function(){
+  if(window.__sqAvailabilityLinkScrubber)return;window.__sqAvailabilityLinkScrubber=true;
+  var root=document.getElementById('MainContent')||document.body;
+  function cleanUrl(raw){
+    try{
+      var u=new URL(raw,location.origin);
+      if(u.origin!==location.origin||u.pathname.indexOf('/collections/')!==0)return raw;
+      if(!u.searchParams.has('filter.v.availability'))return raw;
+      u.searchParams.delete('filter.v.availability');
+      var q=u.searchParams.toString();
+      return u.pathname+(q?'?'+q:'')+u.hash;
+    }catch(_){return raw}
+  }
+  function scrub(node){
+    var scope=node&&node.querySelectorAll?node:root;
+    if(scope.matches&&scope.matches('a[href*="filter.v.availability"]')){
+      var h=scope.getAttribute('href'),n=cleanUrl(h);if(n!==h)scope.setAttribute('href',n);
+    }
+    scope.querySelectorAll&&scope.querySelectorAll('a[href*="filter.v.availability"]').forEach(function(a){var h=a.getAttribute('href'),n=cleanUrl(h);if(n!==h)a.setAttribute('href',n)});
+    scope.querySelectorAll&&scope.querySelectorAll('form[action*="filter.v.availability"]').forEach(function(f){var h=f.getAttribute('action'),n=cleanUrl(h);if(n!==h)f.setAttribute('action',n)});
+  }
+  scrub(root);
+  var timer=null,observer=new MutationObserver(function(records){clearTimeout(timer);timer=setTimeout(function(){records.forEach(function(r){r.addedNodes.forEach(function(n){if(n.nodeType===1)scrub(n)})});scrub(root)},20)});
+  observer.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['href','action']});
+  [100,350,800,1500,3000,5500,9000].forEach(function(ms){setTimeout(function(){scrub(root)},ms)});
+})();
+</script>
+{% endif %}
