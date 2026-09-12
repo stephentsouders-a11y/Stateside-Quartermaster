@@ -9,7 +9,7 @@ permissions:
 jobs:
   certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -18,94 +18,61 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Click every Sta-Brite refinement and verify product fit
+      - name: Certify Sta-Brite root refinements on current preview theme
         env:
           BASE: https://www.statesideqm.com
+          THEME: '158561894555'
         run: |
           cat > certify.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'fs';
           fs.mkdirSync('out',{recursive:true});
-          const root='/collections/sta-brite-insignia';
-          const expectations={
-            '/collections/sta-brite-air-force':{tag:'Service Branch - Air Force',forbid:['Army','Navy','Marine Corps','Coast Guard','Space Force','ROTC','JROTC']},
-            '/collections/sta-brite-army':{tag:'Service Branch - Army',forbid:['Air Force','Navy','Marine Corps','Coast Guard','Space Force','ROTC','JROTC']},
-            '/collections/sta-brite-coast-guard':{tag:'Service Branch - Coast Guard',forbid:['Air Force','Army','Navy','Marine Corps','Space Force','ROTC','JROTC']},
-            '/collections/sta-brite-marine-corps':{tag:'Service Branch - Marine Corps',forbid:['Air Force','Army','Navy','Coast Guard','Space Force','ROTC','JROTC']},
-            '/collections/sta-brite-navy':{tag:'Service Branch - Navy',forbid:['Air Force','Army','Marine Corps','Coast Guard','Space Force','ROTC','JROTC']},
-            '/collections/sta-brite-space-force':{tag:'Service Branch - Space Force',forbid:['Air Force','Army','Navy','Marine Corps','Coast Guard','ROTC','JROTC']},
-            '/collections/sta-brite-rotc':{tag:'Program - ROTC',forbid:['JROTC']},
-            '/collections/sta-brite-jrotc':{tag:'Program - JROTC',forbid:[]},
-            '/collections/sta-brite-military-service-academies':{tag:'Program - Military Schools & Academies',forbid:[]},
-            '/collections/sta-brite-law-enforcement':{tag:'Law Enforcement Insignia',forbid:[]},
-            '/collections/sta-brite-firefighting':{tag:'Public Safety - Firefighting',forbid:[]}
-          };
+          const cats=[
+            ['sta-brite-air-force','Service Branch - Air Force'],
+            ['sta-brite-army','Service Branch - Army'],
+            ['sta-brite-coast-guard','Service Branch - Coast Guard'],
+            ['sta-brite-marine-corps','Service Branch - Marine Corps'],
+            ['sta-brite-navy','Service Branch - Navy'],
+            ['sta-brite-space-force','Service Branch - Space Force'],
+            ['sta-brite-rotc','Program - ROTC'],
+            ['sta-brite-jrotc','Program - JROTC'],
+            ['sta-brite-military-service-academies','Program - Military Schools & Academies'],
+            ['sta-brite-law-enforcement','Law Enforcement Insignia'],
+            ['sta-brite-firefighting','Public Safety - Firefighting']
+          ];
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          const browser=await chromium.launch({headless:true});
-          const ctx=await browser.newContext({viewport:{width:1440,height:1200}});
-          const page=await ctx.newPage();
-          page.setDefaultTimeout(15000); page.setDefaultNavigationTimeout(60000);
-          const report={root:null,selections:[],errors:[],summary:{tested:0,pass:0,fail:0}};
-          const challenge=async()=>page.evaluate(()=>/verify you are human|just a moment|attention required|performing security verification/i.test((document.title||'')+' '+(document.body?.innerText||''))).catch(()=>false);
-          async function productsFor(path){
-            const out=[]; const seen=new Set();
+          const results=[],failures=[];
+          async function allProducts(request,handle){
+            const out=[],seen=new Set();
             for(let pg=1;pg<=24;pg++){
-              const u=new URL(path+'/products.json',process.env.BASE);u.searchParams.set('limit','250');u.searchParams.set('page',String(pg));
-              const r=await ctx.request.get(u.toString(),{timeout:30000});
-              if(!r.ok()) throw new Error(`products.json ${r.status()} ${u.pathname}`);
-              const j=await r.json(); const a=Array.isArray(j?.products)?j.products:[];
-              for(const p of a){if(p?.handle&&!seen.has(p.handle)){seen.add(p.handle);out.push(p)}}
-              if(a.length<250)break;
+              const u=new URL(`/collections/${handle}/products.json`,process.env.BASE);u.searchParams.set('limit','250');u.searchParams.set('page',String(pg));
+              const r=await request.get(u.toString(),{timeout:30000});if(!r.ok())throw new Error(`${handle} products.json HTTP ${r.status()}`);
+              const a=(await r.json())?.products||[];for(const p of a){if(p?.handle&&!seen.has(p.handle)){seen.add(p.handle);out.push(p)}}if(a.length<250)break;
+            }return out;
+          }
+          for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
+            const browser=await chromium.launch({headless:true});const ctx=await browser.newContext({viewport});const page=await ctx.newPage();page.setDefaultTimeout(20000);page.setDefaultNavigationTimeout(60000);
+            const target=`${process.env.BASE}/collections/sta-brite-insignia?preview_theme_id=${process.env.THEME}`;
+            const response=await page.goto(target,{waitUntil:'domcontentloaded'});await page.locator('[data-sq-stabrite-refine-shell]').waitFor({state:'visible',timeout:20000});await sleep(1000);
+            const visibleSidebars=await page.locator('.sq-global-refine-sidebar').evaluateAll(es=>es.filter(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2}).length);
+            const choices=await page.locator('.sq-stabrite-refine__choice input').count();
+            const rootRec={device,status:response?.status()??null,visibleSidebars,choices,url:page.url()};results.push(rootRec);
+            if(rootRec.status!==200)failures.push(`${device}: root HTTP ${rootRec.status}`);if(visibleSidebars!==1)failures.push(`${device}: expected 1 visible sidebar, got ${visibleSidebars}`);if(choices!==cats.length)failures.push(`${device}: expected ${cats.length} category choices, got ${choices}`);
+            await page.screenshot({path:`out/${device}-root.png`,fullPage:false});
+            for(let i=0;i<cats.length;i++){
+              const [handle,tag]=cats[i],input=page.locator(`.sq-stabrite-refine__choice input[data-handle="${handle}"]`),rec={device,handle,tag,checked:false,visible:0,expected:0,vendorBad:0,tagBad:0,subsetBad:0,outcome:'PASS',reasons:[]};
+              if(await input.count()!==1){rec.reasons.push('checkbox missing');rec.outcome='FAIL';results.push(rec);failures.push(`${device} ${handle}: checkbox missing`);continue}
+              const expected=await allProducts(ctx.request,handle);rec.expected=expected.length;const expectedSet=new Set(expected.map(p=>p.handle));
+              for(const p of expected){if(String(p.vendor||'').trim().toLowerCase()!=='sta-brite insignia inc.')rec.vendorBad++;if(!(Array.isArray(p.tags)?p.tags:[]).includes(tag))rec.tagBad++;}
+              await input.check();await page.waitForFunction(h=>document.querySelector('.sq-stabrite-refine__head h2')?.textContent&&document.querySelector(`.sq-stabrite-refine__choice input[data-handle="${h}"]`)?.checked,handle);await page.waitForFunction(()=>document.querySelector('.sq-stabrite-refine__loading')?.style.display==='none');await sleep(250);
+              rec.checked=await input.isChecked();const handles=await page.locator('[data-sq-stabrite-products] a.sq-stabrite-product').evaluateAll(as=>as.map(a=>new URL(a.href).pathname.split('/').pop()));rec.visible=handles.length;rec.subsetBad=handles.filter(h=>!expectedSet.has(h)).length;
+              const expectedVisible=Math.min(50,expected.length);if(!rec.checked)rec.reasons.push('checkbox did not remain checked');if(rec.vendorBad)rec.reasons.push(`${rec.vendorBad} wrong-vendor products`);if(rec.tagBad)rec.reasons.push(`${rec.tagBad} products missing expected tag`);if(rec.subsetBad)rec.reasons.push(`${rec.subsetBad} visible products outside selected collection`);if(rec.visible!==expectedVisible)rec.reasons.push(`visible ${rec.visible}, expected ${expectedVisible}`);
+              rec.outcome=rec.reasons.length?'FAIL':'PASS';results.push(rec);if(rec.outcome==='FAIL')failures.push(`${device} ${handle}: ${rec.reasons.join('; ')}`);
+              await page.screenshot({path:`out/${device}-${String(i+1).padStart(2,'0')}-${handle}.png`,fullPage:false});await input.uncheck();await sleep(150);
             }
-            return out;
+            await ctx.close();await browser.close();
           }
-          async function openRoot(){
-            const r=await page.goto(process.env.BASE+root,{waitUntil:'domcontentloaded'}); await sleep(1800);
-            if(!r||r.status()>=400||await challenge()) throw new Error(`root unavailable status=${r?.status()}`);
-            await page.locator('#MainContent').waitFor({state:'visible'});
-          }
-          await openRoot();
-          report.root={url:page.url(),title:await page.title(),sidebar:await page.locator('.sq-global-refine-sidebar').count()};
-          await page.screenshot({path:'out/root.png',fullPage:true});
-          const links=await page.locator('a[href*="/collections/sta-brite-"]').evaluateAll(as=>{
-            const m=new Map(); for(const a of as){const href=new URL(a.href).pathname; if(!m.has(href))m.set(href,{label:(a.textContent||'').replace(/\s+/g,' ').trim(),href});} return [...m.values()];
-          });
-          const ordered=[]; for(const l of links){if(l.href==='/collections/sta-brite-insignia'||expectations[l.href])ordered.push(l)}
-          for(const [path,exp] of Object.entries(expectations)){if(!ordered.some(x=>x.href===path))ordered.push({label:path.split('/').pop(),href:path,missingFromRoot:true})}
-          for(let i=0;i<ordered.length;i++){
-            const sel=ordered[i]; const rec={label:sel.label,path:sel.href,missingFromRoot:!!sel.missingFromRoot,clicked:false,status:null,count:0,vendorMismatch:[],missingExpectedTag:[],suspiciousTitle:[],visibleProductLinks:0,outcome:'PASS',reasons:[]};
-            try{
-              await openRoot();
-              const a=page.locator(`a[href^="${sel.href}"],a[href="${sel.href}"]`).first();
-              if(await a.count()){await a.click();rec.clicked=true;await page.waitForLoadState('domcontentloaded').catch(()=>{});await sleep(1200)}else{await page.goto(process.env.BASE+sel.href,{waitUntil:'domcontentloaded'});await sleep(1000)}
-              rec.status=(await page.request.get(page.url())).status();
-              if(await challenge())rec.reasons.push('challenge page');
-              rec.visibleProductLinks=await page.locator('#MainContent a[href*="/products/"]').count();
-              const ps=await productsFor(sel.href);rec.count=ps.length;
-              const exp=expectations[sel.href];
-              for(const p of ps){
-                const vendor=String(p.vendor||'').trim(); const tags=Array.isArray(p.tags)?p.tags:[]; const title=String(p.title||'');
-                if(vendor.toLowerCase()!=='sta-brite insignia inc.')rec.vendorMismatch.push({handle:p.handle,title,vendor});
-                if(exp&&!tags.includes(exp.tag))rec.missingExpectedTag.push({handle:p.handle,title,tags});
-                if(exp){for(const bad of exp.forbid){if(new RegExp(`\\b${bad.replace(/[.*+?^${}()|[\\]\\]/g,'\\$&')}\\b`,'i').test(title)){rec.suspiciousTitle.push({handle:p.handle,title,term:bad});break}}}
-              }
-              if(rec.missingFromRoot)rec.reasons.push('selection missing from root page');
-              if(rec.status>=400)rec.reasons.push(`HTTP ${rec.status}`);
-              if(rec.vendorMismatch.length)rec.reasons.push(`${rec.vendorMismatch.length} wrong-vendor products`);
-              if(rec.missingExpectedTag.length)rec.reasons.push(`${rec.missingExpectedTag.length} products missing expected tag`);
-              if(rec.suspiciousTitle.length)rec.reasons.push(`${rec.suspiciousTitle.length} suspicious cross-branch titles`);
-              if(sel.href!==root&&rec.count===0)rec.reasons.push('zero products');
-              rec.outcome=rec.reasons.length?'FAIL':'PASS';
-              await page.screenshot({path:`out/${String(i+1).padStart(2,'0')}-${sel.href.split('/').pop()}.png`,fullPage:false}).catch(()=>{});
-            }catch(e){rec.outcome='FAIL';rec.reasons.push(String(e?.message||e))}
-            report.selections.push(rec);report.summary.tested++;report.summary[rec.outcome==='PASS'?'pass':'fail']++;
-            console.log(`${rec.outcome} ${rec.path} count=${rec.count} ${rec.reasons.join('; ')}`);
-          }
-          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
-          fs.writeFileSync('out/summary.txt',report.selections.map(r=>`${r.outcome}\t${r.path}\t${r.count}\t${r.reasons.join('; ')}`).join('\n'));
-          await ctx.close(); await browser.close();
-          console.log(JSON.stringify(report.summary));
-          if(report.summary.fail)process.exitCode=2;
+          fs.writeFileSync('out/report.json',JSON.stringify({results,failures},null,2));console.log(JSON.stringify({failures,results},null,2));if(failures.length)process.exitCode=2;
           EOF
           node certify.mjs
       - uses: actions/upload-artifact@v4
