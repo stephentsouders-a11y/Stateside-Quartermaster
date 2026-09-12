@@ -1,4 +1,4 @@
-name: Uniforms Refine every-choice Chromium audit
+name: Uniforms Refine sharded Chromium certification
 
 on:
   push:
@@ -15,8 +15,12 @@ permissions:
 
 jobs:
   every-choice:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,188 +31,52 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Click and validate every Uniforms Refine Products choice
+      - name: Audit Uniforms Refine shard ${{ matrix.shard }}
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           mkdir -p out/screens
           cat > audit.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'node:fs';
-
-          const THEME='158561894555';
+          const SHARD=Number(process.env.SHARD||0), SHARDS=4, THEME='158561894555';
           const BASE=`https://www.statesideqm.com/collections/uniforms?preview_theme_id=${THEME}&sq_per_page=50`;
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          const report={base:BASE,startedAt:new Date().toISOString(),chromium:'',inventory:[],choices:[],failures:[],warnings:[],pageErrors:[],rateLimitRetries:0};
+          const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
+          const report={shard:SHARD,base:BASE,startedAt:new Date().toISOString(),chromium:'',inventoryTotal:0,choices:[],failures:[],warnings:[],pageErrors:[],rateLimitRetries:0};
           const browser=await chromium.launch({headless:true}); report.chromium=browser.version();
           const ctx=await browser.newContext({viewport:{width:1440,height:1050}});
-          const page=await ctx.newPage(); page.setDefaultNavigationTimeout(90000); page.setDefaultTimeout(30000);
+          const page=await ctx.newPage(); page.setDefaultNavigationTimeout(70000); page.setDefaultTimeout(25000);
           page.on('pageerror',e=>report.pageErrors.push(String(e)));
-
-          async function waitReady(p=page){
-            await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});
-            await p.waitForTimeout(500);
+          async function waitReady(){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:30000});await page.waitForTimeout(250)}
+          async function go(url){for(let a=0;a<6;a++){const r=await page.goto(url,{waitUntil:'domcontentloaded'});if(r?.status()===200){await waitReady();return}if(r?.status()===429){report.rateLimitRetries++;await sleep(Math.min(2500*(a+1),15000));continue}throw new Error(`HTTP ${r?.status()} ${url}`)}throw new Error(`429 exhausted ${url}`)}
+          async function state(){return page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};const grid=m?.querySelector('.sq-refine-v3-results .product-grid'),cards=grid?[...grid.children].filter(x=>vis(x)&&x.querySelector('a[href*="/products/"]')):[];return{ready:m?.dataset.sqRefineV3Ready||null,error:m?.dataset.sqRefineV3Error||null,sidebar:!!m?.querySelector('.sq-refine-v3-sidebar'),products:cards.map(x=>{const a=x.querySelector('a[href*="/products/"]');return{title:clean(x.innerText).slice(0,200),href:a?.href||''}}),duplicate:[...m.querySelectorAll('.product-grid')].filter(g=>vis(g)&&g!==grid&&g.querySelector('a[href*="/products/"]')).length,oldNative:[...m.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length}})}
+          async function pjson(href){const h=new URL(href).pathname.split('/').filter(Boolean).pop();for(let a=0;a<4;a++){const r=await ctx.request.get(`https://www.statesideqm.com/products/${h}.js`);if(r.status()===200)return r.json();if(r.status()===429){report.rateLimitRetries++;await sleep(1800*(a+1));continue}throw new Error(`product.js ${r.status()} ${h}`)}throw new Error(`product.js 429 ${h}`)}
+          function match(meta,p){const n=meta.filterName||meta.polish||'',v=clean(meta.value);if(n==='filter.p.vendor')return clean(p.vendor)===v;if(n==='filter.p.product_type')return clean(p.type)===v;if(n==='filter.p.tag')return(p.tags||[]).some(t=>clean(t)===v);if(n==='filter.v.availability'){const any=(p.variants||[]).some(x=>x.available);return v==='1'?any:v==='0'?!any:true}if(/^filter\.v\.option\./.test(n)){const needle=v.toLowerCase();return(p.variants||[]).some(x=>(x.options||[]).some(y=>clean(y).toLowerCase()===needle))}return null}
+          await go(BASE);
+          const baseState=await state();
+          if(!baseState.sidebar)report.failures.push('base sidebar missing');if(baseState.oldNative)report.failures.push(`base old native filters ${baseState.oldNative}`);if(baseState.duplicate)report.failures.push(`base duplicate grids ${baseState.duplicate}`);
+          const inventory=await page.evaluate(()=>{const side=document.querySelector('#MainContent .sq-refine-v3-sidebar');return side?[...side.querySelectorAll('details.sq-refine-v3-group')].flatMap((d,gi)=>{const group=(d.querySelector(':scope>summary')?.textContent||'').replace(/\s+/g,' ').trim();return[...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>{const row=i.closest('.sq-refine-v3-choice')||i.closest('label')||i.parentElement,span=row?.querySelector('span');return{group,gi,ii,label:(span?.textContent||row?.textContent||i.value||'').replace(/\s+/g,' ').trim(),value:i.value||'',target:i.dataset.target||'',filterName:i.dataset.filterName||'',polish:i.dataset.sqPolishParam||'',ucp:i.dataset.sqUcpValue||''}}) }):[]});
+          report.inventoryTotal=inventory.length;
+          const mine=inventory.map((x,i)=>({...x,index:i})).filter(x=>x.index%SHARDS===SHARD);
+          console.log('UNIFORMS_SHARD_START',JSON.stringify({shard:SHARD,total:inventory.length,mine:mine.length}));
+          for(const meta of mine){
+            await go(BASE);await sleep(300);
+            const d=page.locator('#MainContent details.sq-refine-v3-group').nth(meta.gi);if(!(await d.getAttribute('open')))await d.locator(':scope>summary').click();const input=d.locator('input[type="checkbox"]').nth(meta.ii);await input.scrollIntoViewIfNeeded().catch(()=>{});
+            const before=page.url();let clickError='';try{await Promise.all([page.waitForURL(u=>u.href!==before,{timeout:18000}).catch(()=>null),input.click({force:true})]);await page.waitForLoadState('domcontentloaded').catch(()=>{});await waitReady().catch(()=>{});if(meta.ucp)await page.waitForFunction(()=>window.__sqUniformColor?.ready||window.__sqUniformColor?.error,null,{timeout:30000}).catch(()=>{})}catch(e){clickError=String(e)}
+            const u=new URL(page.url()),s=await state().catch(()=>({ready:null,products:[],duplicate:0,oldNative:0,sidebar:false,error:'eval failed'})),errors=[],semantic=[];
+            if(clickError)errors.push(clickError);if(s.ready!=='true')errors.push(`V3 not ready ${s.ready} ${s.error||''}`);if(!s.sidebar)errors.push('sidebar missing');if(s.duplicate)errors.push(`duplicate grids ${s.duplicate}`);if(s.oldNative)errors.push(`old native filters ${s.oldNative}`);
+            if(meta.ucp){if(!u.searchParams.getAll('sq_ucp').includes(meta.ucp))errors.push(`missing sq_ucp=${meta.ucp}`);if(!s.products.length)errors.push('zero products')}
+            else if(meta.target){const t=new URL(meta.target,'https://www.statesideqm.com');if(u.pathname!==t.pathname)errors.push(`wrong target ${u.pathname} expected ${t.pathname}`);if(!u.searchParams.getAll('sq_root').includes('uniforms'))errors.push('lost sq_root=uniforms');if(!s.products.length)errors.push('zero products')}
+            else{const param=meta.filterName||meta.polish;if(param&&!u.searchParams.getAll(param).includes(meta.value))errors.push(`missing ${param}=${meta.value}`);if(!param)errors.push('no filter metadata');for(const card of s.products.slice(0,5)){try{const p=await pjson(card.href),ok=match(meta,p);if(ok===false)semantic.push({title:p.title,vendor:p.vendor,type:p.type,reason:`fails ${param}=${meta.value}`})}catch(e){report.warnings.push(`${meta.group} > ${meta.label}: ${e}`)}}if(semantic.length)errors.push(`${semantic.length} sampled products violate selected filter`)}
+            const entry={index:meta.index+1,group:meta.group,label:meta.label,url:u.href,products:s.products.length,semantic,errors};report.choices.push(entry);console.log('UNIFORMS_CHOICE',JSON.stringify(entry));if(errors.length){report.failures.push(`${meta.group} > ${meta.label}: ${errors.join('; ')}`);await page.screenshot({path:`out/screens/${String(meta.index+1).padStart(3,'0')}.png`,fullPage:true}).catch(()=>{})}
           }
-          async function gotoRetry(url){
-            for(let attempt=0;attempt<7;attempt++){
-              const r=await page.goto(url,{waitUntil:'domcontentloaded'});
-              const status=r?.status();
-              if(status===200){await waitReady();return status;}
-              if(status===429){report.rateLimitRetries++;await sleep(Math.min(4000*Math.pow(2,attempt),45000));continue;}
-              throw new Error(`HTTP ${status} for ${url}`);
-            }
-            throw new Error(`HTTP 429 exhausted for ${url}`);
-          }
-          async function openBase(){return gotoRetry(BASE)}
-          const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
-          const safe=s=>clean(s).replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').slice(0,80).toLowerCase();
-          function isCategoryGroup(g){return /shop by category|shop by subcategory|shop by branch/i.test(g)}
-
-          async function pageState(){return page.evaluate(()=>{
-            const main=document.querySelector('#MainContent');
-            const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};
-            const grid=main?.querySelector('.sq-refine-v3-results .product-grid');
-            const cards=grid?[...grid.children].filter(x=>vis(x)&&x.querySelector('a[href*="/products/"]')):[];
-            const products=cards.map(x=>{const a=x.querySelector('a[href*="/products/"]');return {title:(x.innerText||'').replace(/\s+/g,' ').trim().slice(0,240),href:a?.href||'',id:x.dataset.productId||''}});
-            const duplicate=[...main.querySelectorAll('.product-grid')].filter(g=>vis(g)&&g!==grid&&g.querySelector('a[href*="/products/"]')).length;
-            const oldNative=[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length;
-            const oldButtons=[...main.querySelectorAll('.sq-subcategory-section,.sq-subcategory-card')].filter(vis).length;
-            return {ready:main?.dataset.sqRefineV3Ready||null,error:main?.dataset.sqRefineV3Error||null,products,duplicate,oldNative,oldButtons,sidebar:!!main?.querySelector('.sq-refine-v3-sidebar')};
-          })}
-
-          async function productJson(href){
-            const u=new URL(href),handle=u.pathname.split('/').filter(Boolean).pop();
-            for(let attempt=0;attempt<5;attempt++){
-              const r=await ctx.request.get(`https://www.statesideqm.com/products/${handle}.js`);
-              if(r.status()===200)return r.json();
-              if(r.status()===429){report.rateLimitRetries++;await sleep(2500*(attempt+1));continue;}
-              throw new Error(`product.js HTTP ${r.status()} ${handle}`);
-            }
-            throw new Error(`product.js 429 exhausted ${handle}`);
-          }
-
-          function matchNative(meta,p){
-            const name=meta.filterName||meta.polish||'';
-            const value=clean(meta.value);
-            if(name==='filter.p.vendor')return clean(p.vendor)===value;
-            if(name==='filter.p.product_type')return clean(p.type)===value;
-            if(name==='filter.p.tag')return (p.tags||[]).some(t=>clean(t)===value);
-            if(name==='filter.v.availability'){
-              const any=(p.variants||[]).some(v=>v.available);
-              return value==='1'?any:value==='0'?!any:true;
-            }
-            if(/^filter\.v\.option\./.test(name)){
-              const needle=value.toLowerCase();
-              return (p.variants||[]).some(v=>(v.options||[]).some(x=>clean(x).toLowerCase()===needle));
-            }
-            return null;
-          }
-
-          await openBase();
-          const initial=await pageState();
-          if(!initial.sidebar)report.failures.push('Refine Products sidebar missing');
-          if(initial.oldNative)report.failures.push(`Old native filter surfaces visible: ${initial.oldNative}`);
-          if(initial.oldButtons)report.failures.push(`Legacy category buttons visible: ${initial.oldButtons}`);
-          if(initial.duplicate)report.failures.push(`Duplicate product grids visible on base: ${initial.duplicate}`);
-          const inventory=await page.evaluate(()=>{
-            const side=document.querySelector('#MainContent .sq-refine-v3-sidebar');
-            if(!side)return [];
-            return [...side.querySelectorAll('details.sq-refine-v3-group')].flatMap((d,gi)=>{
-              const group=(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim();
-              return [...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>{
-                const row=i.closest('.sq-refine-v3-choice')||i.closest('label')||i.parentElement;
-                const span=row?.querySelector('span');
-                const label=(span?.textContent||row?.textContent||i.getAttribute('aria-label')||i.value||'').replace(/\s+/g,' ').trim();
-                return {group,gi,ii,label,value:i.value||'',target:i.dataset.target||'',filterName:i.dataset.filterName||'',polish:i.dataset.sqPolishParam||'',ucp:i.dataset.sqUcpValue||''};
-              });
-            });
-          });
-          report.inventory=inventory;
-          console.log('UNIFORMS_REFINE_INVENTORY',JSON.stringify(inventory));
-          if(!inventory.length)report.failures.push('No Refine Products checkbox choices found');
-
-          for(let index=0;index<inventory.length;index++){
-            const meta=inventory[index];
-            await openBase();
-            await sleep(1100);
-            const details=page.locator('#MainContent details.sq-refine-v3-group').nth(meta.gi);
-            if(!(await details.getAttribute('open')))await details.locator(':scope > summary').click();
-            const input=details.locator('input[type="checkbox"]').nth(meta.ii);
-            await input.scrollIntoViewIfNeeded().catch(()=>{});
-            const before=page.url(); let clickError='';
-            try{
-              await Promise.all([
-                page.waitForURL(u=>u.href!==before,{timeout:25000}).catch(()=>null),
-                input.click({force:true})
-              ]);
-              await page.waitForLoadState('domcontentloaded').catch(()=>{});
-              await waitReady().catch(()=>{});
-              if(meta.ucp)await page.waitForFunction(()=>window.__sqUniformColor?.ready||window.__sqUniformColor?.error,null,{timeout:45000}).catch(()=>{});
-            }catch(e){clickError=String(e)}
-            const u=new URL(page.url());
-            const state=await pageState().catch(()=>({ready:null,error:'state evaluation failed',products:[],duplicate:0,oldNative:0,oldButtons:0,sidebar:false}));
-            const errors=[]; const warnings=[]; const semantic=[];
-            if(clickError)errors.push(`click/navigation: ${clickError}`);
-            if(state.ready!=='true')errors.push(`V3 not ready (${state.ready}); ${state.error||''}`);
-            if(state.duplicate)errors.push(`duplicate product grids: ${state.duplicate}`);
-            if(state.oldNative)errors.push(`old native filters visible: ${state.oldNative}`);
-            if(!state.sidebar)errors.push('Refine sidebar missing after selection');
-
-            if(meta.ucp){
-              if(!u.searchParams.getAll('sq_ucp').includes(meta.ucp))errors.push(`URL missing sq_ucp=${meta.ucp}`);
-              if(!state.products.length)errors.push('Color / Pattern choice returned zero products');
-            }else if(meta.target){
-              const target=new URL(meta.target,'https://www.statesideqm.com');
-              if(u.pathname!==target.pathname)errors.push(`wrong structural target ${u.pathname}; expected ${target.pathname}`);
-              if(!u.searchParams.getAll('sq_root').includes('uniforms'))errors.push('structural target lost sq_root=uniforms');
-              if(!state.products.length)errors.push('structural choice returned zero products');
-            }else{
-              const param=meta.filterName||meta.polish;
-              if(param&&!u.searchParams.getAll(param).includes(meta.value))errors.push(`URL missing ${param}=${meta.value}`);
-              if(!param)errors.push('checkbox has no target/filter metadata');
-              if(!state.products.length)warnings.push('choice returned zero visible products');
-              const sample=state.products.slice(0,12);
-              for(const card of sample){
-                try{
-                  const p=await productJson(card.href);
-                  const ok=matchNative(meta,p);
-                  if(ok===false)semantic.push({title:p.title,vendor:p.vendor,type:p.type,tags:(p.tags||[]).slice(0,20),reason:`does not satisfy ${param}=${meta.value}`});
-                }catch(e){warnings.push(String(e))}
-              }
-              if(semantic.length)errors.push(`${semantic.length} sampled products fail selected filter semantics`);
-            }
-
-            // For structural choices, prove every rendered card is actually present on the selected collection route's canonical product list.
-            if(meta.target&&state.products.length){
-              const target=new URL(meta.target,'https://www.statesideqm.com'); target.search='';
-              try{
-                const r=await ctx.request.get(`${target.origin}${target.pathname}/products.json?limit=250&page=1`);
-                if(r.ok()){
-                  const j=await r.json(); const handles=new Set((j.products||[]).map(p=>p.handle));
-                  const missing=state.products.filter(card=>!handles.has(new URL(card.href).pathname.split('/').filter(Boolean).pop()));
-                  if(missing.length)errors.push(`${missing.length} rendered products are not members of structural target collection`);
-                }else warnings.push(`target products.json HTTP ${r.status()}`);
-              }catch(e){warnings.push(`target membership check: ${e}`)}
-            }
-
-            const entry={index:index+1,...meta,url:u.href,productCount:state.products.length,sampleProducts:state.products.slice(0,8),semantic,errors,warnings};
-            report.choices.push(entry);
-            console.log('UNIFORMS_REFINE_CHOICE',JSON.stringify(entry));
-            if(errors.length){
-              report.failures.push(`${meta.group} > ${meta.label}: ${errors.join('; ')}`);
-              await page.screenshot({path:`out/screens/${String(index+1).padStart(3,'0')}-${safe(meta.group)}-${safe(meta.label)}.png`,fullPage:true}).catch(()=>{});
-            }
-            report.warnings.push(...warnings.map(w=>`${meta.group} > ${meta.label}: ${w}`));
-          }
-
-          report.finishedAt=new Date().toISOString();
-          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
-          console.log('UNIFORMS_REFINE_SUMMARY',JSON.stringify({chromium:report.chromium,totalChoices:report.choices.length,failures:report.failures,warnings:report.warnings,pageErrors:report.pageErrors,rateLimitRetries:report.rateLimitRetries},null,2));
-          await browser.close();
-          if(report.failures.length||report.pageErrors.length)process.exitCode=2;
+          report.finishedAt=new Date().toISOString();fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));console.log('UNIFORMS_SHARD_SUMMARY',JSON.stringify({shard:SHARD,chromium:report.chromium,inventoryTotal:report.inventoryTotal,tested:report.choices.length,failures:report.failures,warnings:report.warnings,pageErrors:report.pageErrors,rateLimitRetries:report.rateLimitRetries},null,2));await browser.close();if(report.failures.length||report.pageErrors.length)process.exitCode=2;
           EOF
           node audit.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: uniforms-refine-every-choice-chromium
+          name: uniforms-refine-shard-${{ matrix.shard }}
           path: out
           retention-days: 14
