@@ -1,0 +1,39 @@
+name: Zippos Refine Fast-Fail Chromium Cert macOS 0911
+on:
+  push:
+    paths:
+      - '.github/workflows/zippos-refine-fast-cert-macos-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify-fast:
+    runs-on: macos-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install chromium >/dev/null 2>&1
+      - name: Fast-fail every Refine Products choice
+        run: |
+          mkdir -p out/screens
+          cat > cert.mjs <<'EOF'
+          import {chromium} from 'playwright'; import fs from 'node:fs';
+          const BASE='https://www.statesideqm.com/collections/zippos-lighters-torches', PREVIEW='158561894555';
+          const browser=await chromium.launch({headless:true}); const ctx=await browser.newContext({viewport:{width:1440,height:1000}}); const report={cases:[]};
+          async function open(preview=true){const p=await ctx.newPage();const errs=[];p.on('pageerror',e=>errs.push(String(e)));const u=new URL(BASE);if(preview)u.searchParams.set('preview_theme_id',PREVIEW);const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:30000});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true'||document.querySelector('#MainContent')?.dataset.sqRefineV3Error,{timeout:12000}).catch(()=>{});await p.waitForTimeout(400);return{p,errs,status:r?.status()||0}}
+          async function state(p){return p.evaluate(()=>{const m=document.querySelector('#MainContent');const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'};const grids=[...m.querySelectorAll('.product-grid')].filter(vis);const cards=grids.flatMap(g=>[...g.querySelectorAll(':scope > .product-grid__item')].filter(vis));const groups=[...document.querySelectorAll('.sq-refine-v3-sidebar .sq-refine-v3-group')].map((d,gi)=>({gi,label:(d.querySelector(':scope>summary')?.textContent||'').trim(),choices:[...d.querySelectorAll('input[data-kind]')].map((i,ci)=>({ci,label:(i.closest('label')?.querySelector('span')?.textContent||'').trim(),kind:i.dataset.kind||'',target:i.dataset.target||'',name:i.dataset.filterName||'',value:i.dataset.filterValue||'',checked:i.checked}))}));return{url:location.href,ready:m?.dataset.sqRefineV3Ready||'',error:m?.dataset.sqRefineV3Error||'',grids:grids.length,cards:cards.length,groups}})}
+          const br=await open(true),base=await state(br.p);report.base={status:br.status,errors:br.errs,...base};await br.p.close();let n=0;
+          for(const g of base.groups)for(const c of g.choices){n++;const r=await open(true),p=r.p,e={n,group:g.label,label:c.label,kind:c.kind,status:r.status,errors:r.errs};try{const loc=p.locator('.sq-refine-v3-sidebar .sq-refine-v3-group').nth(g.gi).locator('input[data-kind]').nth(c.ci);await loc.scrollIntoViewIfNeeded({timeout:5000});const before=p.url();await loc.click({force:true,timeout:5000});await p.waitForFunction(b=>location.href!==b,before,{timeout:12000}).catch(()=>{});await p.waitForLoadState('domcontentloaded',{timeout:15000}).catch(()=>{});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true'||document.querySelector('#MainContent')?.dataset.sqRefineV3Error,{timeout:12000}).catch(()=>{});await p.waitForTimeout(300);const a=await state(p),u=new URL(a.url);e.navigationOk=c.kind==='structural'?u.pathname===new URL(c.target,BASE).pathname:u.searchParams.getAll(c.name).includes(c.value);e.checkedOk=a.groups.some(x=>x.choices.some(y=>y.checked&&y.label===c.label));e.surfaceOk=a.grids===1&&a.cards>0;e.v3Ok=a.ready==='true'&&!a.error;e.pass=e.navigationOk&&e.checkedOk&&e.surfaceOk&&e.v3Ok&&!e.errors.length;e.after={url:a.url,ready:a.ready,error:a.error,grids:a.grids,cards:a.cards};if(!e.pass)await p.screenshot({path:`out/screens/fail-${String(n).padStart(3,'0')}.png`,fullPage:false})}catch(err){e.exception=String(err);e.pass=false}report.cases.push(e);console.log(`${n} ${e.pass?'PASS':'FAIL'} ${g.label} :: ${c.label}`);await p.close()}
+          const lr=await open(false),live=await state(lr.p);report.live={status:lr.status,errors:lr.errs,...live};await lr.p.screenshot({path:'out/screens/live.png',fullPage:false});await lr.p.close();report.summary={groups:base.groups.map(g=>({label:g.label,count:g.choices.length})),choices:report.cases.length,passed:report.cases.filter(x=>x.pass).length,failed:report.cases.filter(x=>!x.pass).length,previewReady:base.ready,previewError:base.error,previewGrids:base.grids,previewCards:base.cards,liveReady:live.ready,liveError:live.error,liveGrids:live.grids,liveCards:live.cards};fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));fs.writeFileSync('out/failures.json',JSON.stringify(report.cases.filter(x=>!x.pass),null,2));console.log(JSON.stringify(report.summary,null,2));await browser.close();if(report.summary.failed||base.ready!=='true'||base.grids!==1||live.grids!==1)process.exit(2)
+          EOF
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zippos-refine-fast-cert-macos-0911
+          path: out
+          retention-days: 7
