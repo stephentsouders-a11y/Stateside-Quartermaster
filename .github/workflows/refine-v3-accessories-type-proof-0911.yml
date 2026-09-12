@@ -28,14 +28,32 @@ jobs:
           const BASE='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
           const browser=await chromium.launch({headless:true});
           const failures=[];
+
+          async function navigate(page,label){
+            let last=null;
+            for(let attempt=1;attempt<=3;attempt++){
+              try{
+                const response=await page.goto(BASE,{waitUntil:'commit',timeout:30000});
+                console.log('NAV '+label+' attempt='+attempt+' status='+(response?.status()??'null'));
+                await page.waitForFunction(()=>document.querySelector('#MainContent'),null,{timeout:30000});
+                return response;
+              }catch(e){
+                last=e;
+                console.log('NAV_RETRY '+label+' attempt='+attempt+' '+String(e));
+                await page.waitForTimeout(1000*attempt);
+              }
+            }
+            throw last;
+          }
+
           async function run(label,viewport){
             const context=await browser.newContext({viewport});
             const page=await context.newPage();
             const errors=[]; page.on('pageerror',e=>errors.push(String(e)));
             const t0=Date.now();
-            const res=await page.goto(BASE,{waitUntil:'domcontentloaded',timeout:60000});
-            await page.waitForFunction(()=>document.querySelector('#MainContent .sq-refine-v3-sidebar'),null,{timeout:15000});
-            await page.waitForTimeout(900);
+            const res=await navigate(page,label);
+            await page.waitForFunction(()=>document.querySelector('#MainContent .sq-refine-v3-sidebar'),null,{timeout:20000});
+            await page.waitForTimeout(1200);
             const state=await page.evaluate(()=>{
               const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};
               const m=document.querySelector('#MainContent');
@@ -47,33 +65,34 @@ jobs:
               const typeGroup=groups.find(x=>/shop by type|\btype\b/i.test((x.querySelector('h2,h3,h4,.sq-refine-v3-group__title,summary,strong')?.textContent||x.getAttribute('data-sq-refine-v3-group')||'').trim())) || [...sides[0].querySelectorAll('*')].find(x=>/^shop by type$/i.test((x.textContent||'').trim()))?.closest('[data-sq-refine-v3-group],.sq-refine-v3-group,fieldset,details,section,div');
               const typeInputs=typeGroup?[...typeGroup.querySelectorAll('input[type="checkbox"],a[href*="filter.p.product_type"]')].filter(vis):[];
               const title=sides[0]?.querySelector('.sq-refine-v3-sidebar__title');
-              return {sidebars:sides.length,grids:grids.length,cards:cards.length,typePresent:!!typeGroup,typeCount:typeInputs.length,body:sides[0]?getComputedStyle(sides[0]).backgroundColor:null,title:(title?.textContent||'').trim(),titleBg:title?getComputedStyle(title).backgroundColor:null,usable:performance.now()};
+              return {sidebars:sides.length,grids:grids.length,cards:cards.length,typePresent:!!typeGroup,typeCount:typeInputs.length,body:sides[0]?getComputedStyle(sides[0]).backgroundColor:null,title:(title?.textContent||'').trim(),titleBg:title?getComputedStyle(title).backgroundColor:null,repair:m.dataset.sqAccessoriesRefineRepair||null};
             });
-            console.log('STATE '+label+' '+JSON.stringify({status:res.status(),errors,state,wall:Date.now()-t0}));
-            if(res.status()!==200)failures.push(label+' HTTP '+res.status());
-            if(errors.length)failures.push(label+' page errors');
+            console.log('STATE '+label+' '+JSON.stringify({status:res?.status()??null,errors,state,wall:Date.now()-t0}));
+            if((res?.status()??0)!==200)failures.push(label+' HTTP '+(res?.status()??'null'));
+            if(errors.length)failures.push(label+' page errors '+errors.join(' | '));
             if(state.sidebars!==1)failures.push(label+' sidebars '+state.sidebars);
             if(state.grids!==1)failures.push(label+' grids '+state.grids);
             if(state.cards!==50)failures.push(label+' cards '+state.cards);
             if(!state.typePresent||state.typeCount<1)failures.push(label+' missing Type facet/options');
+            if(state.repair!=='true')failures.push(label+' Accessories repair marker missing');
             if(state.body!=='rgb(255, 255, 255)'||state.title.toUpperCase()!=='REFINE PRODUCTS'||state.titleBg!=='rgb(8, 40, 63)')failures.push(label+' sidebar style');
 
             const clicked=await page.evaluate(()=>{
-              const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'};
               const sidebar=document.querySelector('#MainContent .sq-refine-v3-sidebar');
               const groups=[...sidebar.querySelectorAll('[data-sq-refine-v3-group],.sq-refine-v3-group,fieldset,details,section')];
               const tg=groups.find(x=>/shop by type|\btype\b/i.test((x.querySelector('h2,h3,h4,.sq-refine-v3-group__title,summary,strong')?.textContent||x.getAttribute('data-sq-refine-v3-group')||'').trim()));
               if(!tg)return false;
-              const a=[...tg.querySelectorAll('a[href]')].find(vis); if(a){a.click(); return true;}
-              const i=[...tg.querySelectorAll('input[type="checkbox"]')].find(x=>vis(x)&&!x.disabled); if(i){i.click(); return true;}
+              const i=tg.querySelector('input[type="checkbox"]:not(:disabled)');
+              if(i){i.click();return true}
+              const a=tg.querySelector('a[href]');if(a){a.click();return true}
               return false;
             });
             if(!clicked) failures.push(label+' could not click Type option');
             else {
-              await page.waitForTimeout(1800);
-              const after=await page.evaluate(()=>({url:location.href,sidebar:!!document.querySelector('#MainContent .sq-refine-v3-sidebar'),products:[...document.querySelectorAll('#MainContent a[href*="/products/"]')].length}));
+              await page.waitForTimeout(2500);
+              const after=await page.evaluate(()=>({url:location.href,sidebar:!!document.querySelector('#MainContent .sq-refine-v3-sidebar'),products:[...document.querySelectorAll('#MainContent a[href*="/products/"]')].length,repair:document.querySelector('#MainContent')?.dataset.sqAccessoriesRefineRepair||null}));
               console.log('AFTER '+label+' '+JSON.stringify(after));
-              if(!after.sidebar||after.products<1)failures.push(label+' Type click lost sidebar/products');
+              if(!after.sidebar||after.products<1||after.repair!=='true')failures.push(label+' Type click lost sidebar/products/repair');
             }
             await context.close();
           }
