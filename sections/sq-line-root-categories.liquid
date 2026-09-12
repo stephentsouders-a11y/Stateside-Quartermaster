@@ -1,0 +1,39 @@
+{% assign sq_army_unified_only = false %}
+{% if request.page_type == 'collection' %}
+  {% if collection.handle == 'products-built-for-the-line-u-s-army' or collection.handle == 'army-national-guard-series' %}
+    {% assign sq_army_unified_only = true %}
+  {% endif %}
+{% endif %}
+{% if sq_army_unified_only %}
+<script>window.__sqBflDownstreamAuditFix=true;</script>
+{% render 'sq-line-series-categories' %}
+{% if collection.handle == 'products-built-for-the-line-u-s-army' %}
+  {% render 'sq-army-card-parity' %}
+{% endif %}
+{% else %}
+{% render 'sq-ang-merged-nav' %}
+{% render 'sq-air-force-builder-guard' %}
+{% render 'sq-air-force-card-parity' %}
+{% render 'sq-air-force-real-nav' %}
+{% render 'sq-air-force-type-nav' %}
+{% render 'sq-air-force-all-button-audit' %}
+{% render 'sq-army-uniform-head-to-toe' %}
+{% render 'sq-army-apparel-direct-nav' %}
+{% render 'sq-army-direct-type-nav' %}
+{% render 'sq-army-button-image-fix' %}
+{% render 'sq-army-remaining-type-nav' %}
+{% render 'sq-army-card-parity' %}
+{% render 'sq-army-responsive-enforcement' %}
+{% render 'sq-army-real-nav' %}
+{% render 'sq-army-normalized-type-nav' %}
+{% render 'sq-army-all-button-audit' %}
+{% render 'sq-army-guard-card-parity' %}
+{% render 'sq-army-guard-real-nav' %}
+{% render 'sq-army-guard-type-nav' %}
+{% render 'sq-army-guard-headwear-type-nav' %}
+{% render 'sq-army-guard-visual-fix' %}
+{% render 'sq-army-guard-responsive-enforcement' %}
+{% render 'sq-army-guard-all-button-audit' %}
+{% render 'sq-line-series-categories' %}
+{% endif %}
+{% schema %}{"name":"Line root categories","settings":[],"presets":[{"name":"Line root categories"}]}{% endschema %}
