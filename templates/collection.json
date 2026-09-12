@@ -1,0 +1,56 @@
+/*
+ * ------------------------------------------------------------
+ * IMPORTANT: The contents of this file are auto-generated.
+ *
+ * This file may be updated by the Shopify admin theme editor
+ * or related systems. Please exercise caution as any changes
+ * made to this file may be overwritten.
+ * ------------------------------------------------------------
+ */
+{
+  "sections": {
+    "section": {
+      "type": "section",
+      "blocks": {
+        "text_tqQTNE": {"type":"text","name":"t:names.title","settings":{"text":"<h1>{{ closest.collection.title }}</h1>","width":"fit-content","max_width":"normal","alignment":"left","type_preset":"h2","font":"var(--font-body--family)","line_height":"normal","letter_spacing":"normal","case":"none","wrap":"pretty","background":false,"background_color":"#00000026","corner_radius":0,"padding-block-start":0,"padding-block-end":0},"blocks":{}},
+        "text_twGGkJ": {"type":"text","name":"t:names.description","settings":{"text":"{{ closest.collection.description }}","width":"fit-content","max_width":"normal","alignment":"left","type_preset":"rte","font":"var(--font-body--family)","line_height":"normal","letter_spacing":"normal","case":"none","wrap":"pretty","background":false,"background_color":"#00000026","corner_radius":0,"padding-block-start":0,"padding-block-end":0,"padding-inline-start":0,"padding-inline_end":0},"blocks":{}}
+      },
+      "block_order":["text_tqQTNE","text_twGGkJ"],
+      "name":"t:names.heading",
+      "settings":{"content_direction":"column","vertical_on_mobile":true,"horizontal_alignment":"flex-start","vertical_alignment":"center","align_baseline":false,"horizontal_alignment_flex_direction_column":"flex-start","vertical_alignment_flex_direction_column":"center","gap":12,"section_width":"page-width","section_height_custom":50,"background_media":"none","background_color":"{{ settings.color_palette.background }}","video_position":"cover","background_image_position":"cover","toggle_overlay":false,"overlay_color":"#00000026","overlay_style":"solid","gradient_direction":"to top","border":"none","border_width":1,"border_opacity":100,"border_radius":0,"padding-block-start":48,"padding-block-end":32}
+    },
+    "sq_state_guard_uniform_cards":{"type":"sq-state-guard-uniform-card-fix","settings":{}},
+    "sq_shop_all_browser":{"type":"sq-shop-all-browser","settings":{}},
+    "sq_books_navigation_tree":{"type":"sq-books-navigation-tree","settings":{}},
+    "sq_department_subcategories":{"type":"sq-department-subcategories","settings":{}},
+    "sq_line_root_categories":{"type":"sq-line-root-categories","settings":{}},
+    "sq_ang_navigation_safety":{"type":"sq-ang-navigation-safety","settings":{}},
+    "sq_public_safety_roots":{"type":"sq-public-safety-root-categories","settings":{}},
+    "sq_line_program_tree":{"type":"sq-line-program-tree","settings":{}},
+    "sq_third_level":{"type":"sq-third-level-buttons","settings":{}},
+    "sq_button_tree_perfect":{"type":"sq-button-tree-perfect","settings":{}},
+    "sq_air_force_recovery":{"type":"sq-air-force-recovery","settings":{}},
+    "sq_line_image_dedupe":{"type":"sq-line-image-dedupe","settings":{}},
+    "sq_bfl_hierarchy_safety":{"type":"sq-bfl-hierarchy-safety","settings":{}},
+    "vac_state_guard_insignia_button":{"type":"vac-state-guard-insignia-button","settings":{}},
+    "vac_asu_checklist":{"type":"vac-asu-checklist","settings":{}},
+    "vac_asu_order_image_fix":{"type":"vac-asu-order-image-fix","settings":{}},
+    "vac_collection_manufacturers":{"type":"vac-collection-manufacturers","settings":{}},
+    "vac_stabrite_browser":{"type":"vac-stabrite-browser","settings":{}},
+    "vac_stabrite_link_fix":{"type":"vac-stabrite-link-fix","settings":{}},
+    "vac_stock_priority":{"type":"vac-stock-priority","settings":{}},
+    "sq_missing_button_images":{"type":"sq-missing-button-image-fix","settings":{}},
+    "sq_category_dedupe_guard":{"type":"sq-category-dedupe-guard","settings":{}},
+    "sq_availability_link_scrubber":{"type":"sq-availability-link-scrubber","settings":{}},
+    "main": {
+      "type":"main-collection",
+      "blocks":{
+        "filters":{"type":"filters","static":true,"settings":{"enable_filtering":true,"filter_style":"horizontal","filter_width":"centered","text_label_case":"default","show_swatch_label":false,"show_filter_label":false,"enable_sorting":true,"enable_grid_density":true,"padding-block-start":8,"padding-block-end":8,"padding-inline-start":0,"padding-inline-end":0,"facets_margin_bottom":8,"facets_margin_right":20},"blocks":{}},
+        "product-card":{"type":"_product-card","static":true,"settings":{"product_card_gap":4,"border":"none","border_width":1,"border_opacity":100,"border_radius":0,"padding-block-start":0,"padding-block-end":0,"padding-inline-start":0,"padding-inline-end":0},"blocks":{"card-gallery":{"type":"_product-card-gallery","settings":{"image_ratio":"adapt","border":"none","border_width":1,"border_opacity":100,"border_radius":0,"padding-block-start":0,"padding-block-end":0,"padding-inline-start":0,"padding-inline-end":0},"blocks":{}},"product_title_4nY4eT":{"type":"product-title","name":"t:names.product_title","settings":{"width":"100%","max_width":"normal","alignment":"left","type_preset":"rte","font":"var(--font-body--family)","font_size":"1rem","line_height":"normal","letter_spacing":"normal","case":"none","wrap":"pretty","background":false,"background_color":"#00000026","corner_radius":0,"padding-block-start":4,"padding-block-end":0,"padding-inline-start":0,"padding-inline-end":0},"blocks":{}},"price_EzJzMm":{"type":"price","settings":{"show_sale_price_first":true,"show_installments":false,"show_tax_info":false,"type_preset":"h6","width":"100%","alignment":"left","font":"var(--font-body--family)","font_size":"1rem","line_height":"normal","letter_spacing":"normal","case":"none","padding-block-start":0,"padding-block-end":0,"padding-inline-start":0,"padding-inline-end":0},"blocks":{}}},"block_order":["card-gallery","product_title_4nY4eT","price_EzJzMm"]}
+      },
+      "settings":{"layout_type":"grid","product_card_size":"medium","mobile_product_card_size":"small","product_grid_width":"centered","full_width_on_mobile":true,"columns_gap_horizontal":16,"columns_gap_vertical":24,"padding-inline-start":0,"padding-inline-end":0,"background_color":"{{ settings.color_palette.background }}","padding-block_start":0,"padding-block_end":32}
+    },
+    "sq_nav_visual":{"type":"sq-nav-visual","settings":{}}
+  },
+  "order":["section","sq_state_guard_uniform_cards","sq_shop_all_browser","sq_books_navigation_tree","sq_department_subcategories","sq_line_root_categories","sq_ang_navigation_safety","sq_public_safety_roots","sq_line_program_tree","sq_third_level","sq_button_tree_perfect","sq_air_force_recovery","sq_line_image_dedupe","sq_bfl_hierarchy_safety","vac_state_guard_insignia_button","vac_asu_checklist","vac_asu_order_image_fix","vac_collection_manufacturers","vac_stabrite_browser","vac_stabrite_link_fix","vac_stock_priority","sq_missing_button_images","sq_category_dedupe_guard","sq_availability_link_scrubber","main","sq_nav_visual"]
+}
