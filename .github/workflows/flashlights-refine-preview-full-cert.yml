@@ -1,0 +1,106 @@
+name: Flashlights Refine draft full Chromium certification
+
+on:
+  push:
+    paths:
+      - '.github/workflows/flashlights-refine-preview-full-cert.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Click and certify every Refine Products option
+        run: |
+          cat > certify.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const preview='https://www.statesideqm.com/collections/flashlights-lighting?preview_theme_id=158561894555&sq_per_page=50';
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1000},locale:'en-US'});
+          const page=await ctx.newPage();
+          page.setDefaultNavigationTimeout(90000);
+          fs.mkdirSync('out/screens',{recursive:true});
+          const report={started:new Date().toISOString(),base:preview,inventory:[],tests:[],pageErrors:[],failures:[]};
+          page.on('pageerror',e=>report.pageErrors.push(String(e)));
+          const save=()=>fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          async function ready(){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});}
+          async function openBase(){
+            let err='';
+            for(let n=1;n<=4;n++){
+              const r=await page.goto(preview,{waitUntil:'domcontentloaded'}).catch(e=>{err=String(e);return null});
+              try{await ready();return r?.status()||0}catch(e){err=`HTTP ${r?.status()||0} ${String(e)}`;await page.waitForTimeout(1500*n)}
+            }
+            throw new Error('base unavailable: '+err);
+          }
+          function productHandles(){return page.evaluate(()=>[...new Set([...document.querySelectorAll('#MainContent .sq-refine-v3-results a[href*="/products/"]')].map(a=>{try{return new URL(a.href,location.origin).pathname.split('/products/')[1]?.split(/[?#]/)[0]||''}catch(_){return''}}).filter(Boolean))]);}
+          async function inventory(){
+            return await page.evaluate(()=>[...document.querySelectorAll('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group')].map((d,gi)=>({group:(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),gi,choices:[...d.querySelectorAll('.sq-refine-v3-choice input[type="checkbox"]')].map((i,ii)=>({ii,label:(i.closest('.sq-refine-v3-choice')?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim(),attrs:Object.fromEntries([...i.attributes].map(a=>[a.name,a.value])),target:i.dataset.target||'',polishParam:i.dataset.sqPolishParam||'',polishValue:i.dataset.sqPolishValue||'',filterName:i.dataset.filterName||'',value:i.value||''}))}));
+          }
+          await openBase();
+          report.inventory=await inventory();
+          const flat=report.inventory.flatMap(g=>g.choices.map(c=>({group:g.group,gi:g.gi,...c})));
+          for(let x=0;x<flat.length;x++){
+            const item=flat[x];
+            const rec={index:x,group:item.group,label:item.label,attrs:item.attrs,target:item.target,status:'FAIL'};
+            try{
+              await openBase();
+              const groups=page.locator('#MainContent .sq-refine-v3-sidebar details.sq-refine-v3-group');
+              const d=groups.nth(item.gi); await d.locator(':scope > summary').click();
+              const input=d.locator('.sq-refine-v3-choice input[type="checkbox"]').nth(item.ii);
+              const before=page.url();
+              const target=item.target;
+              if(target){
+                await Promise.all([page.waitForURL(u=>u.href!==before,{timeout:30000}).catch(()=>{}),input.click()]);
+                await page.waitForLoadState('domcontentloaded').catch(()=>{});
+              }else{
+                await input.click();
+                await page.waitForTimeout(1400);
+              }
+              const state=await page.evaluate(()=>({url:location.href,ready:document.querySelector('#MainContent')?.dataset.sqRefineV3Ready||null,error:document.querySelector('#MainContent')?.dataset.sqRefineV3Error||null,grids:document.querySelectorAll('#MainContent .product-grid').length,visibleGrids:[...document.querySelectorAll('#MainContent .product-grid')].filter(e=>getComputedStyle(e).display!=='none'&&e.offsetParent!==null).length,challenge:/verify you are human|cloudflare/i.test(document.body?.innerText||'')}));
+              const products=await productHandles();
+              rec.after=state; rec.productCount=products.length; rec.sampleProducts=products.slice(0,12);
+              let ok=state.ready==='true'&&!state.error&&!state.challenge&&state.visibleGrids<=1;
+              if(target){
+                const exp=new URL(target,preview).pathname;
+                ok=ok&&new URL(state.url).pathname===exp&&products.length>0;
+              }else{
+                const u=new URL(state.url);
+                const nonControl=[...u.searchParams.keys()].filter(k=>!['preview_theme_id','sq_per_page','sq_view_page','page','sort_by','sq_root'].includes(k));
+                const checked=await input.isChecked().catch(()=>false);
+                ok=ok&&checked&&nonControl.length>0;
+              }
+              rec.status=ok?'PASS':'FAIL';
+              if(!ok){report.failures.push({index:x,group:item.group,label:item.label,reason:'validation',after:state,productCount:products.length});await page.screenshot({path:`out/screens/${String(x).padStart(3,'0')}.png`,fullPage:true}).catch(()=>{})}
+            }catch(e){rec.error=String(e);report.failures.push({index:x,group:item.group,label:item.label,reason:String(e)});await page.screenshot({path:`out/screens/${String(x).padStart(3,'0')}-exception.png`,fullPage:true}).catch(()=>{})}
+            report.tests.push(rec);save();
+            await page.waitForTimeout(250);
+          }
+          report.finished=new Date().toISOString();
+          report.summary={groups:report.inventory.length,total:flat.length,passed:report.tests.filter(t=>t.status==='PASS').length,failed:report.tests.filter(t=>t.status!=='PASS').length,pageErrors:report.pageErrors.length};
+          save();
+          console.log('CERT_SUMMARY '+JSON.stringify(report.summary));
+          console.log('INVENTORY '+JSON.stringify(report.inventory.map(g=>({group:g.group,choices:g.choices.map(c=>c.label)}))));
+          if(report.failures.length) console.log('FAILURES '+JSON.stringify(report.failures));
+          await browser.close();
+          if(report.failures.length) process.exitCode=2;
+          EOF
+          node certify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flashlights-refine-draft-full-cert
+          path: out
+          retention-days: 14
