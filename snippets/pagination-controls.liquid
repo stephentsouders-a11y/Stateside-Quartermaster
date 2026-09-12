@@ -1,0 +1,195 @@
+{%- doc -%}
+  Renders numbered pagination. On collection pages, in-stock pages are shown first and sold-out pages follow them.
+  Customers can choose 50 or 100 products per page. Design Concept One shows every page number with previous/next arrows.
+{%- enddoc -%}
+
+{% if template.name == 'collection' %}
+  {% liquid
+    assign in_stock_count = 0
+    assign sold_out_count = 0
+    assign availability_value = '1'
+    assign has_availability_partition = false
+
+    for filter in collection.filters
+      if filter.param_name == 'filter.v.availability'
+        assign has_availability_partition = true
+        for active_value in filter.active_values
+          assign availability_value = active_value.value
+        endfor
+        for filter_value in filter.values
+          if filter_value.value == '1'
+            assign in_stock_count = filter_value.count
+          elsif filter_value.value == '0'
+            assign sold_out_count = filter_value.count
+          endif
+        endfor
+      endif
+    endfor
+
+    if in_stock_count > 25000
+      assign in_stock_count = 25000
+    endif
+    if sold_out_count > 25000
+      assign sold_out_count = 25000
+    endif
+
+    assign page_size = paginate.page_size
+    assign in_stock_pages = in_stock_count | plus: page_size | minus: 1 | divided_by: page_size
+    assign sold_out_pages = sold_out_count | plus: page_size | minus: 1 | divided_by: page_size
+    assign total_pages = in_stock_pages | plus: sold_out_pages
+
+    comment
+      Some collection surfaces do not expose the availability facet even though Shopify's
+      paginate object has multiple pages. Never let the custom stock partition collapse a
+      real multi-page collection to zero/one page.
+    endcomment
+    if total_pages < paginate.pages
+      assign total_pages = paginate.pages
+      if in_stock_pages == 0 and sold_out_pages == 0
+        assign in_stock_pages = paginate.pages
+        assign has_availability_partition = false
+      endif
+    endif
+
+    assign global_page = paginate.current_page
+    if has_availability_partition and availability_value == '0'
+      assign global_page = in_stock_pages | plus: paginate.current_page
+    endif
+
+    assign sq_100_view = '100'
+    assign sq_is_100_view = false
+    if template.suffix == 'packs-carry' or template.suffix == 'packs-carry-100'
+      assign sq_100_view = 'packs-carry-100'
+    endif
+    if template.suffix == '100' or template.suffix == 'packs-carry-100'
+      assign sq_is_100_view = true
+    endif
+  %}
+
+  <div class="vac-pagination-shell" data-pagination-design="concept-one">
+    <div class="vac-page-size" aria-label="Products per page">
+      <span>View:</span>
+      <a href="{{ collection.url }}" data-vac-page-size="50" {% unless sq_is_100_view %}aria-current="true"{% endunless %}>50</a>
+      <span aria-hidden="true">|</span>
+      <a href="{{ collection.url }}?view={{ sq_100_view }}" data-vac-page-size="100" data-vac-page-view="{{ sq_100_view }}" {% if sq_is_100_view %}aria-current="true"{% endif %}>100</a>
+      <span>products at a time</span>
+    </div>
+
+    {% if total_pages > 1 %}
+      <nav class="pagination vac-stock-pagination" aria-label="Product pages" data-pagination-design="concept-one" data-vac-in-stock-pages="{{ in_stock_pages }}" data-vac-total-pages="{{ total_pages }}" data-vac-current-page="{{ global_page }}">
+        <ul class="pagination__list" role="list">
+          {% liquid
+            assign prev_global = global_page | minus: 1
+            assign next_global = global_page | plus: 1
+          %}
+          <li class="pagination__item pagination__item--arrow">
+            {% if global_page > 1 %}
+              {% liquid
+                assign prev_local = prev_global
+                assign prev_availability = ''
+                if has_availability_partition
+                  assign prev_availability = '1'
+                  if prev_global > in_stock_pages
+                    assign prev_local = prev_global | minus: in_stock_pages
+                    assign prev_availability = '0'
+                  endif
+                endif
+              %}
+              <a href="{{ collection.url }}?page={{ prev_local }}{% if sq_is_100_view %}&view={{ sq_100_view }}{% endif %}{% if prev_availability != blank %}&filter.v.availability={{ prev_availability }}{% endif %}" class="pagination__link pagination__link--arrow" aria-label="Previous page" data-vac-global-page="{{ prev_global }}">{{ 'icon-chevron-left.svg' | inline_asset_content }}</a>
+            {% else %}
+              <span class="pagination__link pagination__link--arrow pagination__link--disabled" aria-disabled="true">{{ 'icon-chevron-left.svg' | inline_asset_content }}</span>
+            {% endif %}
+          </li>
+
+          {% for page_number in (1..total_pages) %}
+            {% liquid
+              assign local_page = page_number
+              assign page_availability = ''
+              if has_availability_partition
+                assign page_availability = '1'
+                if page_number > in_stock_pages
+                  assign local_page = page_number | minus: in_stock_pages
+                  assign page_availability = '0'
+                endif
+              endif
+            %}
+            <li class="pagination__item pagination__item--page">
+              {% if page_number == global_page %}
+                <span class="pagination__link pagination__link--page pagination__link--current" aria-current="page">{{ page_number }}</span>
+              {% else %}
+                <a href="{{ collection.url }}?page={{ local_page }}{% if sq_is_100_view %}&view={{ sq_100_view }}{% endif %}{% if page_availability != blank %}&filter.v.availability={{ page_availability }}{% endif %}" class="pagination__link pagination__link--page" data-vac-global-page="{{ page_number }}">{{ page_number }}</a>
+              {% endif %}
+            </li>
+          {% endfor %}
+
+          <li class="pagination__item pagination__item--arrow">
+            {% if global_page < total_pages %}
+              {% liquid
+                assign next_local = next_global
+                assign next_availability = ''
+                if has_availability_partition
+                  assign next_availability = '1'
+                  if next_global > in_stock_pages
+                    assign next_local = next_global | minus: in_stock_pages
+                    assign next_availability = '0'
+                  endif
+                endif
+              %}
+              <a href="{{ collection.url }}?page={{ next_local }}{% if sq_is_100_view %}&view={{ sq_100_view }}{% endif %}{% if next_availability != blank %}&filter.v.availability={{ next_availability }}{% endif %}" class="pagination__link pagination__link--arrow" aria-label="Next page" data-vac-global-page="{{ next_global }}">{{ 'icon-chevron-right.svg' | inline_asset_content }}</a>
+            {% else %}
+              <span class="pagination__link pagination__link--arrow pagination__link--disabled" aria-disabled="true">{{ 'icon-chevron-right.svg' | inline_asset_content }}</span>
+            {% endif %}
+          </li>
+        </ul>
+      </nav>
+    {% endif %}
+  </div>
+{% else %}
+  {%- if paginate.pages > 1 -%}
+    <nav class="pagination" aria-label="{{ 'content.pagination.nav_label' | t }}" data-pagination-design="concept-one">
+      <ul class="pagination__list" role="list">
+        <li class="pagination__item pagination__item--arrow">
+          {% if paginate.previous %}<a href="{{ paginate.previous.url }}" class="pagination__link pagination__link--arrow" aria-label="{{ 'content.pagination.previous' | t }}">{{ 'icon-chevron-left.svg' | inline_asset_content }}</a>{% else %}<span class="pagination__link pagination__link--arrow pagination__link--disabled" aria-disabled="true">{{ 'icon-chevron-left.svg' | inline_asset_content }}</span>{% endif %}
+        </li>
+        {% for part in paginate.parts %}
+          <li class="pagination__item{% if part.title == '&hellip;' %} pagination__item--gap{% else %} pagination__item--page{% endif %}">
+            {% if part.is_link %}<a href="{{ part.url }}" class="pagination__link pagination__link--page">{{ part.title }}</a>{% elsif part.title == '&hellip;' %}<span class="pagination__link pagination__link--gap">&hellip;</span>{% else %}<span class="pagination__link pagination__link--page pagination__link--current" aria-current="page">{{ part.title }}</span>{% endif %}
+          </li>
+        {% endfor %}
+        <li class="pagination__item pagination__item--arrow">
+          {% if paginate.next %}<a href="{{ paginate.next.url }}" class="pagination__link pagination__link--arrow" aria-label="{{ 'content.pagination.next' | t }}">{{ 'icon-chevron-right.svg' | inline_asset_content }}</a>{% else %}<span class="pagination__link pagination__link--arrow pagination__link--disabled" aria-disabled="true">{{ 'icon-chevron-right.svg' | inline_asset_content }}</span>{% endif %}
+        </li>
+      </ul>
+    </nav>
+  {%- endif -%}
+{% endif %}
+
+{% stylesheet %}
+  .vac-pagination-shell { display:flex; flex-direction:column; align-items:center; gap:12px; margin-top:var(--padding-xl); width:100%; }
+  .vac-page-size { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; font-size:var(--font-size--sm); }
+  .vac-page-size > span[aria-hidden='true'] { display:none; }
+  .vac-page-size a { box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; min-width:44px; height:44px; padding:0 12px; border:1px solid #cfd8df; border-radius:10px; background:#fff; color:#0b3a63; text-decoration:none; font-weight:800; line-height:1; box-shadow:0 1px 2px rgba(7,29,45,.08); transition:background .15s ease,border-color .15s ease,color .15s ease,transform .15s ease; }
+  .vac-page-size a:hover { border-color:#0b3a63; background:#eef4f8; color:#071d2d; transform:translateY(-1px); }
+  .vac-page-size a:focus-visible { outline:3px solid #d5ab4b; outline-offset:2px; }
+  .vac-page-size a[aria-current='true'] { border-color:#0b3a63; background:#0b3a63; color:#fff; font-weight:900; }
+  .pagination { --pagination-size:44px; display:flex; justify-content:center; width:100%; padding:var(--padding-sm); position:relative; isolation:isolate; box-sizing:border-box; }
+  .pagination__list { display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap; list-style:none; margin:0; padding:0; position:relative; width:100%; }
+  .pagination__item { width:var(--pagination-size); min-width:var(--pagination-size); height:var(--pagination-size); display:grid; place-items:center; }
+  .pagination__link { box-sizing:border-box; display:grid; place-items:center; width:100%; height:100%; border:1px solid #cfd8df; border-radius:10px; background:#fff; color:#0b3a63; text-decoration:none; user-select:none; position:relative; font-size:var(--font-size--md); font-weight:900; line-height:1; box-shadow:0 1px 2px rgba(7,29,45,.08); transition:background .15s ease,border-color .15s ease,color .15s ease,transform .15s ease; }
+  a.pagination__link:hover { border-color:#0b3a63; background:#eef4f8; color:#071d2d; transform:translateY(-1px); }
+  .pagination__link:focus-visible { outline:3px solid #d5ab4b; outline-offset:2px; }
+  .pagination__link--current { border-color:#0b3a63; background:#0b3a63; color:#fff; font-weight:900; cursor:default; }
+  .pagination__link--gap { border-color:transparent; background:transparent; box-shadow:none; cursor:default; pointer-events:none; }
+  .pagination__link--arrow { display:flex; align-items:center; justify-content:center; border-color:#0b3a63; background:#0b3a63; color:#fff; }
+  a.pagination__link--arrow:hover { border-color:#071d2d; background:#071d2d; color:#fff; }
+  .pagination__link--disabled { opacity:.34; cursor:not-allowed; pointer-events:none; }
+  .pagination__link svg { width:.55rem; height:.82rem; flex-shrink:0; }
+  .pagination__link--arrow svg, .pagination__link--arrow svg path { color:currentColor; stroke:currentColor; }
+  @media screen and (max-width:749px) {
+    .vac-pagination-shell { gap:10px; }
+    .pagination { --pagination-size:42px; padding-inline:4px; }
+    .pagination__list { gap:7px; }
+    .pagination__item--gap { width:22px; min-width:22px; }
+    .vac-page-size a { min-width:42px; height:42px; }
+  }
+{% endstylesheet %}
