@@ -19,6 +19,7 @@
       "name":"t:names.heading",
       "settings":{"content_direction":"column","vertical_on_mobile":true,"horizontal_alignment":"flex-start","vertical_alignment":"center","align_baseline":false,"horizontal_alignment_flex_direction_column":"flex-start","vertical_alignment_flex_direction_column":"center","gap":12,"section_width":"page-width","section_height_custom":50,"background_media":"none","background_color":"{{ settings.color_palette.background }}","video_position":"cover","background_image_position":"cover","toggle_overlay":false,"overlay_color":"#00000026","overlay_style":"solid","gradient_direction":"to top","border":"none","border_width":1,"border_opacity":100,"border_radius":0,"padding-block-start":48,"padding-block-end":32}
     },
+    "sq_state_guard_soldout_universe":{"type":"sq-state-guard-soldout-universe-bridge","settings":{}},
     "sq_state_guard_uniform_cards":{"type":"sq-state-guard-uniform-card-fix","settings":{}},
     "sq_shop_all_browser":{"type":"sq-shop-all-browser","settings":{}},
     "sq_books_navigation_tree":{"type":"sq-books-navigation-tree","settings":{}},
@@ -52,5 +53,5 @@
     },
     "sq_nav_visual":{"type":"sq-nav-visual","settings":{}}
   },
-  "order":["section","sq_state_guard_uniform_cards","sq_shop_all_browser","sq_books_navigation_tree","sq_department_subcategories","sq_line_root_categories","sq_ang_navigation_safety","sq_public_safety_roots","sq_line_program_tree","sq_third_level","sq_button_tree_perfect","sq_air_force_recovery","sq_line_image_dedupe","sq_bfl_hierarchy_safety","vac_state_guard_insignia_button","vac_asu_checklist","vac_asu_order_image_fix","vac_collection_manufacturers","vac_stabrite_browser","vac_stabrite_link_fix","vac_stock_priority","sq_missing_button_images","sq_category_dedupe_guard","sq_availability_link_scrubber","main","sq_nav_visual"]
+  "order":["section","sq_state_guard_soldout_universe","sq_state_guard_uniform_cards","sq_shop_all_browser","sq_books_navigation_tree","sq_department_subcategories","sq_line_root_categories","sq_ang_navigation_safety","sq_public_safety_roots","sq_line_program_tree","sq_third_level","sq_button_tree_perfect","sq_air_force_recovery","sq_line_image_dedupe","sq_bfl_hierarchy_safety","vac_state_guard_insignia_button","vac_asu_checklist","vac_asu_order_image_fix","vac_collection_manufacturers","vac_stabrite_browser","vac_stabrite_link_fix","vac_stock_priority","sq_missing_button_images","sq_category_dedupe_guard","sq_availability_link_scrubber","main","sq_nav_visual"]
 }
