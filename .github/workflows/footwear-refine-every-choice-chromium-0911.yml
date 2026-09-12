@@ -61,8 +61,20 @@ jobs:
             if(needColor)await pwPage.waitForFunction(()=>{const m=document.querySelector('#MainContent');return !!(m?.dataset?.sqFootwearColorReady||m?.dataset?.sqFootwearColorError)},{timeout:30000}).catch(()=>{});
           }
           async function rootPage(pwPage){
-            let last;for(let attempt=1;attempt<=3;attempt++){
-              try{const u=new URL(`/collections/${ROOT}`,ORIGIN);u.searchParams.set('preview_theme_id',THEME);u.searchParams.set('sq_per_page','250');await pwPage.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:35000});await waitReady(pwPage,true);return}catch(e){last=e;await sleep(700*attempt)}
+            let last;
+            for(let attempt=1;attempt<=3;attempt++){
+              try{
+                const u=new URL(`/collections/${ROOT}`,ORIGIN);
+                u.searchParams.set('preview_theme_id',THEME);
+                u.searchParams.set('sq_per_page','250');
+                await pwPage.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:35000});
+                await waitReady(pwPage,true);
+                return;
+              }catch(e){
+                last=e;
+                await sleep(700*attempt);
+              }
+            }
             throw last;
           }
           async function handlesOnPage(pwPage){return await pwPage.evaluate(()=>[...new Set([...document.querySelectorAll('#MainContent .sq-refine-v3-results a[href*="/products/"]')].map(a=>{try{return decodeURIComponent(new URL(a.href,location.origin).pathname.split('/products/')[1]||'').split('/')[0]}catch{return''}}).filter(Boolean))])}
