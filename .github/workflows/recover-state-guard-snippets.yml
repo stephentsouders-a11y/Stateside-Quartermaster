@@ -1,0 +1,51 @@
+name: Recover corrected State Guard snippets
+on:
+  push:
+    paths:
+      - '.github/workflows/recover-state-guard-snippets.yml'
+permissions:
+  contents: write
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Extract rendered scripts, correct syntax, validate, and commit
+        run: |
+          cat > recover.mjs <<'EOF'
+          import fs from 'fs';
+          const url='https://www.statesideqm.com/collections/state-guard-series-ohio';
+          const html=await (await fetch(url,{headers:{'user-agent':'Mozilla/5.0 Stateside acceptance repair'}})).text();
+          const specs=[
+            ['sq-state-guard-uniform-field-authority','snippets/sq-state-guard-uniform-field-authority.liquid'],
+            ['sq-state-guard-head-to-toe-correction','snippets/sq-state-guard-head-to-toe-correction.liquid'],
+            ['sq-state-guard-shared-displays','snippets/sq-state-guard-shared-displays.liquid'],
+            ['sq-state-guard-shared-supplements','snippets/sq-state-guard-shared-supplements.liquid']
+          ];
+          const goodEsc=`function esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return c==='&'?'&amp;':c==='<'?'&lt;':c==='>'?'&gt;':c==='"'?'&quot;':'&#39;'})}`;
+          for(const [mark,path] of specs){
+            const re=new RegExp(`<script[^>]*data-${mark.replace(/^sq-/,'sq-')}[^>]*>([\\s\\S]*?)<\\/script>`,'i');
+            let m=html.match(re);
+            if(!m){const re2=new RegExp(`<script[^>]*data-${mark}[^>]*>([\\s\\S]*?)<\\/script>`,'i');m=html.match(re2)}
+            if(!m) throw new Error('Missing rendered script '+mark);
+            let js=m[1];
+            const before=js;
+            js=js.replace(/function esc\(s\)\{[^\n]+\}/,goodEsc);
+            if(js===before) throw new Error('esc helper was not replaced for '+mark);
+            new Function(js);
+            const liquid=`{% if request.page_type == 'collection' %}\n{% if collection.handle contains 'state-guard-series-' or collection.handle == 'new-jersey-state-guard-naval-militia' %}\n<script data-${mark}>${js}</script>\n{% endif %}{% endif %}\n`;
+            fs.mkdirSync(path.split('/').slice(0,-1).join('/'),{recursive:true});
+            fs.writeFileSync(path,liquid);
+            console.log(path,js.length,'validated');
+          }
+          EOF
+          node recover.mjs
+          git config user.name 'stateside-audit-bot'
+          git config user.email 'stateside-audit-bot@users.noreply.github.com'
+          git add snippets/sq-state-guard-*.liquid
+          git diff --cached --check
+          git commit -m 'Fix State Guard inline script syntax' || exit 0
+          git push
