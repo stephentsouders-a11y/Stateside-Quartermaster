@@ -1,0 +1,139 @@
+{% liquid
+  assign sq_afg_mode = ''
+  assign sq_afg_title = ''
+  assign sq_afg_intro = ''
+  assign sq_afg_items_raw = ''
+  assign sq_afg_category_prefix = ''
+
+  if request.page_type == 'collection' and request.path == collection.url
+    case collection.handle
+      when 'armed-forces-gear'
+        assign sq_afg_mode = 'branches'
+        assign sq_afg_title = 'Shop Armed Forces Gear by Branch'
+        assign sq_afg_intro = 'Armed Forces Gear is vendor-only. Choose a service branch to browse only products supplied by Armed Forces Gear.'
+        assign sq_afg_items_raw = 'armed-forces-gear-u-s-army|U.S. Army||armed-forces-gear-u-s-navy|U.S. Navy||armed-forces-gear-u-s-air-force|U.S. Air Force||armed-forces-gear-u-s-marine-corps|U.S. Marine Corps||armed-forces-gear-u-s-coast-guard|U.S. Coast Guard||armed-forces-gear-u-s-space-force|U.S. Space Force||other-armed-forces-gear|Other Armed Forces Gear'
+      when 'armed-forces-gear-u-s-army'
+        assign sq_afg_mode = 'categories'
+        assign sq_afg_title = 'Shop U.S. Army Armed Forces Gear by Category'
+        assign sq_afg_intro = 'Every button below stays inside the vendor-only U.S. Army Armed Forces Gear catalog.'
+        assign sq_afg_category_prefix = 'SQ Army Category:'
+      when 'armed-forces-gear-u-s-navy'
+        assign sq_afg_mode = 'categories'
+        assign sq_afg_title = 'Shop U.S. Navy Armed Forces Gear by Category'
+        assign sq_afg_intro = 'Every button below stays inside the vendor-only U.S. Navy Armed Forces Gear catalog.'
+        assign sq_afg_category_prefix = 'SQ Navy Category:'
+      when 'armed-forces-gear-u-s-air-force'
+        assign sq_afg_mode = 'categories'
+        assign sq_afg_title = 'Shop U.S. Air Force Armed Forces Gear by Category'
+        assign sq_afg_intro = 'Every button below stays inside the vendor-only U.S. Air Force Armed Forces Gear catalog.'
+        assign sq_afg_category_prefix = 'SQ Air Force Category:'
+      when 'armed-forces-gear-u-s-marine-corps'
+        assign sq_afg_mode = 'categories'
+        assign sq_afg_title = 'Shop U.S. Marine Corps Armed Forces Gear by Category'
+        assign sq_afg_intro = 'Every button below stays inside the vendor-only U.S. Marine Corps Armed Forces Gear catalog.'
+        assign sq_afg_category_prefix = 'SQ Marine Corps Category:'
+      when 'armed-forces-gear-u-s-coast-guard'
+        assign sq_afg_mode = 'categories'
+        assign sq_afg_title = 'Shop U.S. Coast Guard Armed Forces Gear by Category'
+        assign sq_afg_intro = 'Every button below stays inside the vendor-only U.S. Coast Guard Armed Forces Gear catalog.'
+        assign sq_afg_category_prefix = 'SQ Coast Guard Category:'
+      when 'armed-forces-gear-u-s-space-force'
+        assign sq_afg_mode = 'categories'
+        assign sq_afg_title = 'Shop U.S. Space Force Armed Forces Gear by Category'
+        assign sq_afg_intro = 'Every button below stays inside the vendor-only U.S. Space Force Armed Forces Gear catalog.'
+        assign sq_afg_category_prefix = 'SQ Space Force Category:'
+    endcase
+  endif
+%}
+
+{% if sq_afg_mode == 'branches' %}
+  {% assign sq_afg_items = sq_afg_items_raw | split: '||' %}
+  <section class="sq-afg-branch-section" data-sq-afg-mode="branches" aria-labelledby="sq-afg-branch-title">
+    <div class="sq-afg-branch-wrap">
+      <p class="sq-afg-branch-kicker">Armed Forces Gear Vendor Catalog</p>
+      <h2 id="sq-afg-branch-title">{{ sq_afg_title }}</h2>
+      <p class="sq-afg-branch-intro">{{ sq_afg_intro }}</p>
+      <div class="sq-afg-branch-grid">
+        {% for sq_afg_item in sq_afg_items %}
+          {% assign sq_afg_parts = sq_afg_item | split: '|' %}
+          {% assign sq_afg_handle = sq_afg_parts[0] | strip %}
+          {% assign sq_afg_label = sq_afg_parts[1] | strip %}
+          {% assign sq_afg_collection = collections[sq_afg_handle] %}
+          {% if sq_afg_collection != blank and sq_afg_collection.products_count > 0 %}
+            {% capture sq_afg_fixed_image_url %}{% render 'sq-afg-fixed-image-url', handle: sq_afg_handle %}{% endcapture %}
+            {% assign sq_afg_image_url = sq_afg_fixed_image_url | strip %}
+            {% if sq_afg_image_url == blank and sq_afg_collection.image != blank %}
+              {% assign sq_afg_image_url = sq_afg_collection.image | image_url: width: 720 %}
+            {% endif %}
+            {% if sq_afg_image_url == blank and sq_afg_collection.products.first.featured_image != blank %}
+              {% assign sq_afg_image_url = sq_afg_collection.products.first.featured_image | image_url: width: 720 %}
+            {% endif %}
+            <a class="sq-afg-branch-card" href="{{ sq_afg_collection.url }}" aria-label="Shop {{ sq_afg_label | escape }}">
+              <span class="sq-afg-branch-media">{% if sq_afg_image_url != blank %}<img src="{{ sq_afg_image_url }}" alt="{{ sq_afg_label | escape }}" width="720" height="500" loading="lazy">{% else %}<span class="sq-afg-branch-placeholder" aria-hidden="true">SQ</span>{% endif %}</span>
+              <span class="sq-afg-branch-copy"><span class="sq-afg-branch-name">{{ sq_afg_label }}</span><span class="sq-afg-branch-count">Armed Forces Gear only</span><span class="sq-afg-branch-arrow" aria-hidden="true">&rarr;</span></span>
+            </a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+{% elsif sq_afg_mode == 'categories' %}
+  {% assign sq_prefix_len = sq_afg_category_prefix | size %}
+  {% capture sq_category_rows_raw %}
+    {% for sq_tag in collection.tags %}
+      {% assign sq_tag_prefix = sq_tag | slice: 0, sq_prefix_len %}
+      {% if sq_tag_prefix == sq_afg_category_prefix %}
+        {% assign sq_label = sq_tag | remove_first: sq_afg_category_prefix | strip %}
+        {% if sq_label != blank %}{{ sq_label | downcase }}~{{ sq_label | replace: '~', ' ' }}~{{ sq_tag | replace: '~', ' ' }}||{% endif %}
+      {% endif %}
+    {% endfor %}
+  {% endcapture %}
+  {% assign sq_category_rows_clean = sq_category_rows_raw | strip %}
+  {% assign sq_using_type_fallback = false %}
+  {% if sq_category_rows_clean == blank %}
+    {% assign sq_using_type_fallback = true %}
+    {% capture sq_category_rows_raw %}
+      {% for sq_tag in collection.tags %}
+        {% assign sq_tag_prefix = sq_tag | slice: 0, 8 %}
+        {% if sq_tag_prefix == 'SQ Type:' %}
+          {% assign sq_label = sq_tag | remove_first: 'SQ Type:' | strip %}
+          {% if sq_label != blank %}{{ sq_label | downcase }}~{{ sq_label | replace: '~', ' ' }}~{{ sq_tag | replace: '~', ' ' }}||{% endif %}
+        {% endif %}
+      {% endfor %}
+    {% endcapture %}
+  {% endif %}
+  {% assign sq_category_rows = sq_category_rows_raw | split: '||' | sort_natural %}
+  <section class="sq-afg-branch-section" data-sq-afg-mode="vendor-categories" aria-labelledby="sq-afg-branch-title">
+    <div class="sq-afg-branch-wrap">
+      <p class="sq-afg-branch-kicker">Armed Forces Gear Vendor Catalog</p>
+      <h2 id="sq-afg-branch-title">{{ sq_afg_title }}</h2>
+      <p class="sq-afg-branch-intro">{{ sq_afg_intro }}</p>
+      <div class="sq-afg-branch-grid">
+        {% for sq_row in sq_category_rows %}
+          {% if sq_row contains '~' %}
+            {% assign sq_parts = sq_row | split: '~' %}
+            {% assign sq_label = sq_parts[1] | strip %}
+            {% assign sq_tag = sq_parts[2] | strip %}
+            {% assign sq_tag_handle = sq_tag | handleize %}
+            {% assign sq_image_url = '' %}
+            {% for sq_product in collection.products %}
+              {% if sq_product.tags contains sq_tag and sq_product.featured_image != blank %}
+                {% assign sq_image_url = sq_product.featured_image | image_url: width: 720 %}
+                {% break %}
+              {% endif %}
+            {% endfor %}
+            <a class="sq-afg-branch-card" href="{{ collection.url }}/{{ sq_tag_handle }}" aria-label="Shop {{ sq_label | escape }}">
+              <span class="sq-afg-branch-media">{% if sq_image_url != blank %}<img src="{{ sq_image_url }}" alt="{{ sq_label | escape }}" width="720" height="500" loading="lazy">{% else %}<span class="sq-afg-branch-placeholder" aria-hidden="true">SQ</span>{% endif %}</span>
+              <span class="sq-afg-branch-copy"><span class="sq-afg-branch-name">{{ sq_label }}</span><span class="sq-afg-branch-count">{% if sq_using_type_fallback %}Shop by type{% else %}Shop by category{% endif %}</span><span class="sq-afg-branch-arrow" aria-hidden="true">&rarr;</span></span>
+            </a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+{% endif %}
+
+{% stylesheet %}
+body:has(.sq-afg-branch-section) .sq-subcategory-section{display:none!important}body:has(.sq-afg-branch-section) .sq-third-level{display:none!important}body:has(.sq-afg-branch-section) collection-component{display:none!important}.sq-afg-branch-section{padding:12px 20px 48px;background:#f4f5f3;color:#071d2d}.sq-afg-branch-wrap{max-width:1280px;margin:0 auto}.sq-afg-branch-kicker{margin:0 0 6px;color:#a91827;font-size:12px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}.sq-afg-branch-section h2{margin:0;font-size:clamp(26px,3vw,40px);line-height:1.08}.sq-afg-branch-intro{max-width:860px;margin:10px 0 26px;color:#41505b;font-size:16px;line-height:1.55}.sq-afg-branch-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.sq-afg-branch-card{position:relative;display:flex;min-width:0;height:300px;flex-direction:column;overflow:hidden;border:1px solid #aeb8be;border-radius:14px;background:#fff;color:#fff;text-decoration:none;box-shadow:0 8px 22px rgba(0,0,0,.12);transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}.sq-afg-branch-card::after{content:"";position:absolute;inset:auto 0 0;height:4px;background:#a91827}.sq-afg-branch-card:hover,.sq-afg-branch-card:focus-visible{transform:translateY(-4px);border-color:#a91827;box-shadow:0 14px 30px rgba(0,0,0,.24)}.sq-afg-branch-card:focus-visible{outline:3px solid #d5ab4b;outline-offset:3px}.sq-afg-branch-media{display:grid;height:190px;flex:0 0 190px;place-items:center;overflow:hidden;background:#fff;border-bottom:1px solid #d9dee1}.sq-afg-branch-media img{display:block;width:100%;height:100%;padding:10px;box-sizing:border-box;background:#fff;object-fit:contain;transition:transform .25s ease}.sq-afg-branch-card:hover img{transform:scale(1.035)}.sq-afg-branch-placeholder{display:grid;width:100%;height:100%;place-items:center;color:#d5ab4b;font-size:38px;font-weight:950;letter-spacing:.08em}.sq-afg-branch-copy{position:relative;display:flex;min-height:110px;flex:1;flex-direction:column;padding:14px 42px 16px 15px;background:#071d2d}.sq-afg-branch-name{font-size:15px;font-weight:850;line-height:1.24}.sq-afg-branch-count{margin-top:6px;color:#c7d0d6;font-size:12px;font-weight:650}.sq-afg-branch-arrow{position:absolute;right:15px;bottom:16px;color:#d5ab4b;font-size:22px;font-weight:900}@media(max-width:1000px){.sq-afg-branch-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:749px){.sq-afg-branch-section{padding:6px 14px 36px}.sq-afg-branch-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.sq-afg-branch-card{height:218px}.sq-afg-branch-media{height:128px;flex-basis:128px}.sq-afg-branch-copy{min-height:90px;padding:12px 34px 14px 12px}.sq-afg-branch-name{font-size:14px}.sq-afg-branch-arrow{right:11px;bottom:13px}}
+{% endstylesheet %}
+{% schema %}{"name":"SQ AFG branch buttons","settings":[],"presets":[{"name":"SQ AFG branch buttons"}]}{% endschema %}
