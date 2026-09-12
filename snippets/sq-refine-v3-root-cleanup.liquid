@@ -30,6 +30,14 @@
       if(!box||box.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results,.sq-refine-v3-page-size'))return;
       hide(box);
     });
+    main.querySelectorAll('.sq-refine-v3-choice').forEach(function(row){
+      var text=String(row.textContent||'').replace(/\s+/g,' ').trim();
+      if(/^duty belts?(?:\s*\(\d+\))?$/i.test(text))row.remove();
+    });
+    main.querySelectorAll('.sq-refine-v3-results a[href*="/products/duty-belt"]').forEach(function(link){
+      var card=link.closest('.product-grid__item,.grid__item,.card-wrapper')||link;
+      hide(card);
+    });
   }
   function clean(){
     var main=document.getElementById('MainContent');
@@ -66,6 +74,7 @@
         if(host!==results&&!host.contains(results))results.appendChild(host);
       }
     }
+    suppressDiveContamination(main);
     main.dataset.sqRefineV3RootCleanup='true';
     if(route==='dive-scuba')main.dataset.sqDiveScubaCleanup='true';
     return true;
@@ -77,4 +86,3 @@
 })();
 </script>
 {% endif %}
-{%- comment -%} Dive/Scuba certification trigger 2026-09-11 {%- endcomment -%}
