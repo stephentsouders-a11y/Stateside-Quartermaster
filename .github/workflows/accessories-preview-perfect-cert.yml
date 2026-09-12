@@ -25,7 +25,7 @@ jobs:
           import { chromium } from 'playwright';
           import fs from 'fs';
           fs.mkdirSync('cert-out',{recursive:true});
-          const target='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
+          const target='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158671503515';
           const failures=[],results=[];
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
           for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
