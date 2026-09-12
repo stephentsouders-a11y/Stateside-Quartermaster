@@ -2,7 +2,9 @@ name: Verify morale color filter in Chromium
 on:
   push:
     branches: [refine-restart-v3]
-    paths: ['.github/workflows/morale-color-chromium-verify.yml']
+    paths:
+      - '.github/workflows/morale-color-chromium-verify.yml'
+      - 'snippets/sq-refine-v3-morale-color-pattern.liquid'
   workflow_dispatch:
 permissions:
   contents: write
@@ -31,7 +33,7 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/search_docs.mjs -o search_docs.mjs
           curl -fsSL https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/validate.mjs -o validate.mjs
           node search_docs.mjs 'collection product tag url filtering current_tags' --model gpt-6-astra-pro --client-name ChatGPT --client-version '2026-09-11' > out/docs-search.txt
-          node validate.mjs --filename sq-refine-v3-morale-color-pattern.liquid --filetype snippets --file "$GITHUB_WORKSPACE/snippets/sq-refine-v3-morale-color-pattern.liquid" --model gpt-6-astra-pro --client-name ChatGPT --client-version '2026-09-11' --artifact-id morale-color-pattern-native-0911 --revision 1 --json > out/liquid-validation.json
+          node validate.mjs --filename sq-refine-v3-morale-color-pattern.liquid --filetype snippets --file "$GITHUB_WORKSPACE/snippets/sq-refine-v3-morale-color-pattern.liquid" --model gpt-6-astra-pro --client-name ChatGPT --client-version '2026-09-11' --artifact-id morale-color-pattern-native-0911 --revision 2 --json > out/liquid-validation.json
       - name: Inspect storefront with agent-browser Chromium
         continue-on-error: true
         run: |
@@ -78,17 +80,9 @@ jobs:
           async function open(){if(!await group().evaluate(d=>d.open)) await group().locator(':scope > summary').click();}
           async function handles(){return cards().evaluateAll(es=>es.map(e=>{const a=e.querySelector('a[href*="/products/"]'); return a?new URL(a.href).pathname.split('/products/')[1].split('/')[0]:null}).filter(Boolean));}
           async function product(handle){if(productCache.has(handle)) return productCache.get(handle); const r=await page.request.get('https://www.statesideqm.com/products/'+handle+'.js'); assert.ok(r.ok(),'Product JSON '+handle+' '+r.status()); const data=await r.json(); productCache.set(handle,data); return data;}
-          async function truth(tags,{allowEmpty=false}={}){
-            const list=await handles(); if(!allowEmpty) assert.ok(list.length>0,'Filtered grid contains products'); assert.equal(new Set(list).size,list.length,'No repeated products in grid');
-            const samples=[]; for(const h of list.slice(0,12)){const p=await product(h); for(const t of tags) assert.ok(p.tags.includes(t),'Product '+h+' missing selected tag '+t); samples.push({handle:h,colorTags:p.tags.filter(t=>/^SQ Color\/Pattern:/.test(t))});}
-            return {visibleCount:list.length,samples};
-          }
+          async function truth(tags,{allowEmpty=false}={}){const list=await handles(); if(!allowEmpty) assert.ok(list.length>0,'Filtered grid contains products'); assert.equal(new Set(list).size,list.length,'No repeated products in grid'); const samples=[]; for(const h of list.slice(0,12)){const p=await product(h); for(const t of tags) assert.ok(p.tags.includes(t),'Product '+h+' missing selected tag '+t); samples.push({handle:h,colorTags:p.tags.filter(t=>/^SQ Color\/Pattern:/.test(t))});} return {visibleCount:list.length,samples};}
           function input(label){return group().locator('input[data-sq-morale-color-tag='+JSON.stringify(expectedTag(label))+']');}
-          async function select(label,on){
-            await open(); const h=handleize(expectedTag(label));
-            await Promise.all([page.waitForURL(u=>{const seg=u.pathname.startsWith('/collections/morale-patches-tactical-id/')?u.pathname.split('/collections/morale-patches-tactical-id/')[1].split('/')[0]:''; const hs=seg?seg.split('+'):[]; return hs.includes(h)===on;},{waitUntil:'domcontentloaded'}),input(label).setChecked(on)]);
-            await ready(); assert.equal(new URL(page.url()).searchParams.get('preview_theme_id'),theme,'Draft preview theme retained'); assert.equal(await input(label).isChecked(),on,'Correct checked state for '+label); assert.equal(new URL(page.url()).searchParams.has('filter.p.tag'),false,'Obsolete filter.p.tag is absent');
-          }
+          async function select(label,on){await open(); const h=handleize(expectedTag(label)); await Promise.all([page.waitForURL(u=>{const seg=u.pathname.startsWith('/collections/morale-patches-tactical-id/')?u.pathname.split('/collections/morale-patches-tactical-id/')[1].split('/')[0]:''; const hs=seg?seg.split('+'):[]; return hs.includes(h)===on;},{waitUntil:'domcontentloaded'}),input(label).setChecked(on)]); await ready(); assert.equal(new URL(page.url()).searchParams.get('preview_theme_id'),theme,'Draft preview theme retained'); assert.equal(await input(label).isChecked(),on,'Correct checked state for '+label); assert.equal(new URL(page.url()).searchParams.has('filter.p.tag'),false,'Obsolete filter.p.tag is absent');}
           try{
             await go(base); await open();
             report.groups=await side().locator(':scope > details > summary').allTextContents();
@@ -99,18 +93,13 @@ jobs:
             assert.ok(report.options.every(o=>o.handle===handleize(o.tag)),'Every checkbox carries correct native tag handle');
             const baseline=await handles(); report.baselineVisibleCount=baseline.length; assert.ok(baseline.length>0,'Baseline products render'); assert.equal(new Set(baseline).size,baseline.length,'Baseline products unique');
             await group().scrollIntoViewIfNeeded(); await page.screenshot({path:out+'/desktop-options.png'});
-            report.checks.push('Desktop: exact heading, exactly 10 canonical tag-backed options, one sidebar, unique baseline grid');
-            for(const label of ['Gray','Black','White']){
-              await go(base); await select(label,true); const tag=expectedTag(label); const result=await truth([tag]); const filtered=await handles(); assert.notDeepEqual(filtered,baseline,label+' changes results'); assert.ok(await group().evaluate(d=>d.open),'Selected group remains open'); report.tests.push({label,tag,url:page.url(),...result});
-              await group().scrollIntoViewIfNeeded(); await page.screenshot({path:out+'/desktop-'+label.toLowerCase()+'.png'});
-              await select(label,false); assert.equal(new URL(page.url()).pathname,'/collections/morale-patches-tactical-id','Clearing '+label+' restores base collection route'); assert.deepEqual(await handles(),baseline,'Clearing '+label+' restores baseline');
-            }
-            report.checks.push('Gray, Black, White each change the route and every sampled product carries the selected canonical tag; clearing restores baseline');
-            await go(base); await select('Gray',true); const persisted=page.url(); await page.reload({waitUntil:'domcontentloaded'}); await ready(); assert.ok(await input('Gray').isChecked(),'Gray persists after reload'); await truth([expectedTag('Gray')]); report.checks.push('Selected native tag state persists after reload');
-            await select('Black',true); const multiPath=new URL(page.url()).pathname; assert.ok(multiPath.includes('sq-color-pattern-gray')&&multiPath.includes('sq-color-pattern-black'),'Native multi-tag path contains both selections'); await truth([expectedTag('Gray'),expectedTag('Black')],{allowEmpty:true}); assert.ok(await input('Gray').isChecked()&&await input('Black').isChecked(),'Both multi-select boxes remain checked');
-            await select('Black',false); await truth([expectedTag('Gray')]); assert.ok(await input('Gray').isChecked(),'Removing Black retains Gray'); report.checks.push('Multi-selection uses native + tag routes; removing one retains the other');
+            report.checks.push('Desktop exact heading, 10 canonical tag-backed options, one sidebar, unique baseline grid');
+            for(const label of ['Gray','Black','White']){await go(base); await select(label,true); const tag=expectedTag(label); const result=await truth([tag]); const filtered=await handles(); assert.notDeepEqual(filtered,baseline,label+' changes results'); assert.ok(await group().evaluate(d=>d.open),'Selected group remains open'); report.tests.push({label,tag,url:page.url(),...result}); await group().scrollIntoViewIfNeeded(); await page.screenshot({path:out+'/desktop-'+label.toLowerCase()+'.png'}); await select(label,false); assert.equal(new URL(page.url()).pathname,'/collections/morale-patches-tactical-id','Clearing '+label+' restores base collection route'); assert.deepEqual(await handles(),baseline,'Clearing '+label+' restores baseline');}
+            report.checks.push('Gray Black White each change results and sampled products carry selected canonical tag; clear restores baseline');
+            await go(base); await select('Gray',true); const persisted=page.url(); await page.reload({waitUntil:'domcontentloaded'}); await ready(); assert.ok(await input('Gray').isChecked(),'Gray persists after reload'); await truth([expectedTag('Gray')]); report.checks.push('Selected native tag persists after reload');
+            await select('Black',true); const multiPath=new URL(page.url()).pathname; assert.ok(multiPath.includes('sq-color-pattern-gray')&&multiPath.includes('sq-color-pattern-black'),'Native multi-tag path contains both selections'); const multi=await truth([expectedTag('Gray'),expectedTag('Black')],{allowEmpty:true}); report.tests.push({label:'Gray + Black',url:page.url(),...multi}); assert.ok(await input('Gray').isChecked()&&await input('Black').isChecked(),'Both multi-select boxes remain checked'); await select('Black',false); await truth([expectedTag('Gray')]); assert.ok(await input('Gray').isChecked(),'Removing Black retains Gray'); report.checks.push('Multi-selection uses native + routes; removing one retains the other');
             for(const size of [100,250]){const u=new URL(persisted); u.searchParams.set('sq_per_page',String(size)); await go(u.href); assert.ok(await input('Gray').isChecked(),'Gray retained for '+size+' per page'); await truth([expectedTag('Gray')]); report.checks.push('Color remains applied at '+size+' products per page');}
-            await page.setViewportSize({width:390,height:844}); await go(base); await open(); await group().scrollIntoViewIfNeeded(); await page.screenshot({path:out+'/mobile-options.png'}); await select('Gray',true); await truth([expectedTag('Gray')]); assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'No mobile horizontal overflow'); await group().scrollIntoViewIfNeeded(); await page.screenshot({path:out+'/mobile-gray.png'}); await select('Gray',false); assert.deepEqual(await handles(),baseline,'Mobile clear restores baseline'); report.checks.push('Mobile 390px: Gray filters truthfully, clears correctly, and creates no horizontal overflow');
+            await page.setViewportSize({width:390,height:844}); await go(base); await open(); await group().scrollIntoViewIfNeeded(); await page.screenshot({path:out+'/mobile-options.png'}); await select('Gray',true); await truth([expectedTag('Gray')]); assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'No mobile horizontal overflow'); await group().scrollIntoViewIfNeeded(); await page.screenshot({path:out+'/mobile-gray.png'}); await select('Gray',false); assert.deepEqual(await handles(),baseline,'Mobile clear restores baseline'); report.checks.push('Mobile 390px Gray filters truthfully clears correctly and has no horizontal overflow');
             report.refineErrors=report.pageErrors.filter(e=>/sq-refine|sqMorale|morale.*color|SQ V3/i.test(e.message)); assert.equal(report.refineErrors.length,0,'No Refine or Morale Color controller page errors');
             report.status='PASS';
           } catch(error){report.status='FAIL'; report.failure=String(error.stack||error); report.failureUrl=page.url(); await page.screenshot({path:out+'/failure.png',fullPage:true}).catch(()=>{}); fs.writeFileSync(out+'/failure.html',await page.content().catch(()=>''));}
