@@ -1,0 +1,100 @@
+name: K9 Refine V3 membership certification
+on:
+  push:
+    branches: [refine-restart-v3]
+    paths: ['.github/workflows/k9-refine-membership-certify.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium tools
+        run: |
+          npm init -y >/dev/null
+          npm install playwright@1.55.0 agent-browser @shopify/liquid-html-parser >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          npx agent-browser install >/dev/null
+      - name: Validate changed Liquid
+        run: |
+          mkdir -p proof
+          node - <<'NODE'
+          const fs=require('fs'),vm=require('vm'),{toLiquidHtmlAST}=require('@shopify/liquid-html-parser');
+          const files=['snippets/sq-refine-v3-k9-membership-guard.liquid','snippets/sq-refine-v3-product-scale-lock.liquid'];
+          for(const f of files){const s=fs.readFileSync(f,'utf8');toLiquidHtmlAST(s);for(const m of s.matchAll(/<script(?![^>]*application\/json)[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(m[1]);console.log('PASS '+f)}
+          NODE
+      - name: Exhaustive Playwright Chromium certification
+        run: |
+          cat > certify.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const base='https://www.statesideqm.com/collections/k9-dog-gear?preview_theme_id=158561894555';
+          const bad=[
+            'Army Tactical Desert Combat Suits with Knee Pads - G3',
+            'FRENCH CCE CAMO FLEECE SHIRT W/ZIPPER NEW Unissued',
+            'GERMAN OD TRICOT SHIRT W/ZIPPER USED (L)',
+            'Harlej Bag - Car Seat Organizer, Mobile Office',
+            'LULA® Loader / Unloader - Ruger 10/22® .22LR',
+            'Meow Morale Patch','ROTC Collar Insignia','SpikeVest for Cats',
+            'Surfing Surfboard SUP Coil Paddle Leash Cord'
+          ];
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1100}});page.setDefaultTimeout(30000);
+          const report={commit:process.env.GITHUB_SHA,theme:158561894555,tests:[],choices:[],errors:[]};
+          page.on('pageerror',e=>report.errors.push(e.message));
+          const wait=async()=>{await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{},{timeout:90000});await page.waitForSelector('.sq-refine-v3-sidebar');await page.waitForTimeout(1200)};
+          const titles=async()=>page.locator('#MainContent a[href*="/products/"]').evaluateAll(as=>{const seen=new Set(),out=[];for(const a of as){const c=a.closest('.product-grid__item,product-card,.product-card,.card-wrapper,.grid__item')||a;if(c.getAttribute('data-sq-k9-membership-rejected')==='true')continue;const t=(c.innerText||a.innerText||'').replace(/\s+/g,' ').trim();const h=(a.getAttribute('href')||'').split('?')[0];if(t&&!seen.has(h)){seen.add(h);out.push(t)}}return out});
+          const assertClean=async label=>{const ts=await titles();for(const needle of bad)assert.ok(!ts.some(t=>t.toLowerCase().includes(needle.toLowerCase())),label+' leaked '+needle);return ts.length};
+          await page.goto(base,{waitUntil:'domcontentloaded',timeout:90000});await wait();
+          assert.equal(await page.evaluate(()=>Shopify.theme.id),158561894555);
+          assert.ok(await page.locator('script[data-sq-refine-v3]').count(),'Refine V3 core missing');
+          assert.ok(await page.locator('script[data-sq-k9-membership-guard]').count(),'K9 guard missing');
+          assert.ok(await page.getByText('REFINE PRODUCTS',{exact:true}).count(),'Refine Products title missing');
+          await assertClean('baseline');
+          const choices=await page.locator('.sq-refine-v3-sidebar input[type="checkbox"]').evaluateAll(ins=>ins.map((i,n)=>({n,label:(i.closest('label')?.innerText||i.getAttribute('aria-label')||i.value||'').replace(/\s+/g,' ').trim(),group:(i.closest('details')?.querySelector(':scope>summary')?.innerText||'').trim(),kind:i.dataset.kind||'',value:i.value||'',target:i.dataset.target||'',name:i.name||''})).filter(x=>x.label));
+          report.discovered=choices;
+          for(const c of choices){
+            let rec={group:c.group,label:c.label,pass:false};
+            try{
+              await page.goto(base,{waitUntil:'domcontentloaded',timeout:90000});await wait();
+              const inputs=page.locator('.sq-refine-v3-sidebar input[type="checkbox"]');
+              const count=await inputs.count();let idx=-1;
+              for(let i=0;i<count;i++){const inp=inputs.nth(i);const lab=(await inp.evaluate(el=>(el.closest('label')?.innerText||el.getAttribute('aria-label')||el.value||'').replace(/\s+/g,' ').trim()));const grp=(await inp.evaluate(el=>(el.closest('details')?.querySelector(':scope>summary')?.innerText||'').trim()));if(lab===c.label&&grp===c.group){idx=i;break}}
+              assert.ok(idx>=0,'choice not found after reload');
+              const inp=inputs.nth(idx);await inp.scrollIntoViewIfNeeded();
+              await inp.check({force:true});
+              await page.waitForTimeout(1800);
+              const cleanCount=await assertClean(c.group+' > '+c.label);
+              rec={...rec,pass:true,url:page.url(),visibleProducts:cleanCount};
+              console.log('PASS',c.group,'>',c.label,cleanCount);
+            }catch(e){rec.error=e.message;console.error('FAIL',c.group,'>',c.label,e.message)}
+            report.choices.push(rec);
+          }
+          const failed=report.choices.filter(x=>!x.pass);
+          report.tests.push({name:'Refine V3 core present',pass:true},{name:'K9 membership guard present',pass:true},{name:'all choices audited',pass:failed.length===0,total:report.choices.length,failed:failed.length},{name:'no known non-K9 leakage',pass:failed.every(x=>!/leaked /.test(x.error||''))},{name:'no page errors',pass:report.errors.length===0,errors:report.errors});
+          fs.writeFileSync('proof/k9-refine-membership-report.json',JSON.stringify(report,null,2));
+          await page.goto(base,{waitUntil:'domcontentloaded',timeout:90000});await wait();await page.screenshot({path:'proof/k9-refine-certified.png',fullPage:true});
+          await browser.close();if(failed.length||report.errors.length)process.exit(1);
+          EOF
+          node certify.mjs
+      - name: Agent-browser Chromium proof
+        if: always()
+        run: |
+          npx agent-browser open 'https://www.statesideqm.com/collections/k9-dog-gear?preview_theme_id=158561894555'
+          npx agent-browser wait '.sq-refine-v3-sidebar'
+          npx agent-browser snapshot -i > proof/k9-agent-browser-snapshot.txt
+          npx agent-browser screenshot proof/k9-agent-browser.png
+          npx agent-browser close
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k9-refine-membership-certification
+          path: proof
+          retention-days: 14
