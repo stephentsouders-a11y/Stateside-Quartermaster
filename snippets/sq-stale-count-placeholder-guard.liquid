@@ -1,5 +1,5 @@
 {% if request.page_type == 'collection' %}
-<script data-sq-stale-count-placeholder-guard data-revision="20260912-v1">
+<script data-sq-stale-count-placeholder-guard data-revision="20260912-v2">
 (function(){
   if(window.__sqStaleCountPlaceholderGuard)return;
   window.__sqStaleCountPlaceholderGuard=true;
@@ -16,7 +16,7 @@
       }
     });
   }
-  [3500,5000,8000].forEach(function(ms){setTimeout(neutralize,ms)});
+  [1200,2200,3500,5000].forEach(function(ms){setTimeout(neutralize,ms)});
 })();
 </script>
 {% endif %}
