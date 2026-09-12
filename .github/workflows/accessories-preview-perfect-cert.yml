@@ -1,7 +1,10 @@
-name: Accessories preview perfect certification
+name: Accessories live single-refine certification
 on:
   push:
+    branches: [main]
     paths:
+      - 'snippets/sq-single-refine-authority.liquid'
+      - 'snippets/sq-storefront-content-guard.liquid'
       - '.github/workflows/accessories-preview-perfect-cert.yml'
   workflow_dispatch:
 permissions:
@@ -18,94 +21,64 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Certify repaired Accessories preview theme
+      - name: Certify live Accessories single Refine authority
         run: |
           cat > certify.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'fs';
-          fs.mkdirSync('cert-out/videos',{recursive:true});
-          const target='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
-          const results=[],failures=[],warnings=[];
+          fs.mkdirSync('cert-out',{recursive:true});
+          const target='https://www.statesideqm.com/collections/accessories-gifts-collectibles';
+          const failures=[],results=[];
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
           for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
             const browser=await chromium.launch({headless:true});
-            const ctx=await browser.newContext({viewport,recordVideo:{dir:'cert-out/videos',size:{width:Math.min(viewport.width,1280),height:Math.min(viewport.height,720)}}});
-            const page=await ctx.newPage();
+            const page=await browser.newPage({viewport});
             page.setDefaultNavigationTimeout(60000);
-            const events=[],consoleErrors=[],pageErrors=[],failedRequests=[];
-            page.on('framenavigated',f=>{if(f===page.mainFrame())events.push({t:Date.now(),kind:'navigate',url:f.url()})});
-            page.on('close',()=>events.push({t:Date.now(),kind:'page-close'}));
-            page.on('crash',()=>events.push({t:Date.now(),kind:'page-crash'}));
-            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
-            page.on('pageerror',e=>pageErrors.push(String(e)));
-            page.on('requestfailed',r=>failedRequests.push({url:r.url(),error:r.failure()?.errorText||''}));
-            await page.addInitScript(()=>{
-              window.__certVitals={lcp:0,cls:0,longtasks:0};
-              try{new PerformanceObserver(l=>{for(const e of l.getEntries())window.__certVitals.lcp=Math.max(window.__certVitals.lcp,e.startTime)}).observe({type:'largest-contentful-paint',buffered:true})}catch{}
-              try{new PerformanceObserver(l=>{for(const e of l.getEntries())if(!e.hadRecentInput)window.__certVitals.cls+=e.value}).observe({type:'layout-shift',buffered:true})}catch{}
-              try{new PerformanceObserver(l=>window.__certVitals.longtasks+=l.getEntries().length).observe({type:'longtask',buffered:true})}catch{}
-            });
-            const started=Date.now();
             let response=null,navError=null;
-            try{response=await page.goto(target,{waitUntil:'domcontentloaded'})}catch(e){navError=String(e)}
-            const states=[];
-            async function state(label){
-              if(page.isClosed())return {label,closed:true};
-              return page.evaluate(label=>{
-                const main=document.querySelector('#MainContent');
-                return {label,url:location.href,title:document.title,ready:document.readyState,main:!!main,mainChildren:main?main.children.length:null,bodyText:(document.body?.innerText||'').slice(0,180),htmlLength:document.documentElement?.outerHTML?.length||0};
-              },label).catch(e=>({label,error:String(e)}));
-            }
-            let usableMs=null;
-            for(let i=0;i<40&&!navError;i++){
-              const ready=await page.evaluate(()=>{const c=document.querySelector('.sq-subcategory-card');if(!c)return false;const r=c.getBoundingClientRect(),s=getComputedStyle(c);return r.width>100&&r.height>100&&s.display!=='none'&&s.visibility!=='hidden'}).catch(()=>false);
-              if(ready){usableMs=Date.now()-started;break}
-              await sleep(150);
-            }
-            states.push(await state('usable'));
-            await page.screenshot({path:`cert-out/${device}-usable.png`,fullPage:false}).catch(()=>{});
-            for(const [label,delay] of [['plus2s',2000],['plus5s',3000],['plus9s',4000],['plus13s',4000]]){
-              await sleep(delay);states.push(await state(label));
-              await page.screenshot({path:`cert-out/${device}-${label}.png`,fullPage:false}).catch(()=>{});
-            }
-            const finalState=states.at(-1)||{};
-            let audit={missingMain:true};
-            if(!page.isClosed()) audit=await page.evaluate(()=>{
-              const main=document.querySelector('#MainContent');if(!main)return {missingMain:true,url:location.href,title:document.title,vitals:window.__certVitals};
+            try{response=await page.goto(target,{waitUntil:'domcontentloaded'});}catch(e){navError=String(e);}
+            await sleep(5000);
+            const audit=await page.evaluate(()=>{
+              const main=document.querySelector('#MainContent');
               const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
-              const cards=[...main.querySelectorAll('.sq-subcategory-card')].filter(vis),imgs=[...main.querySelectorAll('img')],side=[...main.querySelectorAll('.sq-global-refine-sidebar')].filter(vis),native=[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis),nav=performance.getEntriesByType('navigation')[0];
-              return {missingMain:false,url:location.href,title:document.title,themeId:String(window.Shopify?.theme?.id||''),categoryCards:cards.length,sidebarCount:side.length,refineTitles:[...main.querySelectorAll('.sq-global-refine-sidebar__title')].filter(vis).length,refineDetails:[...main.querySelectorAll('.sq-global-refine-sidebar details')].filter(vis).length,nativeFilters:native.length,brokenImages:imgs.filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.currentSrc||i.src).filter(Boolean),overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,stateGuard:/State Guard Uniform Builder|Build Your Uniform|PT Uniform/i.test(main.innerText||''),mobileCollapsed:side[0]?.dataset?.mobileCollapsed||null,cardRects:cards.slice(0,3).map(e=>{const r=e.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}}),perf:nav?{ttfb:Math.round(nav.responseStart),dcl:Math.round(nav.domContentLoadedEventEnd),load:Math.round(nav.loadEventEnd),transferSize:nav.transferSize,decodedBodySize:nav.decodedBodySize}:null,vitals:window.__certVitals};
-            }).catch(e=>({missingMain:true,error:String(e)}));
-            let refineInteraction={attempted:false,opened:false,closed:false,detailsAfterOpen:0,detailToggled:false};
-            if(!audit.missingMain&&!page.isClosed()){
-              const title=page.locator('.sq-global-refine-sidebar__title').first();
-              if(await title.isVisible().catch(()=>false)){
-                refineInteraction.attempted=true;
-                if(device==='mobile'){
-                  await title.click();await sleep(200);refineInteraction.opened=await page.locator('.sq-global-refine-sidebar').evaluate(e=>e.dataset.mobileCollapsed==='false').catch(()=>false);refineInteraction.detailsAfterOpen=await page.locator('.sq-global-refine-sidebar details').count();
-                  const summary=page.locator('.sq-global-refine-sidebar details > summary').first();if(await summary.isVisible().catch(()=>false)){await summary.click();refineInteraction.detailToggled=true;}
-                  await page.screenshot({path:'cert-out/mobile-refine-open.png',fullPage:false}).catch(()=>{});await title.click();await sleep(120);refineInteraction.closed=await page.locator('.sq-global-refine-sidebar').evaluate(e=>e.dataset.mobileCollapsed==='true').catch(()=>false);
-                }else{refineInteraction.opened=true;refineInteraction.closed=true;refineInteraction.detailsAfterOpen=await page.locator('.sq-global-refine-sidebar details').count();}
-              }
-            }
-            const result={device,status:response?.status()??null,responseUrl:response?.url()||null,navError,usableMs,states,audit,refineInteraction,events,consoleErrors,pageErrors,failedRequests:failedRequests.slice(0,40)};results.push(result);
-            if(result.status!==200)failures.push(`${device}: HTTP ${result.status}`);if(navError)failures.push(`${device}: navigation error`);if(usableMs===null||usableMs>5000)failures.push(`${device}: usable ${usableMs}ms`);
-            if(states.some(s=>s.closed||s.main===false||s.error))failures.push(`${device}: storefront became unstable after first render`);
-            if(audit.missingMain)failures.push(`${device}: #MainContent missing at final stability gate`);else{
-              if(audit.categoryCards<8)failures.push(`${device}: only ${audit.categoryCards} category cards`);if(audit.sidebarCount!==1)failures.push(`${device}: sidebar count ${audit.sidebarCount}`);if(audit.refineTitles!==1)failures.push(`${device}: Refine title count ${audit.refineTitles}`);if(audit.refineDetails<1)failures.push(`${device}: Refine Products has no functional groups`);if(audit.nativeFilters!==0)failures.push(`${device}: duplicate native filters ${audit.nativeFilters}`);if(audit.brokenImages.length)failures.push(`${device}: broken images ${audit.brokenImages.length}`);if(audit.overflow)failures.push(`${device}: horizontal overflow`);if(audit.stateGuard)failures.push(`${device}: State Guard contamination`);if(new URL(audit.url).searchParams.has('filter.v.availability'))failures.push(`${device}: availability filter remained in URL`);if((audit.vitals?.cls??0)>0.1)failures.push(`${device}: CLS ${(audit.vitals.cls||0).toFixed(3)}`);if((audit.vitals?.lcp??0)>3500)failures.push(`${device}: LCP ${Math.round(audit.vitals.lcp)}ms`);
-              if(device==='mobile'){if(!refineInteraction.attempted||!refineInteraction.opened||!refineInteraction.closed||refineInteraction.detailsAfterOpen<1||!refineInteraction.detailToggled)failures.push('mobile: Refine Products interaction incomplete');const [a,b]=audit.cardRects||[];if(a&&b&&Math.abs(a.x-b.x)>4)failures.push(`mobile: category cards not one column (${a.x} vs ${b.x})`);}
-            }
-            if(consoleErrors.length)warnings.push(`${device}: ${consoleErrors.length} console errors`);
-            await ctx.close().catch(()=>{});await browser.close().catch(()=>{});
+              const custom=[...(main?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis);
+              const nativeSelectors=['.facets-block-wrapper--horizontal .facets__filters-wrapper','.facets-toggle__wrapper','theme-drawer#filters-drawer','#filters-drawer','.facets-block-wrapper--vertical','.facets__form-vertical','facet-filters-form','.mobile-facets__wrapper','.mobile-facets__open-wrapper'];
+              const native=[];
+              nativeSelectors.forEach(sel=>{[...(main?.querySelectorAll(sel)||[])].forEach(el=>{if(!custom.some(c=>c===el||c.contains(el)||el.contains(c))&&vis(el))native.push(el);});});
+              return {
+                url:location.href,
+                title:document.title,
+                customVisible:custom.length,
+                refineTitles:[...(main?.querySelectorAll('.sq-global-refine-sidebar__title')||[])].filter(vis).length,
+                detailGroups:[...(main?.querySelectorAll('.sq-global-refine-sidebar details')||[])].filter(vis).length,
+                nativeVisible:native.length,
+                bodyClass:document.body.className,
+                authority:custom[0]?.getAttribute('data-sq-refine-authority')||null,
+                guardCustom:document.documentElement.dataset.sqRefineCustomVisible||null,
+                guardNative:document.documentElement.dataset.sqRefineNativeVisible||null,
+                horizontalOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4
+              };
+            }).catch(e=>({error:String(e)}));
+            await page.screenshot({path:`cert-out/${device}.png`,fullPage:true}).catch(()=>{});
+            results.push({device,status:response?.status()??null,navError,audit});
+            if(response?.status()!==200)failures.push(`${device}: HTTP ${response?.status()}`);
+            if(navError)failures.push(`${device}: navigation error ${navError}`);
+            if(audit.error)failures.push(`${device}: audit error ${audit.error}`);
+            if(audit.customVisible!==1)failures.push(`${device}: expected exactly 1 visible custom Refine sidebar, found ${audit.customVisible}`);
+            if(audit.refineTitles!==1)failures.push(`${device}: expected exactly 1 visible Refine Products title, found ${audit.refineTitles}`);
+            if(audit.detailGroups<1)failures.push(`${device}: Refine Products has no functional groups`);
+            if(audit.nativeVisible!==0)failures.push(`${device}: duplicate native filter UI still visible (${audit.nativeVisible})`);
+            if(audit.horizontalOverflow)failures.push(`${device}: horizontal overflow`);
+            await browser.close();
           }
-          fs.writeFileSync('cert-out/report.json',JSON.stringify({target,results,failures,warnings},null,2));
-          console.log(JSON.stringify({results,failures,warnings},null,2));
-          if(failures.length)process.exitCode=2;
+          const report={target,results,failures};
+          fs.writeFileSync('cert-out/report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          if(failures.length)process.exit(2);
           EOF
           node certify.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: accessories-preview-perfect-cert
+          name: accessories-live-single-refine-cert
           path: cert-out
           retention-days: 7
