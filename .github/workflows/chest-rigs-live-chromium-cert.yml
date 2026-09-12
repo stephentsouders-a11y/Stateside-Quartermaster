@@ -31,7 +31,6 @@ jobs:
           const start='https://www.statesideqm.com/collections/packs-pouches-carry-gear-chest-rigs-load-carriage?sq_root=tactical-gear';
           const expectedPath='/collections/packs-pouches-carry-gear-chest-rigs-load-carriage/sq-type-chest-rigs';
           const report={start,expectedPath,failures:[],devices:[]};
-          const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
           for (const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]) {
             const browser=await chromium.launch({headless:true});
             const context=await browser.newContext({viewport,recordVideo:{dir:'out',size:device==='desktop'?{width:1280,height:720}:{width:390,height:720}}});
@@ -44,30 +43,19 @@ jobs:
             const response=await page.goto(start,{waitUntil:'domcontentloaded'}).catch(()=>null);
             await page.waitForTimeout(1500);
             await page.screenshot({path:`out/${device}-before.png`,fullPage:true});
-            const chestInput=page.locator('input[type="checkbox"]').filter({has:page.locator('xpath=ancestor::label[contains(translate(normalize-space(.),"CHEST RIGS","chest rigs"),"chest rigs")]')});
             let clicked=false;
-            const labels=page.locator('label');
-            for(let i=0,n=await labels.count();i<n;i++){
-              const label=labels.nth(i); const text=clean(await label.innerText().catch(()=>''));
-              if(/^Chest Rigs(?:\s|$)/i.test(text)){
-                const input=label.locator('input[type="checkbox"]');
-                if(await input.count()){
-                  const before=page.url();
-                  await Promise.all([page.waitForURL(u=>u.href!==before,{timeout:20000}).catch(()=>null),input.first().click({force:true})]);
-                  clicked=true; break;
-                }
-              }
+            const card=page.locator('a[href*="/collections/packs-pouches-carry-gear-chest-rigs-load-carriage/sq-type-chest-rigs"]').first();
+            if(await card.count()){
+              const href=await card.getAttribute('href');
+              report.devices.push({device,cardHref:href});
+              await Promise.all([
+                page.waitForURL(u=>u.pathname.includes('/sq-type-chest-rigs'),{timeout:20000}),
+                card.click({force:true})
+              ]).catch(()=>{});
+              clicked=page.url().includes('/sq-type-chest-rigs');
             }
             if(!clicked){
-              const link=page.getByRole('link',{name:/^Chest Rigs$/i}).first();
-              if(await link.count()){
-                await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:20000}).catch(()=>null),link.click()]);
-                clicked=true;
-              }
-            }
-            if(!clicked){
-              report.failures.push(`${device}: Chest Rigs control not found on live page`);
-              await page.goto(`https://www.statesideqm.com${expectedPath}?sq_root=tactical-gear&filter.v.availability=1`,{waitUntil:'domcontentloaded'}).catch(()=>null);
+              report.failures.push(`${device}: Chest Rigs card did not navigate to the dedicated route`);
             }
             await page.waitForLoadState('domcontentloaded').catch(()=>{});
             await page.waitForTimeout(1800);
@@ -89,7 +77,9 @@ jobs:
             if(productTitles.length<1) report.failures.push(`${device}: no visible product titles found`);
             if(chestLike.length<1) report.failures.push(`${device}: no chest-rig-like product title found`);
             await page.screenshot({path:`out/${device}-after.png`,fullPage:true});
-            report.devices.push({device,httpStatus:response?.status()||null,clicked,url:u.href,productCount:productTitles.length,productTitles,belts,chestLike,pageErrors,consoleErrors});
+            const existing=report.devices.find(d=>d.device===device)||{};
+            Object.assign(existing,{httpStatus:response?.status()||null,clicked,url:u.href,productCount:productTitles.length,productTitles,belts,chestLike,pageErrors,consoleErrors});
+            if(!report.devices.includes(existing)) report.devices.push(existing);
             const video=page.video();
             await page.close(); await context.close();
             if(video){const src=await video.path();fs.copyFileSync(src,`out/${device}.webm`)}
