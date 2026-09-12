@@ -1,0 +1,42 @@
+{% if request.page_type == 'collection' %}
+{% if collection.handle == 'products-built-for-the-line-u-s-army' or collection.handle == 'army-national-guard-series' %}
+{% assign sq_is_army = false %}
+{% if collection.handle == 'products-built-for-the-line-u-s-army' %}{% assign sq_is_army = true %}{% endif %}
+{% assign sq_mw_agsu = 'sq-state-guard-male-agsu-marlow-white.jpg' | asset_url %}
+{% assign sq_mw_asu = 'sq-state-guard-male-asu-marlow-white.jpg' | asset_url %}
+<script data-sq-army-arng-visual-parity-v3>
+(function(){
+  if(window.__sqArmyArngVisualParityV3)return;window.__sqArmyArngVisualParityV3=true;
+  var main=document.getElementById('MainContent');if(!main)return;
+  var isArmy={{ sq_is_army | json }};
+  var locks={
+    'ocp / combat & field uniform':{src:'https://cdn.shopify.com/s/files/1/0774/4602/1275/files/FRACU-ocp-uniform-jacket-new.jpg?v=1786232901',alt:'U.S. Army OCP combat uniform coat'},
+    'ihwcu / hot weather uniform':{src:'https://cdn.shopify.com/s/files/1/0774/4602/1275/files/711SfqmQzmL._AC_SL1500.jpg?v=1786822993',alt:'U.S. Army Improved Hot Weather Combat Uniform coat'},
+    'agsu / green service uniform':{src:{{ sq_mw_agsu | json }},alt:'Marlow White U.S. Army Green Service Uniform'},
+    'asu / blue service uniform':{src:{{ sq_mw_asu | json }},alt:'Marlow White U.S. Army Blue Service Uniform'},
+    'army pt / physical fitness uniform':{src:'https://cdn.shopify.com/s/files/1/0774/4602/1275/files/s-l1600_20ec8b8e-b8c1-4591-91ed-80656846e762.jpg?v=1788815480',alt:'U.S. Army APFU physical fitness shirt'},
+    'cold weather & outerwear':{src:'https://cdn.shopify.com/s/files/1/0774/4602/1275/files/c153385a-d4a2-441c-a20f-fe918284a22c.png?v=1788242524',alt:'U.S. Army Gen III ECWCS cold weather parka'}
+  };
+  function norm(x){return String(x||'').replace(/\s+/g,' ').trim().toLowerCase()}
+  function tidyHeading(){if(!isArmy)return;var hs=main.querySelectorAll('h1,h2');for(var i=0;i<hs.length;i++){var t=norm(hs[i].textContent).toUpperCase();if(t==='PRODUCTS BUILT FOR THE LINE — U.S. ARMY'||t==='PRODUCTS BUILT FOR THE LINE - U.S. ARMY'){if(hs[i].textContent.trim()!=='U.S. ARMY')hs[i].textContent='U.S. ARMY';hs[i].setAttribute('data-sq-army-title-parity','true');break}}}
+  function lockCardImages(){
+    var q=new URLSearchParams(location.search);if(norm(q.get('sq_bfl_category'))!=='uniforms & uniform accessories'||q.get('sq_bfl_subcategory'))return;
+    var view=main.querySelector('[data-sqbfl-view]')||main,cards=view.querySelectorAll('.sqbfl-card');
+    for(var i=0;i<cards.length;i++){
+      var strong=cards[i].querySelector('strong'),key=norm(strong&&strong.textContent),lock=locks[key];if(!lock)continue;
+      var img=cards[i].querySelector('img');if(!img)continue;
+      var sources=cards[i].querySelectorAll('source');for(var s=0;s<sources.length;s++){sources[s].removeAttribute('srcset');sources[s].removeAttribute('sizes')}
+      img.removeAttribute('srcset');img.removeAttribute('sizes');
+      if(img.getAttribute('src')!==lock.src)img.setAttribute('src',lock.src);
+      img.alt=lock.alt;img.setAttribute('data-sq-army-approved-image',key);img.loading='eager';img.setAttribute('fetchpriority','high');img.decoding='async';
+    }
+  }
+  var queued=false;function run(){queued=false;tidyHeading();lockCardImages()}function queue(){if(queued)return;queued=true;(window.requestAnimationFrame||function(fn){setTimeout(fn,16)})(run)}
+  run();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',queue,{once:true});window.addEventListener('load',queue,{once:true});
+  var mo=new MutationObserver(queue);mo.observe(main,{childList:true,subtree:true,attributes:true,attributeFilter:['src','srcset']});
+  [80,250,700,1400,2600,4500,7000,10000,15000,22000,30000,45000,60000].forEach(function(ms){setTimeout(queue,ms)});
+  setTimeout(function(){run();mo.disconnect()},65000);
+})();
+</script>
+{% endif %}
+{% endif %}
