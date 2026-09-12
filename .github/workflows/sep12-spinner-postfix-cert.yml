@@ -1,0 +1,35 @@
+name: Sep12 spinner post-fix certification
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-spinner-postfix-cert.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify no prolonged loading text
+        run: |
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright';import fs from 'fs';
+          const base='https://www.statesideqm.com',theme='158561894555';
+          const hs=['medical-first-aid','armyng-vietnam','shield-republic-apparel','space-force-insignia-ranks-awards','literature-field-manuals-reference-guides','packs-pouches-carry-gear-molle-pouches-organizers','pew-pews','military-gifts-flags-memorial-displays','ifak-trauma-kits','sta-brite-ribbons-ribbon-mounts','sleeping-bags-sleep-systems','tourniquets-bleeding-control','sta-brite-patches-tactical-id','literature-u-s-conflicts-world-war-ii'];
+          const rx=/loading items|checking items|counting items|building the customer-facing product tree|organizing .* products/i;
+          const browser=await chromium.launch({headless:true}),rows=[];
+          for(const h of hs){for(const [device,vp] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){const page=await browser.newPage({viewport:vp});const rec={handle:h,device,status:null,loading:[],deferred:0,countReady:0,errors:[]};page.on('pageerror',e=>rec.errors.push(e.message));const u=new URL('/collections/'+h,base);u.searchParams.set('preview_theme_id',theme);try{const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});rec.status=r?.status()??null;await page.waitForTimeout(9000);rec.loading=await page.evaluate(src=>{const rx=new RegExp(src,'i');return [...document.querySelectorAll('#MainContent *')].filter(e=>e.children.length===0&&rx.test((e.textContent||'').trim())).slice(0,100).map(e=>({text:(e.textContent||'').trim(),cls:e.className||''}))},rx.source);rec.deferred=await page.locator('#MainContent [data-sq-count-ready="deferred"]').count();rec.countReady=await page.locator('#MainContent [data-sq-count-ready="true"]').count();}catch(e){rec.error=String(e)}rec.fail=rec.status!==200||rec.loading.length>0||rec.errors.some(x=>/syntaxerror|unexpected token/i.test(x));rows.push(rec);await page.close();await new Promise(r=>setTimeout(r,1800))}}await browser.close();fs.mkdirSync('out',{recursive:true});fs.writeFileSync('out/results.json',JSON.stringify(rows,null,2));console.log(JSON.stringify({tested:rows.length,failed:rows.filter(r=>r.fail).length,failures:rows.filter(r=>r.fail)},null,2));if(rows.some(r=>r.fail))process.exitCode=2;
+          EOF
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep12-spinner-postfix
+          path: out
+          retention-days: 7
