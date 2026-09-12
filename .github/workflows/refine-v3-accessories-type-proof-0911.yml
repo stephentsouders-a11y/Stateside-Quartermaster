@@ -1,0 +1,86 @@
+name: Refine V3 Accessories Type proof 0911
+on:
+  push:
+    paths:
+      - '.github/workflows/refine-v3-accessories-type-proof-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium Playwright
+        run: |
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Prove Accessories Type facet desktop and mobile
+        run: |
+          cat > accessories-type-proof.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const BASE='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
+          const browser=await chromium.launch({headless:true});
+          const failures=[];
+          async function run(label,viewport){
+            const context=await browser.newContext({viewport});
+            const page=await context.newPage();
+            const errors=[]; page.on('pageerror',e=>errors.push(String(e)));
+            const t0=Date.now();
+            const res=await page.goto(BASE,{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForFunction(()=>document.querySelector('#MainContent .sq-refine-v3-sidebar'),null,{timeout:15000});
+            await page.waitForTimeout(900);
+            const state=await page.evaluate(()=>{
+              const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};
+              const m=document.querySelector('#MainContent');
+              const sides=[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis);
+              const grids=[...m.querySelectorAll('.product-grid')].filter(g=>vis(g)&&[...g.querySelectorAll(':scope > .product-grid__item')].some(c=>vis(c)&&c.querySelector('a[href*="/products/"]')));
+              const g=grids.find(x=>x.closest('.sq-refine-v3-results'))||grids[0];
+              const cards=g?[...g.querySelectorAll(':scope > .product-grid__item')].filter(c=>vis(c)&&c.querySelector('a[href*="/products/"]')):[];
+              const groups=[...sides[0].querySelectorAll('[data-sq-refine-v3-group],.sq-refine-v3-group')];
+              const typeGroup=groups.find(x=>/shop by type|\btype\b/i.test((x.querySelector('h2,h3,h4,.sq-refine-v3-group__title,summary,strong')?.textContent||x.getAttribute('data-sq-refine-v3-group')||'').trim())) || [...sides[0].querySelectorAll('*')].find(x=>/^shop by type$/i.test((x.textContent||'').trim()))?.closest('[data-sq-refine-v3-group],.sq-refine-v3-group,fieldset,details,section,div');
+              const typeInputs=typeGroup?[...typeGroup.querySelectorAll('input[type="checkbox"],a[href*="filter.p.product_type"]')].filter(vis):[];
+              const title=sides[0]?.querySelector('.sq-refine-v3-sidebar__title');
+              return {sidebars:sides.length,grids:grids.length,cards:cards.length,typePresent:!!typeGroup,typeCount:typeInputs.length,body:sides[0]?getComputedStyle(sides[0]).backgroundColor:null,title:(title?.textContent||'').trim(),titleBg:title?getComputedStyle(title).backgroundColor:null,usable:performance.now()};
+            });
+            console.log('STATE '+label+' '+JSON.stringify({status:res.status(),errors,state,wall:Date.now()-t0}));
+            if(res.status()!==200)failures.push(label+' HTTP '+res.status());
+            if(errors.length)failures.push(label+' page errors');
+            if(state.sidebars!==1)failures.push(label+' sidebars '+state.sidebars);
+            if(state.grids!==1)failures.push(label+' grids '+state.grids);
+            if(state.cards!==50)failures.push(label+' cards '+state.cards);
+            if(!state.typePresent||state.typeCount<1)failures.push(label+' missing Type facet/options');
+            if(state.body!=='rgb(255, 255, 255)'||state.title.toUpperCase()!=='REFINE PRODUCTS'||state.titleBg!=='rgb(8, 40, 63)')failures.push(label+' sidebar style');
+
+            const clicked=await page.evaluate(()=>{
+              const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'};
+              const sidebar=document.querySelector('#MainContent .sq-refine-v3-sidebar');
+              const groups=[...sidebar.querySelectorAll('[data-sq-refine-v3-group],.sq-refine-v3-group,fieldset,details,section')];
+              const tg=groups.find(x=>/shop by type|\btype\b/i.test((x.querySelector('h2,h3,h4,.sq-refine-v3-group__title,summary,strong')?.textContent||x.getAttribute('data-sq-refine-v3-group')||'').trim()));
+              if(!tg)return false;
+              const a=[...tg.querySelectorAll('a[href]')].find(vis); if(a){a.click(); return true;}
+              const i=[...tg.querySelectorAll('input[type="checkbox"]')].find(x=>vis(x)&&!x.disabled); if(i){i.click(); return true;}
+              return false;
+            });
+            if(!clicked) failures.push(label+' could not click Type option');
+            else {
+              await page.waitForTimeout(1800);
+              const after=await page.evaluate(()=>({url:location.href,sidebar:!!document.querySelector('#MainContent .sq-refine-v3-sidebar'),products:[...document.querySelectorAll('#MainContent a[href*="/products/"]')].length}));
+              console.log('AFTER '+label+' '+JSON.stringify(after));
+              if(!after.sidebar||after.products<1)failures.push(label+' Type click lost sidebar/products');
+            }
+            await context.close();
+          }
+          await run('desktop',{width:1440,height:1000});
+          await run('mobile',{width:390,height:844});
+          await browser.close();
+          if(failures.length){console.error('FAILURES\n'+failures.join('\n'));process.exit(2)}
+          console.log('ACCESSORIES_TYPE_PROOF_PASS');
+          EOF
+          node accessories-type-proof.mjs
