@@ -6,84 +6,147 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: firearm-refine-exhaustive-0911
+  cancel-in-progress: true
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7,8,9,10,11]
     steps:
       - uses: actions/setup-node@v4
         with: { node-version: '24' }
       - run: npm init -y >/dev/null 2>&1 && npm install playwright@1.55.0 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Click every Firearm Accessories Refine choice one by one
+      - name: Test assigned Firearm Accessories Refine choices
         env:
           BASE: https://www.statesideqm.com
           THEME: '158561894555'
+          SHARD: ${{ matrix.shard }}
+          SHARDS: '12'
         run: |
           cat > audit.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'fs';
           fs.mkdirSync('out',{recursive:true});
-          const base=process.env.BASE, theme=process.env.THEME;
+          const base=process.env.BASE, theme=process.env.THEME, shard=Number(process.env.SHARD), shards=Number(process.env.SHARDS);
           const root=()=>{const u=new URL('/collections/firearm-accessories',base);u.searchParams.set('preview_theme_id',theme);return u.toString()};
           const browser=await chromium.launch({headless:true});
           const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
           const page=await ctx.newPage();
-          page.setDefaultTimeout(12000); page.setDefaultNavigationTimeout(45000);
+          page.setDefaultTimeout(10000); page.setDefaultNavigationTimeout(30000);
           const badHttp=[], errors=[];
           page.on('response',r=>{if(r.status()===429||r.status()>=500)badHttp.push(`${r.status()} ${r.url()}`)});
           page.on('pageerror',e=>errors.push(String(e)));
-          async function ready(timeout=30000){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout});}
+          async function ready(timeout=25000){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout});}
           async function openRoot(){await page.goto(root(),{waitUntil:'domcontentloaded'});await ready();}
-          async function visibleProducts(){return page.locator('#MainContent a[href*="/products/"]').evaluateAll(as=>[...new Map(as.filter(a=>{const r=a.getBoundingClientRect(),s=getComputedStyle(a);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'}).map(a=>[new URL(a.href).pathname,(a.textContent||'').replace(/\s+/g,' ').trim()])).entries()].map(([href,title])=>({href,title})).slice(0,20)).catch(()=>[])}
+          async function visibleProducts(){return page.locator('#MainContent .product-grid a[href*="/products/"], #MainContent collection-component a[href*="/products/"]').evaluateAll(as=>[...new Map(as.filter(a=>{const r=a.getBoundingClientRect(),s=getComputedStyle(a);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'}).map(a=>[new URL(a.href).pathname,(a.textContent||'').replace(/\s+/g,' ').trim()])).entries()].map(([href,title])=>({href,title})).slice(0,20)).catch(()=>[])}
+          function routeMatches(c, after){
+            const u=new URL(after);
+            if(c.target){
+              const t=new URL(c.target,base);
+              if(u.pathname.replace(/\/$/,'')!==t.pathname.replace(/\/$/,'')) return `wrong destination: expected ${t.pathname}, got ${u.pathname}`;
+              return null;
+            }
+            const name=c.filterName||'';
+            const value=c.filterValue||'';
+            if(name&&value){
+              const vals=u.searchParams.getAll(name);
+              if(vals.includes(value)) return null;
+              if(name==='filter.p.product_type' && u.searchParams.getAll('sq_type_family').includes(value)) return null;
+              return `missing selected parameter ${name}=${value}`;
+            }
+            return null;
+          }
           await openRoot();
           const groups=await page.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group').evaluateAll(ds=>ds.map((d,gi)=>({
             gi,
             label:(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),
             choices:[...d.querySelectorAll(':scope > .sq-refine-v3-choices input[type="checkbox"]')].map((i,ci)=>({
               ci,
-              label:(i.closest('label')?.textContent||i.parentElement?.textContent||i.dataset.target||i.dataset.filterValue||i.value||`choice-${ci}`).replace(/\s+/g,' ').trim(),
+              label:(i.closest('label')?.querySelector('span')?.textContent||i.closest('label')?.textContent||i.dataset.target||i.dataset.filterValue||i.value||`choice-${ci}`).replace(/\s+/g,' ').trim(),
               kind:i.dataset.kind||'',target:i.dataset.target||'',filterName:i.dataset.filterName||i.dataset.sqPolishParam||i.name||'',filterValue:i.dataset.filterValue||i.dataset.sqPolishValue||i.value||''
             }))
           })));
+          const flat=[];let globalIndex=0;
+          for(const g of groups)for(const c of g.choices)flat.push({...c,group:g.label,groupIndex:g.gi,globalIndex:globalIndex++});
+          const assigned=flat.filter(x=>x.globalIndex%shards===shard);
           console.log('DISCOVERED '+JSON.stringify(groups.map(g=>({group:g.label,choices:g.choices.length,labels:g.choices.map(c=>c.label)}))));
-          const report={root:root(),discoveredAt:new Date().toISOString(),groups,tests:[],badHttp,errors};
-          for(const g of groups){
-            for(const c of g.choices){
-              const t={group:g.label,choice:c.label,groupIndex:g.gi,choiceIndex:c.ci,kind:c.kind,pass:false,beforeUrl:null,afterUrl:null,products:[],reason:null};
-              try{
-                await openRoot();
-                t.beforeUrl=page.url();
-                const group=page.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group').nth(g.gi);
-                if(!await group.count()) throw new Error('group missing after reload');
-                const input=group.locator(':scope > .sq-refine-v3-choices input[type="checkbox"]').nth(c.ci);
-                if(!await input.count()) throw new Error('choice missing after reload');
-                const before=page.url();
-                await input.evaluate(el=>el.click());
-                await page.waitForFunction(u=>location.href!==u,before,{timeout:12000}).catch(()=>{});
-                await page.waitForLoadState('domcontentloaded',{timeout:20000}).catch(()=>{});
-                await page.waitForTimeout(600);
-                t.afterUrl=page.url();
-                t.products=await visibleProducts();
-                if(t.afterUrl===t.beforeUrl) throw new Error('selection did not change URL');
-                if(!t.products.length && !/availability/i.test(g.label)) throw new Error('selection returned no visible products');
-                t.pass=true;
-              }catch(e){t.reason=String(e?.message||e)}
-              report.tests.push(t);
-              console.log(`${t.pass?'PASS':'FAIL'} :: ${g.label} :: ${c.label}${t.reason?' :: '+t.reason:''}`);
-            }
+          console.log(`SHARD ${shard}/${shards} assigned ${assigned.length} of ${flat.length}`);
+          const report={root:root(),discoveredAt:new Date().toISOString(),shard,shards,groups,totalChoices:flat.length,tests:[],badHttp,errors};
+          for(const c of assigned){
+            const t={group:c.group,choice:c.label,groupIndex:c.groupIndex,choiceIndex:c.ci,globalIndex:c.globalIndex,kind:c.kind,target:c.target,filterName:c.filterName,filterValue:c.filterValue,pass:false,beforeUrl:null,afterUrl:null,products:[],reason:null};
+            try{
+              await openRoot();
+              t.beforeUrl=page.url();
+              const group=page.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group').nth(c.groupIndex);
+              if(!await group.count()) throw new Error('group missing after reload');
+              const input=group.locator(':scope > .sq-refine-v3-choices input[type="checkbox"]').nth(c.ci);
+              if(!await input.count()) throw new Error('choice missing after reload');
+              const before=page.url();
+              await input.evaluate(el=>el.click());
+              await page.waitForFunction(u=>location.href!==u,before,{timeout:8000}).catch(()=>{});
+              await page.waitForLoadState('domcontentloaded',{timeout:15000}).catch(()=>{});
+              await page.waitForTimeout(800);
+              t.afterUrl=page.url();
+              if(t.afterUrl===t.beforeUrl) throw new Error('selection did not change URL');
+              const mismatch=routeMatches(c,t.afterUrl); if(mismatch) throw new Error(mismatch);
+              t.products=await visibleProducts();
+              if(!t.products.length) throw new Error('selection returned no visible products');
+              t.pass=true;
+            }catch(e){t.reason=String(e?.message||e)}
+            report.tests.push(t);
+            console.log(`${t.pass?'PASS':'FAIL'} :: #${c.globalIndex} :: ${c.group} :: ${c.label}${t.reason?' :: '+t.reason:''}`);
           }
-          report.summary={groups:groups.length,choices:report.tests.length,passed:report.tests.filter(x=>x.pass).length,failed:report.tests.filter(x=>!x.pass).length,badHttp:[...new Set(badHttp)].length,pageErrors:errors.length};
-          fs.writeFileSync('out/firearm-refine-exhaustive.json',JSON.stringify(report,null,2));
-          await page.goto(root(),{waitUntil:'domcontentloaded'}).catch(()=>{});
-          await page.screenshot({path:'out/firearm-root.png',fullPage:true}).catch(()=>{});
+          report.summary={shard,assigned:assigned.length,groups:groups.length,totalChoices:flat.length,passed:report.tests.filter(x=>x.pass).length,failed:report.tests.filter(x=>!x.pass).length,badHttp:[...new Set(badHttp)].length,pageErrors:errors.length};
+          fs.writeFileSync(`out/firearm-refine-shard-${shard}.json`,JSON.stringify(report,null,2));
           console.log('SUMMARY '+JSON.stringify(report.summary));
           await browser.close();
-          if(report.summary.failed||report.summary.badHttp)process.exitCode=2;
           EOF
           node audit.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: firearm-refine-exhaustive-0911
+          name: firearm-refine-shard-${{ matrix.shard }}
           path: out
+          retention-days: 7
+  aggregate:
+    needs: audit
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: firearm-refine-shard-*
+          path: reports
+          merge-multiple: true
+      - name: Aggregate exhaustive certification
+        run: |
+          node <<'EOF'
+          const fs=require('fs'),path=require('path');
+          const files=fs.readdirSync('reports').filter(f=>f.endsWith('.json')).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+          if(files.length!==12){console.error(`Expected 12 shard reports, found ${files.length}`);process.exit(2)}
+          const reports=files.map(f=>JSON.parse(fs.readFileSync(path.join('reports',f),'utf8')));
+          const tests=reports.flatMap(r=>r.tests);
+          const unique=new Map(tests.map(t=>[t.globalIndex,t]));
+          const totalChoices=Math.max(...reports.map(r=>r.totalChoices||0));
+          const failures=[...unique.values()].filter(t=>!t.pass);
+          const badHttp=[...new Set(reports.flatMap(r=>r.badHttp||[]))];
+          const pageErrors=reports.reduce((n,r)=>n+(r.errors||[]).length,0);
+          const summary={reports:files.length,totalChoices,uniqueTested:unique.size,passed:[...unique.values()].filter(t=>t.pass).length,failed:failures.length,badHttp:badHttp.length,pageErrors};
+          console.log('CERTIFICATION '+JSON.stringify(summary));
+          if(failures.length){for(const f of failures)console.log(`FAILURE :: #${f.globalIndex} :: ${f.group} :: ${f.choice} :: ${f.reason} :: ${f.afterUrl||''}`)}
+          if(unique.size!==totalChoices){console.error(`Coverage gap: tested ${unique.size} of ${totalChoices}`);process.exitCode=2}
+          if(failures.length||badHttp.length)process.exitCode=2;
+          fs.writeFileSync('firearm-refine-certification-summary.json',JSON.stringify({summary,failures,badHttp},null,2));
+          EOF
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: firearm-refine-certification-summary
+          path: firearm-refine-certification-summary.json
           retention-days: 7
