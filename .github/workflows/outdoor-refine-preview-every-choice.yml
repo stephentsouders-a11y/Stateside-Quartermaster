@@ -1,3 +1,4 @@
+# certification-trigger: 2026-09-11
 name: Outdoor Refine preview every-choice Chromium certification
 
 on:
@@ -61,7 +62,6 @@ jobs:
             await page.waitForTimeout(800);
             return {ctx,page};
           }
-          const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};
           try{
             const seed=await open('seed');
             report.initial=await seed.page.evaluate(()=>{const m=document.querySelector('#MainContent'),v=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return {theme:window.Shopify?.theme?.id||null,ready:m?.dataset.sqRefineV3Ready||null,sidebar:[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(v).length,legacyCards:[...m.querySelectorAll('.sq-subcategory-card')].filter(v).length,nativeFilters:[...m.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(v).length,visibleGrids:[...m.querySelectorAll('.product-grid')].filter(g=>v(g)&&g.querySelector('a[href*="/products/"]')).length,stateGuard:/State Guard Uniform Builder|Build Your Uniform|PT Uniform/i.test(m.innerText||'')}});
