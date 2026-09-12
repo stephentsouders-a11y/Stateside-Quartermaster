@@ -1,0 +1,51 @@
+name: Sep12 candidate exhaustive Refine certification
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-candidate-refine-exhaustive.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0,1,2,3]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Audit every Refine checkbox
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright'; import fs from 'fs';
+          const base='https://www.statesideqm.com',theme='158561894555',shard=+process.env.SHARD,shards=4;
+          const all=[
+            ['accessories','/collections/accessories-gifts-collectibles'],['airsoft','/collections/airsoft-milsim'],['apparel','/collections/apparel'],['afg','/collections/armed-forces-gear'],['art','/collections/art'],['armor','/collections/body-armor-ballistic-protection'],['literature','/collections/literature'],['child','/collections/child-safety-shop'],['dive','/collections/dive-scuba'],['firearm','/collections/firearm-accessories'],['medical','/collections/first-aid-medical-ifak'],['flags','/collections/flags-patriotic-decor'],['lighting','/collections/flashlights-lighting'],['footwear','/collections/footwear-gloves-eyewear'],['k9','/collections/k9-dog-gear'],['knives','/collections/knives-axes-cutlery'],['morale','/collections/morale-patches-tactical-id'],['outdoor','/collections/outdoor-preparedness-gear'],['patriotic','/collections/patriotic-american-heritage'],['rescue','/collections/safety-rescue-climbing'],['sta-brite','/collections/sta-brite-insignia'],['tactical','/collections/tactical-gear'],['thin-line','/collections/thin-line'],['uniforms','/collections/uniforms'],['watches','/collections/watches'],['lighters','/collections/zippos-lighters-torches'],['logo','/collections/stateside-quartermaster-logo-merch'],['arng','/collections/army-national-guard-series'],['ang','/collections/air-national-guard-series'],['army','/collections/products-built-for-the-line-u-s-army'],['navy','/collections/products-built-for-the-line-u-s-navy'],['air-force','/collections/products-built-for-the-line-u-s-air-force'],['marines','/collections/products-built-for-the-line-u-s-marine-corps'],['coast-guard','/collections/products-built-for-the-line-u-s-coast-guard'],['space-force','/collections/products-built-for-the-line-u-s-space-force'],['rotc','/collections/rotc-series'],['jrotc','/collections/jrotc-series'],['msa','/collections/military-schools-academies'],['law','/collections/law-enforcement-corrections'],['fire-ems','/collections/firefighting-ems-search-rescue'],['state-ohio','/collections/state-guard-series-ohio'],['state-texas','/collections/state-guard-series-texas'],['state-ca','/collections/state-guard-series-california']
+          ];
+          const routes=all.filter((_,i)=>i%shards===shard),out='out';fs.mkdirSync(`${out}/screens`,{recursive:true});
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));const browser=await chromium.launch({headless:true});const rows=[];
+          function semantic(label,titles){const l=label.toLowerCase(),bad=[];for(const title of titles){const t=title.toLowerCase();const add=w=>bad.push({title,why:w});if(/chest rigs?/.test(l)&&/\bbelt\b|buckle|waist belt|duty belt|web belt/.test(t))add('belt-like product under Chest Rigs');if(/\bbelts?\b/.test(l)&&/chest rig|plate carrier|body armor|helmet/.test(t))add('carrier/armor product under Belts');if(/helmets?/.test(l)&&/\bboot|glove|belt|shirt|pants?|trouser|backpack|chest rig/.test(t))add('non-helmet product');if(/flashlight|lighting/.test(l)&&/shirt|pants?|trouser|boot|belt|patch|insignia|book/.test(t))add('non-lighting product');if(/first aid|medical|ifak/.test(l)&&/shirt|pants?|trouser|boot|belt buckle|book|flag/.test(t))add('obvious non-medical product');if(/footwear|boots?/.test(l)&&/shirt|pants?|trouser|belt|patch|insignia|chest rig|plate carrier/.test(t))add('non-footwear product');if(/gloves?/.test(l)&&/shirt|pants?|trouser|boot|belt|patch|insignia|chest rig/.test(t))add('non-glove product');if(/eyewear|goggles|glasses/.test(l)&&/shirt|pants?|trouser|boot|belt|patch|insignia|chest rig/.test(t))add('non-eyewear product');if(/knives|knife|axes|multi-tools?/.test(l)&&/shirt|pants?|trouser|boot|belt|patch|insignia|chest rig|plate carrier/.test(t))add('obvious non-tool product')}return bad.slice(0,30)}
+          const sel='.sq-global-refine-sidebar input[type=checkbox],.sq-refine-taxonomy input[type=checkbox],.sq-refine-v3-sidebar input[type=checkbox]';
+          for(const [slug,path] of routes){const ctx=await browser.newContext({viewport:{width:1440,height:1000}});const page=await ctx.newPage();page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(60000);const rec={slug,path,status:null,controls:[],pageErrors:[],challenge:false};page.on('pageerror',e=>rec.pageErrors.push(e.message));try{const u=new URL(path,base);u.searchParams.set('preview_theme_id',theme);let r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});rec.status=r?.status()??null;await sleep(1200);rec.challenge=await page.evaluate(()=>/verify you are human|just a moment|connection needs to be verified/i.test((document.title||'')+' '+(document.body?.innerText||''))).catch(()=>false);if(rec.status===200&&!rec.challenge){await page.waitForFunction(s=>document.querySelector(s),sel,{timeout:12000}).catch(()=>{});let count=await page.locator(sel).count();for(let i=0;i<count;i++){let input=page.locator(sel).nth(i);if(!await input.isVisible().catch(()=>false))continue;const meta=await input.evaluate(el=>{const row=el.closest('label,a,.sq-global-refine-sidebar__choice,li,.sq-refine-v3-option,.sq-refine-taxonomy__choice')||el.parentElement;return{label:el.getAttribute('aria-label')||el.value||(row?.innerText||'').replace(/\s+/g,' ').trim(),value:el.value||'',rowText:(row?.innerText||'').replace(/\s+/g,' ').trim()}});const c={...meta,checked:false,textBlocked:null,settled:false,products:0,semantic:[],error:null};try{const before=page.url();await input.scrollIntoViewIfNeeded();await input.click({timeout:8000});c.checked=await input.isChecked().catch(()=>false);let stable=0,last='';for(let t=0;t<14;t++){await sleep(250);const state=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),txt=(m?.innerText||'').replace(/\s+/g,' ');const loading=/loading items|checking items|counting items|building the customer-facing product tree|organizing .* products/i.test(txt);const ps=[...m.querySelectorAll('a[href*="/products/"]')].filter(a=>{const r=a.getBoundingClientRect(),s=getComputedStyle(a);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'}).slice(0,100).map(a=>(a.closest('.product-card,.product-grid__item,.sq-custom-color-product,.sqsg-product,.sq-type-family-product,[class*=product]')?.innerText||a.innerText||'').replace(/\s+/g,' ').trim().split('\n')[0]).filter(Boolean);return{loading,key:location.href+'|'+ps.slice(0,8).join('|'),titles:[...new Set(ps)]}});if(!state.loading&&state.key===last)stable++;else stable=0;last=state.key;if(!state.loading&&stable>=1){c.settled=true;c.products=state.titles.length;c.semantic=semantic(c.label||c.rowText,state.titles);break}}const checkedNow=await page.locator(sel+':checked').count().catch(()=>0);if(c.checked&&checkedNow===0)c.error='selection did not persist';if(c.checked){const active=page.locator(sel+':checked').first();await active.click({timeout:8000}).catch(()=>{});await sleep(300)}
+                  // Verify label/text is inert when a non-input row target exists.
+                  await page.goto(before,{waitUntil:'domcontentloaded'}).catch(()=>{});await sleep(700);await page.waitForFunction(s=>document.querySelector(s),sel,{timeout:6000}).catch(()=>{});count=await page.locator(sel).count();input=page.locator(sel).nth(Math.min(i,Math.max(0,count-1)));if(await input.count()){const row=input.locator('xpath=ancestor-or-self::*[self::label or self::a or contains(@class,"choice") or self::li][1]');if(await row.count()){const textTarget=row.locator('span,small,strong').filter({visible:true}).first();if(await textTarget.count()){const url0=page.url(),ch0=await input.isChecked().catch(()=>false);await textTarget.click({timeout:3000,force:true}).catch(()=>{});await sleep(250);const ch1=await input.isChecked().catch(()=>false);c.textBlocked=(ch0===ch1&&page.url()===url0)}}}
+                }catch(e){c.error=String(e).split('\n')[0]}rec.controls.push(c);}
+              await page.screenshot({path:`${out}/screens/${slug}.png`,fullPage:false}).catch(()=>{})}}
+            catch(e){rec.fatal=String(e).split('\n')[0]}rec.failedControls=rec.controls.filter(c=>c.error||!c.checked||!c.settled||c.semantic.length||c.textBlocked===false).length;rec.fail=(rec.status!==200&&!rec.challenge)||rec.pageErrors.some(x=>/syntaxerror|unexpected token/i.test(x))||rec.failedControls>0;rows.push(rec);fs.writeFileSync(`${out}/results-${shard}.json`,JSON.stringify(rows,null,2));await ctx.close();await sleep(1800)}await browser.close();const summary={shard,routes:rows.length,controls:rows.reduce((n,r)=>n+r.controls.length,0),failedRoutes:rows.filter(r=>r.fail).length,failedControls:rows.reduce((n,r)=>n+r.failedControls,0),semanticCandidates:rows.reduce((n,r)=>n+r.controls.reduce((m,c)=>m+c.semantic.length,0),0),challenges:rows.filter(r=>r.challenge).length};fs.writeFileSync(`${out}/summary-${shard}.json`,JSON.stringify(summary,null,2));console.log(JSON.stringify(summary,null,2));if(summary.failedRoutes)process.exitCode=2;
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep12-refine-${{ matrix.shard }}
+          path: out
+          retention-days: 7
