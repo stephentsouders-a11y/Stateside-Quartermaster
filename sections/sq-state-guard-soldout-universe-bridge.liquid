@@ -1,0 +1,31 @@
+{% if request.page_type == 'collection' %}
+{% assign sq_sg_universe = false %}
+{% if collection.handle contains 'state-guard-series-' or collection.handle == 'new-jersey-state-guard-naval-militia' %}{% assign sq_sg_universe = true %}{% endif %}
+{% if sq_sg_universe %}
+<script data-sq-state-guard-soldout-universe-bridge>
+(function(){
+  if(window.__sqStateGuardSoldoutUniverseBridge)return;window.__sqStateGuardSoldoutUniverseBridge=true;
+  var originalFetch=window.fetch.bind(window),handle={{ collection.handle | json }};
+  var target='/collections/'+encodeURIComponent(handle)+'/products.json';
+  window.fetch=async function(input,init){
+    var response=await originalFetch(input,init),u;
+    try{u=new URL(typeof input==='string'?input:(input&&input.url)||'',location.origin)}catch(_){return response}
+    if(u.origin!==location.origin||u.pathname!==target||!response.ok)return response;
+    try{
+      var data=await response.clone().json();
+      if(!data||!Array.isArray(data.products))return response;
+      data.products.forEach(function(p){
+        if(!p||!Array.isArray(p.variants)||!p.variants.length)return;
+        var any=p.variants.some(function(v){return v&&v.available===true});
+        if(!any){p.__sqSoldOutPreserved=true;p.variants.forEach(function(v){if(v)v.available=true})}
+      });
+      var headers=new Headers(response.headers);headers.set('content-type','application/json; charset=utf-8');
+      return new Response(JSON.stringify(data),{status:response.status,statusText:response.statusText,headers:headers});
+    }catch(_){return response}
+  };
+  document.documentElement.dataset.sqStateGuardSoldoutUniverse='preserved';
+})();
+</script>
+{% endif %}
+{% endif %}
+{% schema %}{"name":"SG sold-out universe","settings":[],"presets":[{"name":"SG sold-out universe"}]}{% endschema %}
