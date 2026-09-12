@@ -2,182 +2,14 @@
   "status": "FAIL",
   "theme": "158561894555",
   "publication": "UNPUBLISHED",
-  "sourceCommit": "3be3e42236ac3c6c4e026142368aaef645600087",
-  "started": "2026-09-12T02:41:48.925Z",
+  "sourceCommit": "5aeec7e313f8a4770b74fa3fddad3181e8f1f9d1",
+  "started": "2026-09-12T03:03:16.552Z",
   "checks": [
     "Desktop exact heading, 10 canonical tag-backed options, one sidebar, unique baseline grid"
   ],
   "pageErrors": [],
-  "tests": [
-    {
-      "label": "Gray",
-      "tag": "SQ Color/Pattern: Gray",
-      "url": "https://www.statesideqm.com/collections/morale-patches-tactical-id/sq-color-pattern-gray",
-      "visibleCount": 12,
-      "samples": [
-        {
-          "handle": "join-or-die-tactical-morale-patch",
-          "colorTags": [
-            "SQ Color/Pattern: Gray",
-            "SQ Color/Pattern: White"
-          ]
-        },
-        {
-          "handle": "christian-flag-patch",
-          "colorTags": [
-            "SQ Color/Pattern: Brown / Tan",
-            "SQ Color/Pattern: Camouflage",
-            "SQ Color/Pattern: Gray",
-            "SQ Color/Pattern: Green",
-            "SQ Color/Pattern: Red",
-            "SQ Color/Pattern: White"
-          ]
-        },
-        {
-          "handle": "de-oppresso-liber-special-forces-vinyl-decal-green-beret-military-window-sticker-made-in-usa",
-          "colorTags": [
-            "SQ Color/Pattern: Black",
-            "SQ Color/Pattern: Blue",
-            "SQ Color/Pattern: Brown / Tan",
-            "SQ Color/Pattern: Gray",
-            "SQ Color/Pattern: Green",
-            "SQ Color/Pattern: Orange",
-            "SQ Color/Pattern: Pink",
-            "SQ Color/Pattern: Purple",
-            "SQ Color/Pattern: Red",
-            "SQ Color/Pattern: White",
-            "SQ Color/Pattern: Yellow / Gold"
-          ]
-        },
-        {
-          "handle": "infantry-crossed-rifles-vinyl-decal-military-vehicle-window-sticker-made-in-usa",
-          "colorTags": [
-            "SQ Color/Pattern: Black",
-            "SQ Color/Pattern: Blue",
-            "SQ Color/Pattern: Brown / Tan",
-            "SQ Color/Pattern: Gray",
-            "SQ Color/Pattern: Green",
-            "SQ Color/Pattern: Orange",
-            "SQ Color/Pattern: Pink",
-            "SQ Color/Pattern: Purple",
-            "SQ Color/Pattern: Red",
-            "SQ Color/Pattern: White",
-            "SQ Color/Pattern: Yellow / Gold"
-          ]
-        },
-        {
-          "handle": "infidel-arabic-script-vinyl-decal-military-vehicle-window-sticker-made-in-usa",
-          "colorTags": [
-            "SQ Color/Pattern: Black",
-            "SQ Color/Pattern: Blue",
-            "SQ Color/Pattern: Brown / Tan",
-            "SQ Color/Pattern: Gray",
-            "SQ Color/Pattern: Green",
-            "SQ Color/Pattern: Orange",
-            "SQ Color/Pattern: Pink",
-            "SQ Color/Pattern: Purple",
-            "SQ Color/Pattern: Red",
-            "SQ Color/Pattern: White",
-            "SQ Color/Pattern: Yellow / Gold"
-          ]
-        },
-        {
-          "handle": "mini-freedom-dog-crossbones-logo-woven-morale-patch",
-          "colorTags": [
-            "SQ Color/Pattern: Black",
-            "SQ Color/Pattern: Blue",
-            "SQ Color/Pattern: Brown / Tan",
-            "SQ Color/Pattern: Gray",
-            "SQ Color/Pattern: Green",
-            "SQ Color/Pattern: Pink",
-            "SQ Color/Pattern: Red",
-            "SQ Color/Pattern: White"
-          ]
-        },
-        {
-          "handle": "navy-seal-trident-vinyl-decal-naval-special-warfare-vehicle-window-sticker-made-in-usa",
-          "colorTags": [
-            "SQ Color/Pattern: Black",
-            "SQ Color/Pattern: Blue",
-            "SQ Color/Pattern: Brown / Tan",
-            "SQ Color/Pattern: Gray",
-            "SQ Color/Pattern: Green",
-            "SQ Color/Pattern: Orange",
-            "SQ Color/Pattern: Pink",
-            "SQ Color/Pattern: Purple",
-            "SQ Color/Pattern: Red",
-            "SQ Color/Pattern: White",
-            "SQ Color/Pattern: Yellow / Gold"
-          ]
-        },
-        {
-          "handle": "off-the-grid-solid-logo-decal-7-colors",
-          "colorTags": [
-            "SQ Color/Pattern: Black",
-            "SQ Color/Pattern: Blue",
-            "SQ Color/Pattern: Brown / Tan",
-            "SQ Color/Pattern: Gray",
-            "SQ Color/Pattern: Orange",
-            "SQ Color/Pattern: Other Color / Pattern",
-            "SQ Color/Pattern: Pink",
-            "SQ Color/Pattern: Red",
-            "SQ Color/Pattern: White",
-            "SQ Color/Pattern: Yellow / Gold"
-          ]
-        },
-        {
-          "handle": "ops-core-fast-xr-helmet-stops-ak-47-rounds-at-1-72-lbs",
-          "colorTags": [
-            "SQ Color/Pattern: Black",
-            "SQ Color/Pattern: Brown / Tan",
-            "SQ Color/Pattern: Camouflage",
-            "SQ Color/Pattern: Gray",
-            "SQ Color/Pattern: Green"
-          ]
-        },
-        {
-          "handle": "tactical-usa-flag-patch-with-detachable-backing",
-          "colorTags": [
-            "SQ Color/Pattern: Black",
-            "SQ Color/Pattern: Blue",
-            "SQ Color/Pattern: Gray",
-            "SQ Color/Pattern: Green",
-            "SQ Color/Pattern: Orange",
-            "SQ Color/Pattern: Other Color / Pattern",
-            "SQ Color/Pattern: Red",
-            "SQ Color/Pattern: White",
-            "SQ Color/Pattern: Yellow / Gold"
-          ]
-        },
-        {
-          "handle": "u-s-army-combat-engineer-veteran-vinyl-decal-military-vehicle-window-sticker-made-in-usa",
-          "colorTags": [
-            "SQ Color/Pattern: Black",
-            "SQ Color/Pattern: Blue",
-            "SQ Color/Pattern: Brown / Tan",
-            "SQ Color/Pattern: Gray",
-            "SQ Color/Pattern: Green",
-            "SQ Color/Pattern: Orange",
-            "SQ Color/Pattern: Pink",
-            "SQ Color/Pattern: Purple",
-            "SQ Color/Pattern: Red",
-            "SQ Color/Pattern: White",
-            "SQ Color/Pattern: Yellow / Gold"
-          ]
-        },
-        {
-          "handle": "us-flag-patches",
-          "colorTags": [
-            "SQ Color/Pattern: Black",
-            "SQ Color/Pattern: Blue",
-            "SQ Color/Pattern: Brown / Tan",
-            "SQ Color/Pattern: Gray",
-            "SQ Color/Pattern: Other Color / Pattern"
-          ]
-        }
-      ]
-    }
-  ],
+  "tests": [],
+  "rateLimitRetries": 0,
   "browserVersion": "140.0.7339.16",
   "groups": [
     "Shop by Category",
@@ -240,7 +72,7 @@
     }
   ],
   "baselineVisibleCount": 50,
-  "failure": "AssertionError [ERR_ASSERTION]: Page response 429\n    at go (file:///tmp/morale-verify/test.mjs:30:92)\n    at async file:///tmp/morale-verify/test.mjs:48:48",
-  "failureUrl": "https://www.statesideqm.com/collections/morale-patches-tactical-id?preview_theme_id=158561894555&__cf_chl_rt_tk=1gdMV1Pb.GCCBsW97tN2SkKfI_VjMvdeAn6mYQQemLo-1789180962-1.0.1.1-DYui1zR5uVoSEUCN1Hq8yGxOpn54tabhkCAkTVJ6HSo",
-  "finished": "2026-09-12T02:42:43.167Z"
+  "failure": "locator.setChecked: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator('.sq-refine-v3-sidebar > details').filter({ has: locator(':scope > summary').filter({ hasText: /^Shop by Color \\/ Pattern$/ }) }).locator('input[data-sq-morale-color-tag=\"SQ Color/Pattern: Gray\"]')\n    - locator resolved to <input type=\"checkbox\" name=\"filter.p.tag\" value=\"SQ Color/Pattern: Gray\" data-sq-morale-color-tag=\"SQ Color/Pattern: Gray\" data-sq-color-pattern-tag=\"SQ Color/Pattern: Gray\" data-sq-morale-color-handle=\"sq-color-pattern-gray\" data-sq-color-pattern-handle=\"sq-color-pattern-gray\"/>\n  - attempting click action\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - performing click action\n    - click action done\n    - waiting for scheduled navigations to finish\n    - navigations have finished\n    - waiting for\" https://www.statesideqm.com/collections/morale-patches-tactical-id?filter.p.tag=SQ+Color%2FPattern%3A+Gray\" navigation to finish...\n    - navigated to \"https://www.statesideqm.com/collections/morale-patches-tactical-id?filter.p.tag=SQ+Color%2FPattern%3A+Gray\"\n\n    at select (/tmp/morale-verify/test.mjs:63:24)\n    at async file:///tmp/morale-verify/test.mjs:87:64",
+  "failureUrl": "https://www.statesideqm.com/collections/morale-patches-tactical-id?filter.p.tag=SQ+Color%2FPattern%3A+Gray",
+  "finished": "2026-09-12T03:04:20.427Z"
 }
