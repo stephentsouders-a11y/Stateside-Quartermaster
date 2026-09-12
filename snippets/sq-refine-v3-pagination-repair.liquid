@@ -1,7 +1,7 @@
 {% doc %}
 Sitewide authoritative pagination repair for Refine V3 collection pages.
 Design Concept One: every logical page number is rendered with persistent previous/next arrows.
-Products-per-page state (50/100/250), filters, sort order, preview theme, and sq_root context
+Products-per-page state (50/100/250), non-availability filters, sort order, preview theme, and sq_root context
 remain linked in every logical page URL. State Guard Series stays on standard pagination.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
@@ -17,7 +17,7 @@ remain linked in every logical page URL. State Guard Series stays on standard pa
 #MainContent .sq-refine-v3-page-btn--disabled{opacity:.34!important;cursor:not-allowed!important;pointer-events:none!important}
 @media(max-width:749px){#MainContent .sq-refine-v3-pager{gap:7px!important;padding-inline:2px!important}#MainContent .sq-refine-v3-page-rail{flex:1 1 auto!important;justify-content:flex-start!important;flex-wrap:nowrap!important;overflow-x:auto!important;overscroll-behavior-inline:contain!important;scrollbar-width:thin!important;max-width:none!important;padding:3px 1px 6px!important}#MainContent .sq-refine-v3-page-btn{width:42px!important;min-width:42px!important;height:42px!important;min-height:42px!important}#MainContent .sq-refine-v3-page-btn--arrow{flex-basis:42px!important}}
 </style>
-<script data-sq-refine-v3-pagination-repair data-revision="concept-one-all-pages-ppp-linked-20260912-v1">
+<script data-sq-refine-v3-pagination-repair data-revision="concept-one-all-pages-ppp-linked-no-availability-20260912-v2">
 (function(){
 if(window.__sqRefineV3PaginationRepair)return;window.__sqRefineV3PaginationRepair=true;
 var ROOTS=new Set(['accessories-gifts-collectibles','airsoft-milsim','apparel','armed-forces-gear','art','body-armor-ballistic-protection','literature','child-safety-shop','dive-scuba','firearm-accessories','first-aid-medical-ifak','flags-patriotic-decor','flashlights-lighting','footwear-gloves-eyewear','k9-dog-gear','knives-axes-cutlery','morale-patches-tactical-id','outdoor-preparedness-gear','patriotic-american-heritage','safety-rescue-climbing','sta-brite-insignia','tactical-gear','thin-line','uniforms','watches','zippos-lighters-torches','stateside-quartermaster-logo-merch','army-national-guard-series','air-national-guard-series','products-built-for-the-line-u-s-army','products-built-for-the-line-u-s-navy','products-built-for-the-line-u-s-air-force','products-built-for-the-line-u-s-marine-corps','products-built-for-the-line-u-s-coast-guard','products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series','military-schools-academies','law-enforcement-corrections','firefighting-ems-search-rescue']);
@@ -27,8 +27,8 @@ function wait(ms){return new Promise(function(resolve){setTimeout(resolve,ms)})}
 function perPage(){var n=parseInt(new URLSearchParams(location.search).get('sq_per_page')||'50',10);return[50,100,250].indexOf(n)>-1?n:50}
 function currentView(){return Math.max(1,parseInt(new URLSearchParams(location.search).get('sq_view_page')||'1',10)||1)}
 function sourcePath(){return currentHandle==='air-national-guard-series'?'/collections/products-built-for-the-line-u-s-air-force':location.pathname}
-function alternateUrl(page){var now=new URLSearchParams(location.search),u=new URL(sourcePath(),location.origin);now.forEach(function(v,k){if(k.indexOf('filter.')===0||k==='sort_by'||k==='preview_theme_id')u.searchParams.append(k,v)});u.searchParams.set('view','sq-refine-v3-products');u.searchParams.set('page',String(page));return u.pathname+'?'+u.searchParams.toString()}
-function logicalUrl(page){var u=new URL(location.href);u.searchParams.delete('page');u.searchParams.delete('view');u.searchParams.set('sq_per_page',String(perPage()));u.searchParams.set('sq_view_page',String(page));return u.pathname+'?'+u.searchParams.toString()}
+function alternateUrl(page){var now=new URLSearchParams(location.search),u=new URL(sourcePath(),location.origin);now.forEach(function(v,k){if((k.indexOf('filter.')===0&&k!=='filter.v.availability')||k==='sort_by'||k==='preview_theme_id')u.searchParams.append(k,v)});u.searchParams.delete('filter.v.availability');u.searchParams.set('view','sq-refine-v3-products');u.searchParams.set('page',String(page));return u.pathname+'?'+u.searchParams.toString()}
+function logicalUrl(page){var u=new URL(location.href);u.searchParams.delete('page');u.searchParams.delete('view');u.searchParams.delete('filter.v.availability');u.searchParams.set('sq_per_page',String(perPage()));u.searchParams.set('sq_view_page',String(page));return u.pathname+'?'+u.searchParams.toString()}
 function sentinelNativePage(view,size){return Math.floor((view*size)/50)+1}
 function productLinks(doc){var grid=doc.querySelector('.product-grid');if(!grid)return[];return Array.from(new Set(Array.from(grid.querySelectorAll('a[href*="/products/"]')).map(function(a){return a.getAttribute('href')||a.href}).filter(Boolean)))}
 function nativeTotalPages(doc){var grid=doc.querySelector('.product-grid'),n=parseInt(grid&&grid.getAttribute('data-last-page')||'',10);if(n>0)return n;var max=1;Array.from(doc.querySelectorAll('.pagination a[href*="page="],pagination-component a[href*="page="]')).forEach(function(a){try{var p=parseInt(new URL(a.href,location.origin).searchParams.get('page')||'0',10);if(p>max)max=p}catch(_){}});return max}
