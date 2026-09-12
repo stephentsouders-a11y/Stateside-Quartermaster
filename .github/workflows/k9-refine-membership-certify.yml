@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   chromium:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +20,7 @@ jobs:
         run: |
           npm init -y >/dev/null
           npm install playwright@1.55.0 agent-browser @shopify/liquid-html-parser >/dev/null
-          npx playwright install chromium >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
           npx agent-browser install >/dev/null
       - name: Validate K9 Liquid and JavaScript
         run: |
@@ -58,10 +58,10 @@ jobs:
           await discovery.close();
           const normal=choices.filter(c=>!c.color),colors=choices.filter(c=>c.color);
           let cursor=0;
-          async function worker(id){const page=await browser.newPage({viewport:{width:1440,height:1100}});wire(page);while(true){const pos=cursor++;if(pos>=normal.length)break;const c=normal[pos];let rec={...c,pass:false};try{await load(page);const row=await locateRow(page,c);await row.evaluate(el=>{const d=el.closest('details');if(d)d.open=true});await row.scrollIntoViewIfNeeded();const input=row.locator('input[type="checkbox"]');const before=page.url();
+          async function worker(id){const page=await browser.newPage({viewport:{width:1440,height:1100}});wire(page);while(true){const pos=cursor++;if(pos>=normal.length)break;const c=normal[pos];let rec={...c,pass:false};try{await load(page);const row=await locateRow(page,c);await row.evaluate(el=>{const d=el.closest('details');if(d)d.open=true});await row.scrollIntoViewIfNeeded();const before=page.url();
               const expected=c.target?new URL(c.target,'https://www.statesideqm.com'):null;
               const nav=c.target||c.param?page.waitForURL(u=>{if(c.target)return u.pathname===expected.pathname;if(c.param)return u.searchParams.getAll(c.param).includes(c.value);return false},{timeout:15000}).catch(()=>null):Promise.resolve();
-              await row.click({position:{x:Math.min(70,Math.max(25,await row.evaluate(el=>el.getBoundingClientRect().width/2))),y:18}});await nav;
+              await row.click();await nav;
               const after=page.url();if(c.target)assert.equal(new URL(after).pathname,expected.pathname,'structural control navigated to wrong collection');else if(c.param)assert.ok(new URL(after).searchParams.getAll(c.param).includes(c.value),`missing ${c.param}=${c.value} after visible-row click`);else assert.notEqual(after,before,'control produced no observable URL change');
               const count=await assertClean(page,c.group+' > '+c.label);rec={...rec,pass:true,url:after,visibleProducts:count};console.log('PASS',id,c.group,'>',c.label);
             }catch(e){rec.error=e.message;console.error('FAIL',id,c.group,'>',c.label,e.message)}report.choices.push(rec)}await page.close()}
