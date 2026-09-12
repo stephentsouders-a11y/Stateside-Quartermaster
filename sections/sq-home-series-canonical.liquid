@@ -13,13 +13,15 @@
 /collections/rotc-series|ROTC|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-circle-rotc-rebuilt-transparent-2026-09-09.png?v=1788984205|#032666|Leadership, training, apparel and equipment for ROTC.||
 /collections/jrotc-series|JROTC|Series|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-circle-jrotc-rebuilt-transparent-2026-09-09.png?v=1788984213|#9c0007|Leadership, training, apparel and equipment for JROTC.||
 /collections/military-schools-academies|Military Schools|& Academies|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/sq-circle-military-schools.png?v=1787804129|#171717|Products for military schools and service academies.||
+/collections/law-enforcement-corrections|Law Enforcement|& Corrections|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/law-enforcement-corrections-seal-button-matched.png?v=1788962282|#071f3d|Law enforcement and corrections apparel, insignia and field essentials.||
+/collections/firefighting-ems-search-rescue|Firefighting, EMS|& Search & Rescue|https://cdn.shopify.com/s/files/1/0774/4602/1275/files/firefighting-ems-search-rescue-seal-button-matched.png?v=1788962313|#8b0015|Firefighting, EMS and search & rescue products and emergency-response gear.||
 {% endcapture %}
 {% assign rows = data | strip | split: '||' %}
 <section class="sqhc sqhc-series" data-sq-line-series-root>
   <div class="sqhc-shell">
     <p class="sqhc-k">Built for Service</p>
     <h2 class="sqhc-h">Products Built for the Line</h2>
-    <p class="sqhc-sub">Shop service, Guard, cadet and academy product lines.</p>
+    <p class="sqhc-sub">Shop service, Guard, cadet, academy and public-safety product lines.</p>
     <div class="sqhc-series-grid">
       {% for row in rows %}
         {% assign r = row | strip %}
@@ -45,15 +47,15 @@
 </section>
 <style data-sq-home-series-live-look>
 [data-sq-line-series-root] .sqhc-series-card{position:relative!important;overflow:hidden!important;grid-template-rows:138px 48px 1px 64px 28px!important}
-/* Match every first-row visible circle diameter to the Air National Guard reference. */
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="stateside-quartermaster-logo-merch"] .sqhc-series-logo img{transform:scale(1.3673)!important;transform-origin:center center!important;clip-path:none!important}
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="army-national-guard-series"] .sqhc-series-logo img{transform:scale(1.4255)!important;transform-origin:center center!important;clip-path:none!important}
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="state-guard-series"] .sqhc-series-logo img{transform:scale(1.0388)!important;transform-origin:center center!important}
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="products-built-for-the-line-u-s-army"] .sqhc-series-logo img{transform:scale(.971)!important;transform-origin:center center!important}
-/* Rebuilt ROTC/JROTC seals: match the visible diameter of the neighboring homepage seals. */
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="rotc-series"] .sqhc-series-logo img,
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="jrotc-series"] .sqhc-series-logo img{transform:scale(1)!important;transform-origin:center center!important}
 [data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="military-schools-academies"] .sqhc-series-logo img{transform:scale(1.078)!important;transform-origin:center center!important}
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="law-enforcement-corrections"] .sqhc-series-logo img{transform:scale(1.302)!important;transform-origin:center center!important}
+[data-sq-line-series-root] .sqhc-series-card[data-sq-series-handle="firefighting-ems-search-rescue"] .sqhc-series-logo img{transform:scale(1.353)!important;transform-origin:center center!important}
 [data-sq-line-series-root] .sqhc-series-desc{overflow:hidden!important;min-height:0!important}
 [data-sq-line-series-root] .sqhc-series-count{display:flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;min-height:0!important;height:100%!important;margin:0!important;padding:0!important;transform:none!important;color:#d5ab4b!important;font-size:12px!important;font-weight:800!important;letter-spacing:.02em!important;line-height:1!important;text-align:center!important;white-space:nowrap!important;overflow:hidden!important}
 [data-sq-line-series-root] .sqhc-series-count::before,
