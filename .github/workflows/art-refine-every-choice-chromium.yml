@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/scripts/art-refine-every-choice-cert.mjs'
       - '.github/workflows/art-refine-every-choice-chromium.yml'
+      - 'snippets/sq-art-refine-integrity.liquid'
+      - 'layout/theme.liquid'
   workflow_dispatch:
 jobs:
   certify:
@@ -24,3 +26,4 @@ jobs:
           name: art-refine-every-choice
           path: cert-art-every-choice/
           retention-days: 7
+# rerun after Art integrity repair 2026-09-11
