@@ -1,0 +1,30 @@
+name: Storefront collection 500 surface diagnostic
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-500-surface-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Probe HTML and collection product endpoints
+        run: |
+          cat > diag.mjs <<'EOF'
+          import fs from 'fs';
+          const BASE='https://www.statesideqm.com';
+          const hs=['literature-u-s-conflicts-world-war-ii','notebooks-books-manuals','army','literature-legacy-contaminated','pew-pews','shield-republic-apparel'];
+          const out=[]; const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          for(const h of hs){const rec={handle:h,probes:[]};for(const suffix of ['', '?filter.v.availability=1', '/products.json?limit=1', '.json']){const url=BASE+'/collections/'+h+suffix;const t=Date.now();try{const r=await fetch(url,{redirect:'manual',headers:{'User-Agent':'Mozilla/5.0 acceptance-audit'}});const body=await r.text();rec.probes.push({suffix,status:r.status,ms:Date.now()-t,location:r.headers.get('location'),contentType:r.headers.get('content-type'),len:body.length,head:body.slice(0,260)})}catch(e){rec.probes.push({suffix,error:String(e),ms:Date.now()-t})}await sleep(2500)}out.push(rec)}fs.mkdirSync('out',{recursive:true});fs.writeFileSync('out/probes.json',JSON.stringify(out,null,2));console.log(JSON.stringify(out,null,2));
+          EOF
+          node diag.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: collection-500-probes
+          path: out
+          retention-days: 7
