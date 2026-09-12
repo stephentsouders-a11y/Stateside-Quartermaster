@@ -39,6 +39,7 @@ Legacy forced in-stock-only navigation intentionally disabled. Collection pages 
 including sold-out products, unless the customer explicitly selects Shopify's Availability filter.
 {%- endcomment -%}
 {% render 'sq-availability-link-scrubber' %}
+{% render 'sq-state-guard-special-refine-owner' %}
 <script src="{{ 'vac-stock-priority.js' | asset_url }}" defer></script>
 
 {% schema %}
