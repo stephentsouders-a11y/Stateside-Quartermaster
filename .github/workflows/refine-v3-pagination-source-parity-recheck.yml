@@ -1,0 +1,129 @@
+name: Refine V3 Pagination Source Parity Recheck
+on:
+  push:
+    paths:
+      - '.github/workflows/refine-v3-pagination-source-parity-recheck.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        handle:
+          - art
+          - flashlights-lighting
+          - sta-brite-insignia
+          - air-national-guard-series
+          - jrotc-series
+          - apparel
+          - first-aid-medical-ifak
+          - patriotic-american-heritage
+          - products-built-for-the-line-u-s-space-force
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Corrected Chromium source/customer parity proof
+        env:
+          HANDLE: ${{ matrix.handle }}
+        run: |
+          cat > recheck.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const handle=process.env.HANDLE;
+          const theme='158561894555';
+          const base='https://www.statesideqm.com/collections/';
+          const sizes=[50,100,250];
+          const sourceHandle=handle==='air-national-guard-series'?'products-built-for-the-line-u-s-air-force':handle;
+          const out='out';fs.mkdirSync(out,{recursive:true});
+          const report={handle,sourceHandle,source:[],cases:[],failures:[],infra:[]};
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const norm=x=>{try{return new URL(x,'https://www.statesideqm.com').pathname.replace(/\/$/,'')}catch{return x}};
+          async function go(page,url,label){
+            let last='';
+            for(let a=1;a<=8;a++){
+              try{
+                const r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
+                const s=r?.status()||0;
+                if(r?.ok()){await sleep(400);return r;}
+                last=`HTTP ${s}`;
+                if(s===429||s>=500){await sleep(Math.min(20000,1200*Math.pow(2,a-1)));continue;}
+                throw new Error(last);
+              }catch(e){last=String(e);if(a<8){await sleep(Math.min(20000,1200*Math.pow(2,a-1)));continue;}}
+            }
+            throw new Error(`${label}: ${last}`);
+          }
+          async function cardPaths(page,selector){
+            return await page.$$eval(selector,els=>[...new Set(els.map(el=>{
+              const h=(el.getAttribute('data-product-handle')||'').trim();
+              if(h)return `/products/${encodeURIComponent(h)}`;
+              const a=el.querySelector('a[href*="/products/"]');
+              return a?.href||'';
+            }).filter(Boolean))]);
+          }
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1000}});
+          const src=await context.newPage();
+          const expected=new Set();
+          let sourceComplete=false;
+          try{
+            for(let p=1;p<=150;p++){
+              const u=new URL(`${base}${sourceHandle}`);u.searchParams.set('preview_theme_id',theme);u.searchParams.set('view','sq-refine-v3-products');u.searchParams.set('page',String(p));
+              await go(src,u.toString(),`source page ${p}`);
+              const cards=await cardPaths(src,'.product-grid > .product-grid__item');
+              report.source.push({page:p,count:cards.length});
+              cards.map(norm).forEach(x=>expected.add(x));
+              if(cards.length===0||cards.length<50){sourceComplete=true;break;}
+              await sleep(900);
+            }
+          }catch(e){report.infra.push(String(e));}
+          await src.close();
+          if(!sourceComplete||expected.size===0)report.infra.push(`source enumeration incomplete; unique=${expected.size}`);
+          for(const size of sizes){
+            if(report.infra.length)break;
+            const page=await context.newPage();const seen=new Set();let view=1,finished=false;
+            try{
+              while(view<=150){
+                const u=new URL(`${base}${handle}`);u.searchParams.set('preview_theme_id',theme);u.searchParams.set('sq_per_page',String(size));u.searchParams.set('sq_view_page',String(view));
+                await go(page,u.toString(),`customer ${size} page ${view}`);
+                await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',{timeout:45000});
+                await page.waitForTimeout(700);
+                const products=(await cardPaths(page,'#MainContent .sq-refine-v3-results .product-grid > .product-grid__item')).map(norm);
+                if(!products.length){report.failures.push(`${size}/page ${view}: zero products`);break;}
+                const dup=products.filter(x=>seen.has(x));if(dup.length)report.failures.push(`${size}/page ${view}: ${dup.length} repeated product(s)`);
+                products.forEach(x=>seen.add(x));
+                const state=await page.evaluate(()=>{const p=document.querySelector('#MainContent .sq-refine-v3-pager');const links=p?[...p.querySelectorAll('a')]:[];return {pager:!!p,next:links.find(a=>/next/i.test(a.textContent||''))?.href||null,prev:links.find(a=>/previous/i.test(a.textContent||''))?.href||null,data:{...(document.querySelector('#MainContent')?.dataset||{})}}});
+                if(!state.pager)report.failures.push(`${size}/page ${view}: pager missing`);
+                if(view===1&&state.prev)report.failures.push(`${size}/page 1: Previous exposed`);
+                if(view>1&&!state.prev)report.failures.push(`${size}/page ${view}: Previous missing`);
+                if(state.data.sqRefineV3PaginationRepairError)report.failures.push(`${size}/page ${view}: ${state.data.sqRefineV3PaginationRepairError}`);
+                if(state.data.sqRefineV3PaginationRepaired!=='true')report.failures.push(`${size}/page ${view}: repair marker missing`);
+                if(state.next){view++;await sleep(900);continue;}
+                finished=true;break;
+              }
+            }catch(e){report.infra.push(`${size}: ${String(e)}`);}
+            const missing=[...expected].filter(x=>!seen.has(x));const unexpected=[...seen].filter(x=>!expected.has(x));
+            if(!report.infra.length){if(missing.length)report.failures.push(`${size}: ${missing.length} source product(s) missing`);if(unexpected.length)report.failures.push(`${size}: ${unexpected.length} unexpected customer product(s)`);if(seen.size!==expected.size)report.failures.push(`${size}: customer ${seen.size} != source ${expected.size}`);}
+            report.cases.push({size,seen:seen.size,expected:expected.size,finished,missing:missing.slice(0,20),unexpected:unexpected.slice(0,20)});
+            await page.close();await sleep(1500);
+          }
+          await browser.close();
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+          if(report.failures.length)process.exitCode=2;else if(report.infra.length)process.exitCode=3;
+          EOF
+          node recheck.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pagination-parity-${{ matrix.handle }}
+          path: out
+          retention-days: 14
