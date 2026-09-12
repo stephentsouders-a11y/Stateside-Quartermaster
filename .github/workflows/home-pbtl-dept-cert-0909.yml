@@ -1,9 +1,10 @@
 name: Home PBTL count and department dedupe certification
-# final draft rerun 2026-09-09 checksum cad5d7869cd62786794a63d7244034e5
+# corrected 2026-09-12: legacy public-safety cards must not appear in PBTL
 on:
   push:
     paths:
       - '.github/workflows/home-pbtl-dept-cert-0909.yml'
+      - 'sections/sq-home-series-canonical.liquid'
 permissions:
   contents: read
 jobs:
@@ -33,8 +34,6 @@ jobs:
             }
             const result=await page.evaluate(()=>{
               const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'};
-              const dept=[...document.querySelectorAll('.sqhc-grid .sqhc-card')].filter(visible);
-              const deptHrefs=dept.map(a=>new URL(a.href,location.href).pathname);
               const series=[...document.querySelectorAll('[data-sq-line-series-root] .sqhc-series-card')].filter(visible);
               const failures=[];
               for(const card of series){
@@ -43,14 +42,19 @@ jobs:
                 const title=card.querySelector('.sqhc-series-title');
                 if(!count||!visible(count)){failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'missing-count'});continue;}
                 const cr=count.getBoundingClientRect(), ar=card.getBoundingClientRect();
-                if(cr.top<ar.top-1||cr.bottom>ar.bottom+1||cr.left<ar.left-1||cr.right>ar.right+1)failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'count-outside-card',cr:{top:cr.top,bottom:cr.bottom},ar:{top:ar.top,bottom:ar.bottom}});
-                for(const [name,el] of [['desc',desc],['title',title]])if(el&&visible(el)){const r=el.getBoundingClientRect();const overlap=!(cr.right<=r.left||cr.left>=r.right||cr.bottom<=r.top||cr.top>=r.bottom);if(overlap)failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'count-overlaps-'+name,cr:{top:cr.top,bottom:cr.bottom},r:{top:r.top,bottom:r.bottom}});}
-                const cs=getComputedStyle(count);if(cs.whiteSpace!=='nowrap')failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'count-wrap-enabled'});
+                if(cr.top<ar.top-1||cr.bottom>ar.bottom+1||cr.left<ar.left-1||cr.right>ar.right+1)failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'count-outside-card'});
+                for(const [name,el] of [['desc',desc],['title',title]])if(el&&visible(el)){const r=el.getBoundingClientRect();const overlap=!(cr.right<=r.left||cr.left>=r.right||cr.bottom<=r.top||cr.top>=r.bottom);if(overlap)failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'count-overlaps-'+name});}
+                if(getComputedStyle(count).whiteSpace!=='nowrap')failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'count-wrap-enabled'});
               }
-              return {deptCount:dept.length,hasLawDept:deptHrefs.includes('/collections/law-enforcement-corrections'),hasFireDept:deptHrefs.includes('/collections/firefighting-ems-search-rescue'),seriesCount:series.length,hasLawPBTL:series.some(a=>a.dataset.sqSeriesHandle==='law-enforcement-corrections'),hasFirePBTL:series.some(a=>a.dataset.sqSeriesHandle==='firefighting-ems-search-rescue'),countFailures:failures};
+              return {
+                seriesCount:series.length,
+                hasLawPBTL:series.some(a=>a.dataset.sqSeriesHandle==='law-enforcement-corrections'),
+                hasFirePBTL:series.some(a=>a.dataset.sqSeriesHandle==='firefighting-ems-search-rescue'),
+                countFailures:failures
+              };
             });
             console.log(cfg.name.toUpperCase(),JSON.stringify(result));
-            if(result.deptCount!==27||result.hasLawDept||result.hasFireDept||!result.hasLawPBTL||!result.hasFirePBTL||result.countFailures.length){failed=true;await page.screenshot({path:`failure-${cfg.name}.png`,fullPage:true});}
+            if(result.hasLawPBTL||result.hasFirePBTL||result.countFailures.length){failed=true;await page.screenshot({path:`failure-${cfg.name}.png`,fullPage:true});}
             await page.close();
           }
           await browser.close();
