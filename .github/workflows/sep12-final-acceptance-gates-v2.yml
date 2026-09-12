@@ -1,0 +1,121 @@
+name: Sep12 final acceptance gates v2
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-final-acceptance-gates-v2.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        device: [desktop, mobile]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Run strict final candidate-theme certification
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          DEVICE: ${{ matrix.device }}
+        run: |
+          cat > gate.mjs <<'EOF'
+          import { chromium, devices } from 'playwright';
+          import fs from 'fs';
+          const BASE=process.env.BASE,THEME=process.env.THEME,device=process.env.DEVICE;
+          const routes=[
+            '/',
+            '/collections/products-built-for-the-line-u-s-army',
+            '/collections/army-national-guard-series',
+            '/collections/products-built-for-the-line-u-s-air-force',
+            '/collections/air-national-guard-series',
+            '/collections/products-built-for-the-line-u-s-navy',
+            '/collections/products-built-for-the-line-u-s-marine-corps',
+            '/collections/products-built-for-the-line-u-s-coast-guard',
+            '/collections/products-built-for-the-line-u-s-space-force',
+            '/collections/state-guard-series',
+            '/collections/rotc-series',
+            '/collections/jrotc-series',
+            '/collections/military-schools-academies',
+            '/collections/armed-forces-gear',
+            '/collections/accessories-gifts-collectibles',
+            '/collections/thin-line',
+            '/collections/sta-brite-insignia',
+            '/collections/state-guard-series-ohio'
+          ];
+          const OUT='out';fs.mkdirSync(`${OUT}/screens`,{recursive:true});fs.mkdirSync(`${OUT}/videos`,{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          const results=[];
+          const sidebarRequired=new Set(['/collections/armed-forces-gear','/collections/accessories-gifts-collectibles','/collections/thin-line','/collections/sta-brite-insignia','/collections/state-guard-series-ohio']);
+          const titleRequired=/^\/collections\/(products-built-for-the-line-u-s-(army|air-force|navy|marine-corps|coast-guard|space-force)|army-national-guard-series|air-national-guard-series|state-guard-series|rotc-series|jrotc-series|military-schools-academies)$/;
+          for(const route of routes){
+            const u=new URL(route,BASE);u.searchParams.set('preview_theme_id',THEME);
+            const context=await browser.newContext(device==='mobile'?{...devices['iPhone 13'],recordVideo:{dir:`${OUT}/videos`}}:{viewport:{width:1365,height:900},recordVideo:{dir:`${OUT}/videos`}});
+            const page=await context.newPage();page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(35000);
+            const r={route,device,failures:[]};const t0=Date.now();
+            try{
+              const res=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});r.status=res?.status()??null;r.domContentLoadedMs=Date.now()-t0;
+              await page.locator('#MainContent').waitFor({state:'attached',timeout:10000}).catch(()=>{});
+              await page.waitForTimeout(Math.max(0,3500-(Date.now()-t0)));r.usableGateMs=Date.now()-t0;
+              const body=((await page.locator('body').innerText().catch(()=>''))||'').slice(0,16000);
+              r.title=await page.title();r.h1=((await page.locator('#MainContent h1,h1').first().innerText().catch(()=>''))||'').replace(/\s+/g,' ').trim();
+              r.sidebarCount=await page.locator('#MainContent .sq-refine-v3-sidebar:visible,#MainContent .sq-global-refine-sidebar:visible').count().catch(()=>0);
+              r.horizontalFacets=await page.locator('#MainContent .facets-block-wrapper--horizontal:visible').count().catch(()=>0);
+              r.spinner=await page.locator('text=/loading items|building the customer-facing product tree|checking items|organizing .* products/i').count().catch(()=>0);
+              r.brokenImages=await page.locator('#MainContent img').evaluateAll(xs=>xs.filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.alt||i.src).slice(0,20)).catch(()=>[]);
+              r.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+4).catch(()=>false);
+              r.availabilityLeak=await page.locator('#MainContent a[href*="filter.v.availability=1"],#MainContent a[href*="filter.v.availability=0"]').count().catch(()=>0);
+              if(r.status!==200)r.failures.push(`HTTP_${r.status}`);
+              if(/something went wrong|internal server error|there was a problem|404 not found|page not found/i.test((r.title||'')+' '+body))r.failures.push('ERROR_PAGE');
+              if(r.spinner>0)r.failures.push('BLOCKING_SPINNER_AFTER_3_5S');
+              if(r.brokenImages.length)r.failures.push('BROKEN_IMAGES');
+              if(r.overflow)r.failures.push('HORIZONTAL_OVERFLOW');
+              if(r.horizontalFacets>0)r.failures.push('DUPLICATE_HORIZONTAL_FACETS');
+              if(r.availabilityLeak>0)r.failures.push(`FORCED_AVAILABILITY_LINKS_${r.availabilityLeak}`);
+              if(titleRequired.test(route)&&!r.h1)r.failures.push('MISSING_VISIBLE_PAGE_TITLE');
+              if(sidebarRequired.has(route)&&r.sidebarCount!==1)r.failures.push(`SIDEBAR_COUNT_${r.sidebarCount}`);
+              if(route==='/collections/state-guard-series'){
+                if(r.sidebarCount!==0)r.failures.push(`STATE_GUARD_ROOT_SIDEBAR_${r.sidebarCount}`);
+                r.stateGuardCards=await page.locator('#MainContent .sg-entity:visible').count().catch(()=>0);
+                r.stateGuardMerch=await page.locator('#MainContent [data-sq-state-guard-merch-feature]:visible').count().catch(()=>0);
+                if(!r.stateGuardMerch)r.failures.push('STATE_GUARD_MERCH_MISSING');
+                if(r.stateGuardCards<20)r.failures.push(`STATE_GUARD_CARD_COUNT_${r.stateGuardCards}`);
+                if(device==='desktop'&&r.stateGuardCards){
+                  r.stateGuardColumns=await page.locator('#MainContent .sg-entity-grid').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').filter(Boolean).length).catch(()=>0);
+                  if(r.stateGuardColumns!==4)r.failures.push(`STATE_GUARD_DESKTOP_COLUMNS_${r.stateGuardColumns}`);
+                }
+                r.stateGuardOrder=await page.evaluate(()=>{const m=document.querySelector('[data-sq-state-guard-merch-feature]'),g=document.querySelector('.sg-entity-grid');if(!m||!g)return false;return !!(m.compareDocumentPosition(g)&Node.DOCUMENT_POSITION_FOLLOWING)}).catch(()=>false);
+                if(!r.stateGuardOrder)r.failures.push('STATE_GUARD_MERCH_NOT_ABOVE_GRID');
+              }
+              if(route!=='/'&&route!=='/collections/state-guard-series'){
+                const pag=await page.locator('#MainContent [data-pagination-design="concept-one"]:visible').count().catch(()=>0);
+                const per50=await page.locator('#MainContent [data-vac-page-size="50"]:visible').count().catch(()=>0);
+                const per100=await page.locator('#MainContent [data-vac-page-size="100"]:visible').count().catch(()=>0);
+                r.conceptOnePagination=pag;r.perPage50=per50;r.perPage100=per100;
+                const productCount=await page.locator('#MainContent a[href*="/products/"]:visible').count().catch(()=>0);
+                if(productCount>=50&&pag===0)r.failures.push('CONCEPT_ONE_PAGINATION_MISSING');
+                if(productCount>=50&&(per50===0||per100===0))r.failures.push('PRODUCTS_PER_PAGE_LINKAGE_MISSING');
+              }
+              await page.screenshot({path:`${OUT}/screens/${device}-${route.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'home'}.png`,fullPage:true}).catch(()=>{});
+            }catch(e){r.failures.push('EXCEPTION');r.error=String(e)}
+            r.pass=r.failures.length===0;results.push(r);const v=page.video();await context.close();if(v){try{const p=await v.path();const dest=`${OUT}/videos/${device}-${route.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'home'}.webm`;fs.renameSync(p,dest)}catch{}}
+            fs.writeFileSync(`${OUT}/results.json`,JSON.stringify(results,null,2));
+          }
+          await browser.close();const summary={device,total:results.length,passed:results.filter(x=>x.pass).length,failed:results.filter(x=>!x.pass).length,failures:results.filter(x=>!x.pass).map(x=>({route:x.route,failures:x.failures}))};fs.writeFileSync(`${OUT}/summary.json`,JSON.stringify(summary,null,2));console.log(JSON.stringify(summary,null,2));if(summary.failed)process.exitCode=2;
+          EOF
+          node gate.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: final-cert-v2-${{ matrix.device }}
+          path: out
+          retention-days: 7
