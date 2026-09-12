@@ -1,0 +1,61 @@
+{% assign sq_sg_fetch_page = false %}
+{% if collection.handle contains 'state-guard-series-' or collection.handle == 'new-jersey-state-guard-naval-militia' %}
+  {% assign sq_sg_fetch_page = true %}
+{% endif %}
+{% if sq_sg_fetch_page %}
+<script data-sq-state-guard-fetch-resilience-v1>
+(function(){
+  if(window.__sqStateGuardFetchResilienceV1) return;
+  window.__sqStateGuardFetchResilienceV1 = true;
+
+  var nativeFetch = window.fetch.bind(window);
+  var active = 0;
+  var maxActive = 2;
+  var queue = [];
+
+  function runNext(){
+    if(active >= maxActive || !queue.length) return;
+    var job = queue.shift();
+    active++;
+    job().finally(function(){ active--; runNext(); });
+  }
+  function enqueue(job){
+    return new Promise(function(resolve,reject){
+      queue.push(function(){ return job().then(resolve,reject); });
+      runNext();
+    });
+  }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+
+  window.fetch = function(input, init){
+    var url = typeof input === 'string' ? input : (input && input.url) || '';
+    var parsed;
+    try { parsed = new URL(url, location.href); } catch(e) { return nativeFetch(input, init); }
+    var sameOrigin = parsed.origin === location.origin;
+    var collectionRequest = sameOrigin && parsed.pathname.indexOf('/collections/') === 0;
+    if(!collectionRequest) return nativeFetch(input, init);
+
+    return enqueue(async function(){
+      var waits = [0,800,1800,3800];
+      var lastError;
+      for(var i=0;i<waits.length;i++){
+        if(waits[i]) await sleep(waits[i]);
+        var controller = new AbortController();
+        var timeout = setTimeout(function(){ controller.abort(); },15000);
+        try{
+          var opts = Object.assign({}, init || {}, {signal:controller.signal});
+          var response = await nativeFetch(input, opts);
+          clearTimeout(timeout);
+          if(response.ok || response.status < 500) return response;
+          lastError = new Error('HTTP '+response.status);
+        }catch(err){
+          clearTimeout(timeout);
+          lastError = err;
+        }
+      }
+      throw lastError || new Error('State Guard collection request failed');
+    });
+  };
+})();
+</script>
+{% endif %}
