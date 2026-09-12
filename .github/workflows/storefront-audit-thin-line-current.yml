@@ -8,28 +8,162 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/setup-node@v4
-        with: {node-version: '20'}
+        with:
+          node-version: '20'
       - run: |
           npm init -y
           npm install playwright@1.55.0
           npx playwright install --with-deps chromium
-      - name: Render current unpublished theme
+      - name: Certify every Thin Line Refine Products selection in Chromium
         env:
           BASE: https://www.statesideqm.com
           THEME: '158561894555'
         run: |
           cat > audit.mjs <<'EOF'
-          import {chromium} from 'playwright'; import fs from 'fs';
-          const routes=[['thin-line','/collections/thin-line'],['thin-yellow','/collections/thin-line-shop-thin-yellow-line']];
-          const b=await chromium.launch({headless:true});fs.mkdirSync('out',{recursive:true});
-          for(const [slug,path] of routes){const c=await b.newContext({viewport:{width:1440,height:1100}});const p=await c.newPage();const u=new URL(path,process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);let status=null,error=null;try{const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});status=r?.status();await p.waitForTimeout(18000)}catch(e){error=String(e)}const report=await p.evaluate(()=>{const m=document.querySelector('#MainContent'),text=(m?.innerText||'').replace(/\s+/g,' ').trim(),vis=e=>!!e&&getComputedStyle(e).display!=='none'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;return{title:document.title,url:location.href,challenge:/just a moment/i.test(document.title),bodyText:text.slice(0,12000),availabilityLinks:[...(m?.querySelectorAll('a[href]')||[])].filter(a=>(a.getAttribute('href')||'').includes('filter.v.availability')).map(a=>a.getAttribute('href')),sidebarCount:[...(m?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis).length,brokenImages:[...(m?.querySelectorAll('img')||[])].filter(i=>i.complete&&i.naturalWidth===0).map(i=>({alt:i.alt,src:i.currentSrc||i.src})),productLinks:[...(m?.querySelectorAll('a[href*="/products/"]')||[])].filter(vis).map(a=>({href:a.getAttribute('href'),text:(a.innerText||a.textContent||'').replace(/\s+/g,' ').trim()})).slice(0,200),thinYellowVisible:text.includes('Thin Yellow Line American Flag Patch')}});fs.mkdirSync('out/'+slug,{recursive:true});fs.writeFileSync('out/'+slug+'/report.json',JSON.stringify({slug,path,status,error,...report},null,2));await p.screenshot({path:'out/'+slug+'/desktop.png',fullPage:true});await c.close();await new Promise(r=>setTimeout(r,4000))}await b.close();
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+
+          const rootHandle = 'thin-line';
+          const options = [
+            ['General & Multi-Line', 'thin-line-shop-general-multi-line'],
+            ['Thin Blue Line', 'thin-line-shop-thin-blue-line'],
+            ['Thin Camo Line', 'thin-line-shop-thin-camo-line'],
+            ['Thin Gold Line', 'thin-line-shop-thin-gold-line'],
+            ['Thin Gray Line', 'thin-line-shop-thin-gray-line'],
+            ['Thin Green Line', 'thin-line-shop-thin-green-line'],
+            ['Thin Orange Line', 'thin-line-shop-thin-orange-line'],
+            ['Thin Pink Line', 'thin-line-shop-thin-pink-line'],
+            ['Thin Purple & Teal Line', 'thin-line-shop-thin-purple-teal-line'],
+            ['Thin Red Line', 'thin-line-shop-thin-red-line'],
+            ['Thin White Line', 'thin-line-shop-thin-white-line'],
+            ['Thin Yellow Line', 'thin-line-shop-thin-yellow-line'],
+          ];
+
+          fs.mkdirSync('out', { recursive: true });
+          const failures = [];
+          const report = { startedAt: new Date().toISOString(), rootHandle, theme: process.env.THEME, options: [] };
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
+          const page = await context.newPage();
+          const consoleErrors = [];
+          const pageErrors = [];
+          page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+          page.on('pageerror', err => pageErrors.push(String(err)));
+
+          const rootUrl = new URL(`/collections/${rootHandle}`, process.env.BASE);
+          rootUrl.searchParams.set('preview_theme_id', process.env.THEME);
+          const response = await page.goto(rootUrl.toString(), { waitUntil: 'domcontentloaded', timeout: 60000 });
+          if (!response || response.status() >= 400) failures.push(`Root HTTP status ${response?.status()}`);
+          await page.waitForSelector('.sq-refine-taxonomy', { state: 'attached', timeout: 45000 });
+          await page.waitForSelector('.sq-refine-taxonomy-products', { state: 'attached', timeout: 45000 });
+          await page.waitForTimeout(2000);
+
+          const challenge = /just a moment/i.test(await page.title());
+          if (challenge) failures.push('Cloudflare challenge detected');
+
+          const sidebarVisible = await page.locator('.sq-global-refine-sidebar').filter({ visible: true }).count().catch(() => 0);
+          if (sidebarVisible < 1) failures.push('Visible Refine Products sidebar not found');
+
+          const checkboxValues = await page.locator('.sq-refine-taxonomy input[type="checkbox"]').evaluateAll(els => els.map(e => e.value));
+          for (const [, handle] of options) {
+            if (!checkboxValues.includes(handle)) failures.push(`Missing Refine checkbox for ${handle}`);
+          }
+
+          const loadCollection = async (handle) => {
+            return await page.evaluate(async (h) => {
+              const out = [];
+              const seen = new Set();
+              for (let pg = 1; pg <= 24; pg++) {
+                const r = await fetch(`/collections/${encodeURIComponent(h)}/products.json?limit=250&page=${pg}`, { credentials: 'same-origin' });
+                if (!r.ok) throw new Error(`${h} products.json HTTP ${r.status}`);
+                const j = await r.json();
+                const a = Array.isArray(j?.products) ? j.products : [];
+                for (const p of a) if (p?.handle && !seen.has(p.handle)) { seen.add(p.handle); out.push(p.handle); }
+                if (a.length < 250) break;
+              }
+              return out;
+            }, handle);
+          };
+
+          const rootProducts = new Set(await loadCollection(rootHandle));
+          report.rootProductCount = rootProducts.size;
+
+          const pageSize250 = page.locator('input[name="sq_page_size"][value="250"]');
+          if (await pageSize250.count()) {
+            await pageSize250.check({ force: true });
+            await page.waitForTimeout(800);
+          } else {
+            failures.push('250 products-per-page control missing');
+          }
+
+          for (const [label, handle] of options) {
+            const item = { label, handle, expectedCount: 0, actualCount: 0, missing: [], unexpected: [], duplicateHandles: [], passed: false };
+            try {
+              const checked = page.locator('.sq-refine-taxonomy input[type="checkbox"]:checked');
+              const checkedCount = await checked.count();
+              for (let i = checkedCount - 1; i >= 0; i--) await checked.nth(i).uncheck({ force: true });
+              await page.waitForTimeout(350);
+
+              const box = page.locator(`.sq-refine-taxonomy input[type="checkbox"][value="${handle}"]`);
+              if (await box.count() !== 1) throw new Error(`Expected exactly one checkbox, found ${await box.count()}`);
+              await box.check({ force: true });
+              await page.waitForFunction((h) => {
+                const b = document.querySelector(`.sq-refine-taxonomy input[type="checkbox"][value="${h}"]`);
+                const top = document.querySelector('.sq-refine-taxonomy-products__top strong');
+                return !!(b && b.checked && top && /\d+\s+products/i.test(top.textContent || ''));
+              }, handle, { timeout: 15000 });
+              await page.waitForTimeout(650);
+
+              const childProducts = new Set(await loadCollection(handle));
+              const expected = [...childProducts].filter(h => rootProducts.has(h)).sort();
+              const hrefs = await page.locator('.sq-refine-taxonomy-product').evaluateAll(els => els.map(a => a.getAttribute('href') || ''));
+              const actual = hrefs.map(href => {
+                const m = href.match(/\/products\/([^/?#]+)/);
+                return m ? decodeURIComponent(m[1]) : '';
+              }).filter(Boolean);
+              const uniqueActual = [...new Set(actual)].sort();
+              const missing = expected.filter(h => !uniqueActual.includes(h));
+              const unexpected = uniqueActual.filter(h => !expected.includes(h));
+              const duplicateHandles = actual.filter((h, i, a) => a.indexOf(h) !== i);
+
+              item.expectedCount = expected.length;
+              item.actualCount = uniqueActual.length;
+              item.missing = missing;
+              item.unexpected = unexpected;
+              item.duplicateHandles = [...new Set(duplicateHandles)];
+              item.passed = missing.length === 0 && unexpected.length === 0 && duplicateHandles.length === 0 && uniqueActual.length === expected.length;
+              if (!item.passed) failures.push(`${label}: expected ${expected.length}, rendered ${uniqueActual.length}, missing ${missing.length}, unexpected ${unexpected.length}, duplicates ${item.duplicateHandles.length}`);
+
+              const safe = handle.replace(/[^a-z0-9-]/gi, '-');
+              await page.screenshot({ path: `out/${safe}.png`, fullPage: true });
+            } catch (err) {
+              item.error = String(err);
+              failures.push(`${label}: ${String(err)}`);
+            }
+            report.options.push(item);
+          }
+
+          if (consoleErrors.length) failures.push(`Console errors: ${consoleErrors.length}`);
+          if (pageErrors.length) failures.push(`Page errors: ${pageErrors.length}`);
+          report.consoleErrors = consoleErrors;
+          report.pageErrors = pageErrors;
+          report.failures = failures;
+          report.passed = failures.length === 0 && report.options.length === options.length && report.options.every(x => x.passed);
+          report.completedAt = new Date().toISOString();
+          fs.writeFileSync('out/report.json', JSON.stringify(report, null, 2));
+          await page.screenshot({ path: 'out/final-root.png', fullPage: true });
+          await browser.close();
+
+          console.log(JSON.stringify(report, null, 2));
+          if (!report.passed) process.exit(1);
           EOF
           node audit.mjs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: thin-line-current-audit
+          name: thin-line-full-refine-certification
           path: out
-          retention-days: 7
+          retention-days: 14
