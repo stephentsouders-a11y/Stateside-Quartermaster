@@ -1,0 +1,64 @@
+name: Tactical Refine V3 boot diagnostic
+on:
+  push:
+    paths:
+      - '.github/workflows/tactical-boot-diagnostic.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: macos-14
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install chromium
+      - name: Probe preview boot state
+        run: |
+          cat > probe.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const url='https://www.statesideqm.com/collections/tactical-gear?preview_theme_id=158561894555';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          const errors=[]; const consoleErrors=[];
+          page.on('pageerror',e=>errors.push(String(e)));
+          page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+          const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:90000});
+          console.log('HTTP',response?.status());
+          for (const delay of [1000,5000,15000,30000]) {
+            await page.waitForTimeout(delay-(delay===1000?0:({5000:1000,15000:5000,30000:15000}[delay])));
+            const s=await page.evaluate(()=>{
+              const m=document.querySelector('#MainContent');
+              const script=document.querySelector('script[data-sq-tactical-color-pattern]');
+              return {
+                href:location.href,
+                theme:window.Shopify?.theme?.id,
+                main:!!m,
+                mainDataset:m?{...m.dataset}:null,
+                sidebar:document.querySelectorAll('.sq-refine-v3-sidebar').length,
+                results:document.querySelectorAll('.sq-refine-v3-results').length,
+                tacticalScript:!!script,
+                tacticalScriptHandle:script?.dataset.currentHandle||null,
+                tacticalWindowFlag:!!window.__sqTacticalColorV1,
+                tacticalGroup:document.querySelectorAll('[data-sq-tactical-colors]').length,
+                summaries:[...document.querySelectorAll('.sq-refine-v3-sidebar>details>summary')].map(x=>x.textContent.trim()).slice(0,30)
+              };
+            });
+            console.log('STATE@'+delay,JSON.stringify(s));
+          }
+          console.log('PAGEERRORS',JSON.stringify(errors));
+          console.log('CONSOLEERRORS',JSON.stringify(consoleErrors));
+          await page.screenshot({path:'tactical-boot.png',fullPage:true});
+          await browser.close();
+          EOF
+          node probe.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tactical-boot-diagnostic
+          path: tactical-boot.png
+          retention-days: 7
