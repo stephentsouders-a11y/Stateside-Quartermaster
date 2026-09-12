@@ -1,0 +1,41 @@
+name: Activate Zippos Refine Click Rescue 0911
+on:
+  push:
+    paths:
+      - '.github/workflows/zippos-activate-click-rescue-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+          fetch-depth: 0
+      - name: Activate click rescue in layout
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('layout/theme.liquid')
+          s=p.read_text()
+          needle="{% render 'sq-refine-v3' %}"
+          rescue="{% render 'sq-refine-v3-click-rescue' %}"
+          if rescue not in s:
+              if needle not in s:
+                  raise SystemExit('Refine V3 render point not found')
+              s=s.replace(needle, needle+rescue, 1)
+              p.write_text(s)
+          PY
+      - name: Commit activation
+        run: |
+          if git diff --quiet; then
+            echo 'Click rescue already active.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add layout/theme.liquid
+          git commit -m 'Activate Refine V3 click rescue'
+          git push origin HEAD:refine-restart-v3
