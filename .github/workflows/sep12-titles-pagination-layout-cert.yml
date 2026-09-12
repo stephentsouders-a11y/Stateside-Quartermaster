@@ -1,0 +1,39 @@
+name: Sep12 titles pagination layout certification
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-titles-pagination-layout-cert.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify titles pagination and layout
+        run: |
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright';import fs from 'fs';
+          const base='https://www.statesideqm.com',theme='158561894555',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const titles=[['army','/collections/products-built-for-the-line-u-s-army',/army/i],['arng','/collections/army-national-guard-series',/army national guard/i],['air-force','/collections/products-built-for-the-line-u-s-air-force',/air force/i],['ang','/collections/air-national-guard-series',/air national guard/i],['navy','/collections/products-built-for-the-line-u-s-navy',/navy/i],['marines','/collections/products-built-for-the-line-u-s-marine-corps',/marine/i],['coast-guard','/collections/products-built-for-the-line-u-s-coast-guard',/coast guard/i],['space-force','/collections/products-built-for-the-line-u-s-space-force',/space force/i],['state-guard','/collections/state-guard-series',/state guard/i],['rotc','/collections/rotc-series',/rotc/i],['jrotc','/collections/jrotc-series',/jrotc/i],['msa','/collections/military-schools-academies',/military schools|academ/i]];
+          const pagination=[['army','/collections/products-built-for-the-line-u-s-army'],['tactical','/collections/tactical-gear'],['uniforms','/collections/uniforms'],['medical','/collections/first-aid-medical-ifak'],['accessories','/collections/accessories-gifts-collectibles'],['sta-brite','/collections/sta-brite-insignia']];
+          const browser=await chromium.launch({headless:true}),out={titles:[],pagination:[],layout:[]};
+          async function go(page,path){const u=new URL(path,base);u.searchParams.set('preview_theme_id',theme);const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});await sleep(1400);return r}
+          for(const [slug,path,rx] of titles){const page=await browser.newPage({viewport:{width:1440,height:1000}});const rec={slug,path,status:null,h1:'',pass:false};try{const r=await go(page,path);rec.status=r?.status()??null;rec.h1=((await page.locator('#MainContent h1').first().textContent().catch(()=>''))||'').replace(/\s+/g,' ').trim();rec.pass=rec.status===200&&rx.test(rec.h1)}catch(e){rec.error=String(e)}out.titles.push(rec);await page.close();await sleep(1200)}
+          for(const [slug,path] of pagination){const page=await browser.newPage({viewport:{width:1440,height:1000}});const rec={slug,path,status:null,concept:false,pageButtons:[],prev:false,next:false,ppp:[],clicks:[],pass:false};try{const r=await go(page,path);rec.status=r?.status()??null;const pager=page.locator('[data-sq-pagination-concept="one"],.sq-refine-v3-pager').first();rec.concept=await pager.count().then(n=>n>0);if(rec.concept){rec.pageButtons=await pager.locator('a,button').evaluateAll(es=>es.map(e=>({text:(e.textContent||'').trim(),aria:e.getAttribute('aria-label')||'',href:e.getAttribute('href')||''})).filter(x=>/^\d+$/.test(x.text)));rec.prev=await pager.locator('a,button').filter({hasText:/previous|back|‹|←/i}).count().then(n=>n>0).catch(()=>false);rec.next=await pager.locator('a,button').filter({hasText:/next|›|→/i}).count().then(n=>n>0).catch(()=>false);rec.ppp=await page.locator('#MainContent select option,#MainContent button,#MainContent a,#MainContent label').evaluateAll(es=>[...new Set(es.map(e=>(e.textContent||'').trim()).filter(t=>/^(50|100|250)$|products per page/i.test(t)))]);for(const b of rec.pageButtons.slice(0,Math.min(5,rec.pageButtons.length))){const start=page.url();const btn=pager.locator('a,button').filter({hasText:new RegExp('^'+b.text+'$')}).first();if(await btn.count()){await btn.click().catch(()=>{});await sleep(600);rec.clicks.push({text:b.text,changed:page.url()!==start,url:page.url()});await go(page,path)}}}rec.pass=rec.status===200&&rec.concept&&rec.pageButtons.length>0&&rec.next&&rec.ppp.some(x=>/50/.test(x))&&rec.ppp.some(x=>/100/.test(x))&&rec.ppp.some(x=>/250/.test(x))&&rec.clicks.every(x=>x.changed)}catch(e){rec.error=String(e)}out.pagination.push(rec);await page.close();await sleep(1200)}
+          for(const [device,vp] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){const page=await browser.newPage({viewport:vp});const rec={device};try{let r=await go(page,'/collections/state-guard-series');rec.stateStatus=r?.status()??null;Object.assign(rec,await page.evaluate(()=>{const main=document.getElementById('MainContent'),vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};const grid=document.querySelector('[data-sq-state-guard-root] .sg-entity-grid'),promo=document.querySelector('[data-sq-state-guard-merch-feature]');return{stateSidebars:[...main.querySelectorAll('.sq-global-refine-sidebar,.sq-refine-v3-sidebar,.sq-refine-taxonomy')].filter(vis).length,stateCols:grid?getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length:0,promoBefore:!!(promo&&grid&&(promo.compareDocumentPosition(grid)&Node.DOCUMENT_POSITION_FOLLOWING))}}));r=await go(page,'/');rec.homeStatus=r?.status()??null;const pub=await page.locator('#MainContent a:visible,#MainContent button:visible').evaluateAll(es=>es.map(e=>(e.textContent||'').replace(/\s+/g,' ').trim()).filter(t=>/law enforcement|firefighting|search & rescue|\bEMS\b/i.test(t)));rec.publicSafety=pub;rec.pass=rec.stateStatus===200&&rec.stateSidebars===0&&rec.promoBefore&&(device==='mobile'||rec.stateCols>=4)&&rec.homeStatus===200&&pub.length<=2}catch(e){rec.error=String(e);rec.pass=false}out.layout.push(rec);await page.close()}
+          await browser.close();fs.mkdirSync('out',{recursive:true});fs.writeFileSync('out/results.json',JSON.stringify(out,null,2));const failures=[...out.titles.filter(x=>!x.pass),...out.pagination.filter(x=>!x.pass),...out.layout.filter(x=>!x.pass)];console.log(JSON.stringify({titleFailures:out.titles.filter(x=>!x.pass),paginationFailures:out.pagination.filter(x=>!x.pass),layoutFailures:out.layout.filter(x=>!x.pass)},null,2));if(failures.length)process.exitCode=2;
+          EOF
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep12-titles-pagination-layout
+          path: out
+          retention-days: 7
