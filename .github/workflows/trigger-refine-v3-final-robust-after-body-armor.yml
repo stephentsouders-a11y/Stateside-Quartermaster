@@ -1,0 +1,20 @@
+name: Trigger final robust V3 certification after Body Armor fix
+on:
+  push:
+    paths:
+      - '.github/workflows/trigger-refine-v3-final-robust-after-body-armor.yml'
+permissions:
+  actions: write
+  contents: read
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch final robust certification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run refine-v3-42-final-robust-cert-0911.yml \
+            --repo "${{ github.repository }}" \
+            --ref refine-restart-v3
+          echo "Dispatched full 42-route desktop/mobile robust Chromium certification."
