@@ -66,7 +66,7 @@ Adds tag-backed Color / Pattern filtering to the Morale Patches and Patriotic & 
     if (!side || main.dataset.sqRefineV3Ready !== 'true') return false;
     var owned = side.querySelector('[data-sq-color-pattern-owned="' + root + '"]');
     if (owned) {
-      if (isMorale) owned.dataset.sqMoraleColorPattern = owned.dataset.sqMoraleColorPattern || 'native-v4';
+      if (isMorale) owned.dataset.sqMoraleColorPattern = owned.dataset.sqMoraleColorPattern || 'native-v5';
       return true;
     }
     Array.from(side.querySelectorAll(':scope > details.sq-refine-v3-group')).forEach(function (details) {
@@ -76,7 +76,7 @@ Adds tag-backed Color / Pattern filtering to the Morale Patches and Patriotic & 
     var group = document.createElement('details');
     group.className = 'sq-refine-v3-group';
     group.dataset.sqColorPatternOwned = root;
-    if (isMorale) group.dataset.sqMoraleColorPattern = 'native-v4';
+    if (isMorale) group.dataset.sqMoraleColorPattern = 'native-v5';
     var summary = document.createElement('summary');
     summary.textContent = 'Shop by Color / Pattern';
     var choices = document.createElement('div');
@@ -89,7 +89,7 @@ Adds tag-backed Color / Pattern filtering to the Morale Patches and Patriotic & 
       row.className = 'sq-refine-v3-choice';
       var input = document.createElement('input');
       input.type = 'checkbox';
-      input.name = 'filter.p.tag';
+      input.name = isMorale ? 'sq_morale_color_pattern' : 'filter.p.tag';
       input.value = tag;
       input.dataset.sqColorPatternTag = tag;
       input.dataset.sqColorPatternHandle = tagHandle;
@@ -100,11 +100,17 @@ Adds tag-backed Color / Pattern filtering to the Morale Patches and Patriotic & 
       input.checked = isMorale ? handles.indexOf(tagHandle) !== -1 : (selectedTag === tag || handles.indexOf(tagHandle) !== -1);
       var text = document.createElement('span');
       text.textContent = tag.replace(prefix, '').trim();
-      input.addEventListener('change', function () {
+      input.addEventListener('click', function (event) {
+        if (isMorale) event.stopPropagation();
+      }, true);
+      input.addEventListener('change', function (event) {
         var url = new URL(location.href);
         url.searchParams.delete('page');
         url.searchParams.delete('sq_view_page');
         if (isMorale) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
           var nextHandles = selectedHandles().filter(function (value) { return value !== tagHandle; });
           if (input.checked) nextHandles.push(tagHandle);
           nextHandles = Array.from(new Set(nextHandles));
@@ -119,7 +125,7 @@ Adds tag-backed Color / Pattern filtering to the Morale Patches and Patriotic & 
         if (input.checked) url.searchParams.append('filter.p.tag', tag);
         url.searchParams.set('sq_root', root);
         location.assign(url.pathname + '?' + url.searchParams.toString());
-      });
+      }, true);
       row.append(input, text);
       choices.appendChild(row);
     });
