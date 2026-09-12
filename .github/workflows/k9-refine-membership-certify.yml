@@ -1,4 +1,4 @@
-# Rerun marker: certify inlined K9 guard after synced V3 asset update.
+# Rerun marker: certify direct Shopify preview sync of inlined K9 guard.
 name: K9 Refine V3 membership certification
 on:
   push:
