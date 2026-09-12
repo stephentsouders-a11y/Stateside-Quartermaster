@@ -1,0 +1,79 @@
+name: Accessories Chromium certification after observer fix
+on:
+  push:
+    paths:
+      - '.github/workflows/accessories-cert-observer-fix-0911.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium Playwright
+        run: |
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify Accessories desktop and mobile
+        run: |
+          cat > /tmp/cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const base='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
+          const browser=await chromium.launch({headless:true});
+          const failures=[];
+          const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};
+          async function one(label,viewport){
+            const ctx=await browser.newContext({viewport});
+            const p=await ctx.newPage();
+            const errs=[];p.on('pageerror',e=>errs.push(String(e)));
+            let res,last;
+            for(let a=1;a<=3;a++){
+              try{res=await p.goto(base,{waitUntil:'commit',timeout:30000});await p.waitForSelector('#MainContent',{timeout:30000});break}catch(e){last=e;console.log('NAV_RETRY',label,a,String(e));await p.waitForTimeout(1000*a)}
+            }
+            if(!res)throw last;
+            await p.waitForSelector('#MainContent .sq-refine-v3-sidebar',{timeout:30000});
+            await p.waitForTimeout(1500);
+            const st=await p.evaluate(()=>{
+              const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};
+              const m=document.querySelector('#MainContent');
+              const sides=[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis);
+              const grids=[...m.querySelectorAll('.product-grid')].filter(g=>vis(g)&&[...g.querySelectorAll(':scope > .product-grid__item')].some(c=>vis(c)&&c.querySelector('a[href*="/products/"]')));
+              const g=grids.find(x=>x.closest('.sq-refine-v3-results'))||grids[0];
+              const cards=g?[...g.querySelectorAll(':scope > .product-grid__item')].filter(c=>vis(c)&&c.querySelector('a[href*="/products/"]')):[];
+              const side=sides[0];
+              const groups=side?[...side.querySelectorAll('.sq-refine-v3-group,details,fieldset,section')]:[];
+              const type=groups.find(x=>/^shop by type$/i.test((x.querySelector(':scope > summary,h2,h3,h4,strong')?.textContent||'').trim()))||[...(side?.querySelectorAll('*')||[])].find(x=>/^shop by type$/i.test((x.textContent||'').trim()))?.closest('.sq-refine-v3-group,details,fieldset,section');
+              const typeInputs=type?[...type.querySelectorAll('input[type="checkbox"],a[href]')].filter(vis):[];
+              const title=side?.querySelector('.sq-refine-v3-sidebar__title');
+              return {sidebars:sides.length,grids:grids.length,cards:cards.length,type:!!type,typeInputs:typeInputs.length,repair:m?.dataset.sqAccessoriesRefineRepair||null,body:side?getComputedStyle(side).backgroundColor:null,title:(title?.textContent||'').trim(),titleBg:title?getComputedStyle(title).backgroundColor:null};
+            });
+            console.log('STATE',label,JSON.stringify({status:res.status(),errors:errs,state:st}));
+            if(res.status()!==200)failures.push(label+' HTTP '+res.status());
+            if(errs.length)failures.push(label+' pageerror '+errs.join(' | '));
+            if(st.sidebars!==1)failures.push(label+' sidebars '+st.sidebars);
+            if(st.grids!==1)failures.push(label+' grids '+st.grids);
+            if(st.cards!==50)failures.push(label+' cards '+st.cards);
+            if(!st.type||st.typeInputs<1)failures.push(label+' missing Type facet/options');
+            if(st.repair!=='true')failures.push(label+' repair marker');
+            if(st.body!=='rgb(255, 255, 255)'||st.title.toUpperCase()!=='REFINE PRODUCTS'||st.titleBg!=='rgb(8, 40, 63)')failures.push(label+' sidebar style '+JSON.stringify(st));
+            const click=await p.evaluate(()=>{
+              const side=document.querySelector('#MainContent .sq-refine-v3-sidebar');
+              const groups=[...side.querySelectorAll('.sq-refine-v3-group,details,fieldset,section')];
+              const type=groups.find(x=>/^shop by type$/i.test((x.querySelector(':scope > summary,h2,h3,h4,strong')?.textContent||'').trim()));
+              const i=type?.querySelector('input[type="checkbox"]:not(:disabled)');if(i){i.click();return true} const a=type?.querySelector('a[href]');if(a){a.click();return true}return false;
+            });
+            if(!click)failures.push(label+' Type click unavailable');
+            else {await p.waitForTimeout(2500);const aft=await p.evaluate(()=>({side:!!document.querySelector('#MainContent .sq-refine-v3-sidebar'),products:[...document.querySelectorAll('#MainContent a[href*="/products/"]')].length,repair:document.querySelector('#MainContent')?.dataset.sqAccessoriesRefineRepair||null,url:location.href}));console.log('AFTER',label,JSON.stringify(aft));if(!aft.side||aft.products<1||aft.repair!=='true')failures.push(label+' Type click state bad '+JSON.stringify(aft));}
+            await ctx.close();
+          }
+          await one('desktop',{width:1440,height:1000});
+          await one('mobile',{width:390,height:844});
+          await browser.close();
+          if(failures.length){console.error('FAILURES\n'+failures.join('\n'));process.exit(2)}
+          console.log('ACCESSORIES_OBSERVER_FIX_CERT_PASS');
+          EOF
+          node /tmp/cert.mjs
