@@ -1,0 +1,100 @@
+name: Sep12 final acceptance gates v1
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-final-acceptance-gates-v1.yml'
+permissions:
+  contents: read
+jobs:
+  critical:
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [desktop, mobile]
+        route:
+          - /
+          - /collections/products-built-for-the-line-u-s-army
+          - /collections/army-national-guard-series
+          - /collections/products-built-for-the-line-u-s-air-force
+          - /collections/air-national-guard-series
+          - /collections/products-built-for-the-line-u-s-navy
+          - /collections/products-built-for-the-line-u-s-marine-corps
+          - /collections/products-built-for-the-line-u-s-coast-guard
+          - /collections/products-built-for-the-line-u-s-space-force
+          - /collections/state-guard-series
+          - /collections/rotc-series
+          - /collections/jrotc-series
+          - /collections/military-schools-academies
+          - /collections/armed-forces-gear
+          - /collections/accessories-gifts-collectibles
+          - /collections/thin-line
+          - /collections/sta-brite-insignia
+          - /collections/state-guard-series-ohio
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify acceptance gates in Chromium
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          ROUTE: ${{ matrix.route }}
+          DEVICE: ${{ matrix.device }}
+        run: |
+          cat > gate.mjs <<'EOF'
+          import { chromium, devices } from 'playwright';
+          import fs from 'fs';
+          const BASE=process.env.BASE, THEME=process.env.THEME, route=process.env.ROUTE, device=process.env.DEVICE;
+          const out='out'; fs.mkdirSync(out,{recursive:true});
+          const u=new URL(route,BASE); u.searchParams.set('preview_theme_id',THEME);
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext(device==='mobile'?{...devices['iPhone 13'],recordVideo:{dir:out}}:{viewport:{width:1365,height:900},recordVideo:{dir:out}});
+          const page=await context.newPage(); page.setDefaultTimeout(12000); page.setDefaultNavigationTimeout(35000);
+          const r={route,device,url:u.toString(),failures:[]};
+          const t0=Date.now();
+          try {
+            const res=await page.goto(u.toString(),{waitUntil:'domcontentloaded'}); r.status=res?.status()??null;
+            r.domContentLoadedMs=Date.now()-t0;
+            await page.locator('#MainContent').waitFor({state:'attached',timeout:10000}).catch(()=>{});
+            await page.waitForTimeout(Math.max(0,3500-(Date.now()-t0)));
+            r.usableGateMs=Date.now()-t0;
+            const body=((await page.locator('body').innerText().catch(()=>''))||'').slice(0,12000);
+            r.title=await page.title();
+            r.h1=((await page.locator('#MainContent h1,h1').first().innerText().catch(()=>''))||'').replace(/\s+/g,' ').trim();
+            r.sidebarCount=await page.locator('#MainContent .sq-refine-v3-sidebar:visible,#MainContent .sq-global-refine-sidebar:visible').count().catch(()=>0);
+            r.horizontalFacets=await page.locator('#MainContent .facets-block-wrapper--horizontal:visible').count().catch(()=>0);
+            r.spinner=await page.locator('text=/loading items|building the customer-facing product tree|checking items|organizing .* products/i').count().catch(()=>0);
+            r.brokenImages=await page.locator('#MainContent img').evaluateAll(xs=>xs.filter(i=>i.complete&&i.naturalWidth===0).map(i=>i.alt||i.src).slice(0,20)).catch(()=>[]);
+            r.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+4).catch(()=>false);
+            if(r.status!==200) r.failures.push(`HTTP_${r.status}`);
+            if(/something went wrong|internal server error|there was a problem|404 not found|page not found/i.test((r.title||'')+' '+body)) r.failures.push('ERROR_PAGE');
+            if(r.spinner>0) r.failures.push('BLOCKING_SPINNER_AFTER_3_5S');
+            if(r.brokenImages.length) r.failures.push('BROKEN_IMAGES');
+            if(r.overflow) r.failures.push('HORIZONTAL_OVERFLOW');
+            if(r.horizontalFacets>0) r.failures.push('DUPLICATE_HORIZONTAL_FACETS');
+            const stateRoot=route==='/collections/state-guard-series';
+            if(stateRoot && r.sidebarCount!==0) r.failures.push(`STATE_GUARD_ROOT_SIDEBAR_${r.sidebarCount}`);
+            const sidebarRequired=/^\/collections\/(accessories-gifts-collectibles|armed-forces-gear|thin-line|sta-brite-insignia|state-guard-series-ohio)$/.test(route);
+            if(sidebarRequired && r.sidebarCount!==1) r.failures.push(`SIDEBAR_COUNT_${r.sidebarCount}`);
+            const titleRequired=/^\/collections\/(products-built-for-the-line-u-s-(army|air-force|navy|marine-corps|coast-guard|space-force)|army-national-guard-series|air-national-guard-series|state-guard-series|rotc-series|jrotc-series|military-schools-academies)$/.test(route);
+            if(titleRequired && !r.h1) r.failures.push('MISSING_VISIBLE_PAGE_TITLE');
+            r.paginationLinks=await page.locator('#MainContent a:visible').evaluateAll(as=>as.filter(a=>/previous|next|page\s*\d+/i.test((a.innerText||'')+' '+(a.getAttribute('aria-label')||''))).map(a=>({text:(a.innerText||'').trim(),aria:a.getAttribute('aria-label'),href:a.href})).slice(0,50)).catch(()=>[]);
+            r.perPageControls=await page.locator('#MainContent select:visible,#MainContent button:visible,#MainContent a:visible').evaluateAll(es=>es.filter(e=>/products?\s*per\s*page|per\s*page/i.test((e.innerText||'')+' '+(e.getAttribute('aria-label')||''))).map(e=>({tag:e.tagName,text:(e.innerText||'').trim(),aria:e.getAttribute('aria-label')})).slice(0,20)).catch(()=>[]);
+            await page.screenshot({path:`${out}/${device}-${route.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'home'}.png`,fullPage:true});
+          } catch(e) { r.failures.push('EXCEPTION'); r.error=String(e); }
+          r.pass=r.failures.length===0; fs.writeFileSync(`${out}/result.json`,JSON.stringify(r,null,2)); console.log(JSON.stringify(r,null,2));
+          await context.close(); await browser.close(); if(!r.pass) process.exitCode=2;
+          EOF
+          node gate.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: final-gate-${{ matrix.device }}-${{ strategy.job-index }}
+          path: out
+          retention-days: 7
