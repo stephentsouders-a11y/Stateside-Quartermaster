@@ -30,3 +30,5 @@ jobs:
           git add snippets/sq-sta-brite-refine-root-v2.liquid
           git commit -m 'Fix Sta-Brite mobile grid CSS syntax'
           git push
+      - name: Confirm repaired rule
+        run: grep -F 'grid-template-columns:repeat(2,minmax(0,1fr));gap:12px' snippets/sq-sta-brite-refine-root-v2.liquid
