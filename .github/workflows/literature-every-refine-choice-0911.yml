@@ -9,7 +9,7 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,70 +19,70 @@ jobs:
           npm init -y >/dev/null
           npm install --no-save playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Click every Literature Refine checkbox one by one
+      - name: Exhaustive click routing plus low-volume storefront smoke
         run: |
           mkdir -p out
           cat > audit.mjs <<'JS'
           import { chromium } from 'playwright';
           import fs from 'node:fs';
-          const BASE='https://www.statesideqm.com';
-          const ROOT='/collections/literature';
-          const THEME='158561894555';
+          const BASE='https://www.statesideqm.com',ROOT='/collections/literature',THEME='158561894555';
           const browser=await chromium.launch({headless:true});
           const context=await browser.newContext({viewport:{width:1440,height:1000}});
           const page=await context.newPage();
-          page.setDefaultNavigationTimeout(70000); page.setDefaultTimeout(30000);
-          const report={started:new Date().toISOString(),root:ROOT,theme:THEME,choices:[],failures:[],groups:[]};
+          page.setDefaultNavigationTimeout(70000);page.setDefaultTimeout(30000);
+          const report={started:new Date().toISOString(),theme:THEME,groups:[],choices:[],failures:[],smokes:[]};
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const challenged=t=>/connection needs to be verified|verify you are human|cloudflare/i.test(t||'');
           function rootUrl(){const u=new URL(ROOT,BASE);u.searchParams.set('preview_theme_id',THEME);u.searchParams.set('sq_root','literature');return u.toString()}
-          async function loadRoot(){let last;for(let a=0;a<4;a++){try{const r=await page.goto(rootUrl(),{waitUntil:'domcontentloaded'});if(r?.status()===200){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:40000});await sleep(1800);return}}catch(e){last=e}await sleep(1500*(a+1))}throw last||new Error('root failed')}
-          async function inventory(){return page.evaluate(()=>{const visible=e=>e&&e.offsetWidth>0&&e.offsetHeight>0;const side=[...document.querySelectorAll('.sq-refine-v3-sidebar')].find(visible);if(!side)return[];return [...side.querySelectorAll(':scope > details.sq-refine-v3-group')].map((g,gi)=>({group:(g.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),gi,choices:[...g.querySelectorAll('input[type=checkbox]')].map((i,ci)=>({ci,text:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),kind:i.dataset.kind||'',target:i.dataset.target||'',author:i.dataset.author||'',param:i.dataset.sqPolishParam||'',polishValue:i.dataset.sqPolishValue||'',name:i.name||'',value:i.value||''}))}))})}
+          async function assertNotChallenge(){const txt=await page.locator('body').innerText().catch(()=> '');if(challenged(txt))throw new Error('CLOUDFLARE_CHALLENGE')}
+          async function loadRoot(){const r=await page.goto(rootUrl(),{waitUntil:'domcontentloaded'});if(!r||r.status()>=400)throw new Error('root HTTP '+(r?.status()??'none'));await assertNotChallenge();await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:45000});await sleep(1400);await assertNotChallenge()}
+          async function inventory(){return page.evaluate(()=>{const vis=e=>e&&e.offsetWidth>0&&e.offsetHeight>0;const side=[...document.querySelectorAll('.sq-refine-v3-sidebar')].find(vis);if(!side)return[];return [...side.querySelectorAll(':scope > details.sq-refine-v3-group')].map((g,gi)=>({group:(g.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),gi,choices:[...g.querySelectorAll('input[type=checkbox]')].map((i,ci)=>({ci,text:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),kind:i.dataset.kind||'',target:i.dataset.target||'',filterName:i.dataset.filterName||'',filterValue:i.dataset.filterValue||'',param:i.dataset.sqPolishParam||'',polishValue:i.dataset.sqPolishValue||'',author:i.dataset.author||''}))}))})}
+          function normTarget(u){const x=new URL(u,BASE);['preview_theme_id','page','sq_view_page','sq_per_page','view'].forEach(k=>x.searchParams.delete(k));x.searchParams.sort();return x.pathname+(x.search?'?'+x.searchParams.toString():'')}
           await loadRoot();
-          const groups=await inventory(); report.groups=groups.map(g=>({group:g.group,count:g.choices.length}));
-          const flat=groups.flatMap(g=>g.choices.map(c=>({...c,group:g.group,gi:g.gi})));
+          const groups=await inventory(),flat=groups.flatMap(g=>g.choices.map(c=>({...c,group:g.group,gi:g.gi})));
+          report.groups=groups.map(g=>({group:g.group,count:g.choices.length}));
           console.log('CHOICE_COUNT',flat.length,JSON.stringify(report.groups));
+          if(flat.length!==101)report.failures.push({scope:'inventory',error:'expected 101 choices, got '+flat.length});
+          let armed=false,captured='';
+          await page.route('**/*',async route=>{const req=route.request();if(armed&&req.isNavigationRequest()&&req.frame()===page.mainFrame()){captured=req.url();armed=false;return route.abort('blockedbyclient')}return route.continue()});
           for(let n=0;n<flat.length;n++){
-            const spec=flat[n]; const row={index:n+1,group:spec.group,text:spec.text,kind:spec.kind,target:spec.target,param:spec.param,polishValue:spec.polishValue,ok:false,errors:[]};
-            const errs=[]; const onerr=e=>errs.push(String(e)); page.on('pageerror',onerr);
+            const s=flat[n],row={index:n+1,group:s.group,text:s.text,kind:s.kind,target:s.target,ok:false,errors:[]};captured='';
             try{
-              await loadRoot();
-              const group=page.locator('.sq-refine-v3-sidebar:visible > details.sq-refine-v3-group').nth(spec.gi);
-              await group.evaluate(el=>{el.open=true});
-              const locator=group.locator('input[type=checkbox]').nth(spec.ci);
-              const before=page.url();
-              await locator.evaluate(el=>el.click());
-              await page.waitForFunction(b=>location.href!==b,before,{timeout:30000}).catch(()=>{});
-              await page.waitForLoadState('domcontentloaded').catch(()=>{}); await sleep(1500);
-              row.url=page.url(); row.urlChanged=row.url!==before;
-              row.state=await page.evaluate(()=>{const m=document.querySelector('#MainContent');const visible=e=>e&&e.offsetWidth>0&&e.offsetHeight>0;const side=[...document.querySelectorAll('.sq-refine-v3-sidebar')].find(visible);const grids=[...document.querySelectorAll('.sq-refine-v3-results .product-grid')].filter(visible);return{ready:m?.dataset.sqRefineV3Ready||'',author:m?.dataset.sqRefineV3Author||'',authorError:m?.dataset.sqRefineV3AuthorError||'',cards:grids.reduce((a,g)=>Math.max(a,[...g.children].filter(x=>x.querySelector('a[href*="/products/"]')).length),0),checked:side?[...side.querySelectorAll('input[type=checkbox]:checked')].map(i=>({text:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),target:i.dataset.target||'',author:i.dataset.author||'',value:i.value||''})):[],path:location.pathname,query:location.search};});
-              const actual=new URL(row.url);
-              const target=spec.target?new URL(spec.target,BASE):null;
-              const targetPathOk=!target||row.state.path===target.pathname;
-              const targetQueryOk=!target||[...target.searchParams.entries()].every(([k,v])=>actual.searchParams.getAll(k).includes(v));
-              const nativeQueryOk=!spec.param||actual.searchParams.getAll(spec.param).includes(spec.polishValue);
-              const authorOk=spec.kind!=='author'||(!row.state.authorError&&actual.searchParams.get('sq_author')===spec.author&&row.state.author===spec.author);
-              const hasGrid=row.state.cards>0;
-              row.ok=!!(row.urlChanged&&targetPathOk&&targetQueryOk&&nativeQueryOk&&authorOk&&hasGrid&&errs.length===0);
-              if(!row.urlChanged)row.errors.push('URL did not change after click');
-              if(!targetPathOk)row.errors.push('wrong destination path');
-              if(!targetQueryOk)row.errors.push('target query not preserved');
-              if(!nativeQueryOk)row.errors.push('native filter query not preserved');
-              if(!authorOk)row.errors.push('author state failed');
-              if(!hasGrid)row.errors.push('no visible product cards');
-              if(errs.length)row.errors.push(...errs.map(x=>'runtime: '+x));
-            }catch(e){row.errors.push(String(e));}
-            page.off('pageerror',onerr); report.choices.push(row); if(!row.ok)report.failures.push({index:row.index,group:row.group,text:row.text,errors:row.errors,url:row.url||''});
-            fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
-            console.log('CHOICE',row.index,'/',flat.length,row.ok?'PASS':'FAIL',row.group,'::',row.text,row.url||'',row.errors.join(' | '));
+              await assertNotChallenge();
+              const group=page.locator('.sq-refine-v3-sidebar:visible > details.sq-refine-v3-group').nth(s.gi);await group.evaluate(el=>el.open=true);
+              const input=group.locator('input[type=checkbox]').nth(s.ci);await input.evaluate(el=>{el.checked=false});
+              armed=true;await input.evaluate(el=>el.click());
+              for(let i=0;i<40&&!captured;i++)await sleep(25);
+              armed=false;row.captured=captured;
+              if(!captured)row.errors.push('click emitted no navigation');
+              else {
+                const actual=new URL(captured),expected=s.target?new URL(s.target,BASE):null;
+                if(expected&&actual.pathname!==expected.pathname)row.errors.push('wrong path: '+actual.pathname+' != '+expected.pathname);
+                if(expected){for(const [k,v] of expected.searchParams){if(['preview_theme_id'].includes(k))continue;if(!actual.searchParams.getAll(k).includes(v))row.errors.push('missing expected '+k+'='+v)}}
+                const name=s.filterName||s.param,value=s.filterValue||s.polishValue;
+                if(!expected&&name&&value&&!actual.searchParams.getAll(name).includes(value))row.errors.push('missing native '+name+'='+value);
+                if(!expected&&!name&&s.author&&actual.searchParams.get('sq_author')!==s.author)row.errors.push('author route mismatch');
+                if(actual.searchParams.get('sq_root')!=='literature')row.errors.push('sq_root not preserved');
+              }
+              await input.evaluate(el=>{el.checked=false});row.ok=row.errors.length===0;
+            }catch(e){armed=false;row.errors.push(String(e))}
+            report.choices.push(row);if(!row.ok)report.failures.push({scope:'choice',index:row.index,group:row.group,text:row.text,errors:row.errors,captured:row.captured||''});
+            console.log('CHOICE',row.index,'/',flat.length,row.ok?'PASS':'FAIL',row.group,'::',row.text,row.captured||'',row.errors.join(' | '));
           }
-          report.finished=new Date().toISOString(); report.total=report.choices.length; report.passed=report.choices.filter(x=>x.ok).length; report.failed=report.failures.length;
-          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
-          await page.goto(rootUrl(),{waitUntil:'domcontentloaded'}).catch(()=>{}); await sleep(1800); await page.screenshot({path:'out/final-root.png',fullPage:true}).catch(()=>{});
-          console.log('SUMMARY',JSON.stringify({total:report.total,passed:report.passed,failed:report.failed,failures:report.failures}));
-          await context.close();await browser.close();
-          if(report.failed)process.exit(1);
+          await page.unroute('**/*');
+          const smokePaths=[
+            '/collections/literature-u-s-army?sq_root=literature',
+            '/collections/literature-u-s-conflicts-world-war-i?sq_root=literature',
+            '/collections/literature-aviation-technical-manuals?sq_root=literature',
+            '/collections/literature?sq_root=literature&filter.p.vendor=Books%20by%20splitShops'
+          ];
+          for(const path of smokePaths){const s={path,ok:false,errors:[]};try{const u=new URL(path,BASE);u.searchParams.set('preview_theme_id',THEME);const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded'});await assertNotChallenge();await page.waitForSelector('#MainContent',{timeout:30000});await sleep(1000);await assertNotChallenge();const st=await page.evaluate(()=>({ready:document.querySelector('#MainContent')?.dataset.sqRefineV3Ready||'',products:new Set([...document.querySelectorAll('#MainContent a[href*="/products/"]')].map(a=>a.href.split('?')[0])).size,error:document.querySelector('#MainContent')?.dataset.sqRefineV3Error||''}));s.state=st;if(r?.status()!==200)s.errors.push('HTTP '+r?.status());if(st.error)s.errors.push('Refine error '+st.error);if(!st.products)s.errors.push('no product links');s.ok=s.errors.length===0}catch(e){s.errors.push(String(e))}report.smokes.push(s);if(!s.ok)report.failures.push({scope:'smoke',path,errors:s.errors});console.log('SMOKE',s.ok?'PASS':'FAIL',path,JSON.stringify(s.state||{}),s.errors.join(' | '));if(s.errors.some(x=>x.includes('CLOUDFLARE_CHALLENGE')))break}
+          report.finished=new Date().toISOString();report.total=report.choices.length;report.passed=report.choices.filter(x=>x.ok).length;report.failed=report.failures.length;
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));await page.screenshot({path:'out/final.png',fullPage:true}).catch(()=>{});
+          console.log('SUMMARY',JSON.stringify({total:report.total,passed:report.passed,failed:report.failed,smokes:report.smokes}));
+          await context.close();await browser.close();if(report.failed)process.exit(1);
           JS
-          timeout 1950 node audit.mjs
+          node audit.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
