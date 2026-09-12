@@ -1,0 +1,36 @@
+name: Candidate State Guard syntax certification
+on:
+  push:
+    paths:
+      - '.github/workflows/candidate-state-guard-syntax-cert.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify corrected State Guard scripts
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright'; import fs from 'fs';
+          const routes=['state-guard-series-alabama','state-guard-series-california','state-guard-series-connecticut','state-guard-series-georgia','state-guard-series-indiana','state-guard-series-ohio','state-guard-series-washington'];
+          const browser=await chromium.launch({headless:true}); const out=[];
+          for(const h of routes){const ctx=await browser.newContext({viewport:{width:1365,height:900}});const page=await ctx.newPage();const rec={handle:h,status:null,pageErrors:[],invalidInline:[],authority:false,root:false};page.on('pageerror',e=>rec.pageErrors.push(e.message));const u=new URL(`/collections/${h}`,process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);try{const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});rec.status=r?.status()??null;await page.waitForTimeout(1800);rec.root=await page.locator('[data-sqsg]').count().then(n=>n>0);const scripts=await page.locator('script:not([src])').evaluateAll(ss=>ss.map((s,i)=>({i,type:s.type||'',mark:[...s.attributes].filter(a=>a.name.startsWith('data-sq')).map(a=>a.name).join(' '),text:s.textContent||''})));for(const s of scripts){if(!s.text.trim()||(s.type&&s.type!=='text/javascript'&&s.type!=='application/javascript'))continue;try{new Function(s.text)}catch(e){if(/state-guard/i.test(s.mark))rec.invalidInline.push({mark:s.mark,error:String(e)})}}rec.authority=await page.evaluate(()=>!!window.__sqStateGuardUniformFieldAuthority&&!!window.__sqStateGuardHeadToToeCorrection&&!!window.__sqStateGuardSharedDisplays&&!!window.__sqStateGuardSharedSupplements).catch(()=>false)}catch(e){rec.navError=String(e)}rec.fail=rec.status!==200||rec.invalidInline.length>0||rec.pageErrors.some(x=>/Unexpected token|SyntaxError/i.test(x))||!rec.authority;out.push(rec);await ctx.close();await new Promise(r=>setTimeout(r,1800))}await browser.close();fs.mkdirSync('out',{recursive:true});fs.writeFileSync('out/results.json',JSON.stringify(out,null,2));console.log(JSON.stringify(out,null,2));if(out.some(x=>x.fail))process.exitCode=2;
+          EOF
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: candidate-state-guard-syntax
+          path: out
+          retention-days: 7
