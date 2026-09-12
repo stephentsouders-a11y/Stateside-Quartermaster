@@ -1,0 +1,74 @@
+<script data-sq-state-guard-root-refine-isolation>
+window.__sqGlobalRefineAuthorityV2=true;
+window.__sqGlobalRefineVisibleSurfaceFix=true;
+window.__sqRefineTaxonomyPanelV1=true;
+window.__sqGlobalRefineDirectDataV5=true;
+window.__sqGlobalRefineFacetMemoryV2=true;
+window.__sqGlobalRefineLiquidFallbackV2=true;
+window.__sqRefineCheckboxControlsV3=true;
+window.__sqRefineCheckboxControlsV2=true;
+window.__sqRefineCheckboxControls=true;
+window.__sqSgRootCounts=true;
+</script>
+{% capture sg_rows %}
+state-guard-series-alabama|AL|Alabama State Guard & Alabama Service Corps|Seal_of_Alabama.svg||
+state-guard-series-alaska|AK|Alaska State Defense Force & Alaska Naval Militia|Seal_of_the_State_of_Alaska.svg||
+state-guard-series-california|CA|California State Guard & Cal Guard Maritime|Seal_of_California.svg||
+state-guard-series-connecticut|CT|Connecticut State Militia Units|Seal_of_Connecticut.svg||
+state-guard-series-florida|FL|Florida State Guard|Seal_of_Florida.svg||
+state-guard-series-georgia|GA|Georgia State Defense Force|Seal_of_Georgia.svg||
+state-guard-series-indiana|IN|Indiana Guard Reserve|Seal_of_the_State_of_Indiana.svg||
+state-guard-series-louisiana|LA|Louisiana State Guard & Louisiana Naval Militia|Seal_of_Louisiana.svg||
+state-guard-series-maryland|MD|Maryland Defense Force|Seal_of_Maryland_(reverse).svg||
+state-guard-series-massachusetts|MA|Massachusetts State Defense Force, Massachusetts Naval Militia & National Lancers|Seal_of_Massachusetts.svg||
+state-guard-series-michigan|MI|Michigan Volunteer Defense Force|Seal_of_Michigan.svg||
+state-guard-series-mississippi|MS|Mississippi State Guard|Seal_of_Mississippi.svg||
+state-guard-series-new-mexico|NM|New Mexico State Defense Force|Seal_of_New_Mexico.svg||
+new-jersey-state-guard-naval-militia|NJ|New Jersey State Guard & Naval Militia|Seal_of_New_Jersey.svg||
+state-guard-series-new-york|NY|New York Guard & New York Naval Militia|Seal_of_New_York_(state).svg||
+state-guard-series-ohio|OH|Ohio Military Reserve, Ohio Naval Militia & Ohio Cyber Reserve|Seal_of_Ohio.svg||
+state-guard-series-oregon|OR|Oregon Civil Defense Force|Seal_of_Oregon.svg||
+state-guard-series-puerto-rico|PR|Puerto Rico State Guard|Seal_of_Puerto_Rico.svg||
+state-guard-series-rhode-island|RI|Rhode Island Independent Military Organizations|Seal_of_Rhode_Island.svg||
+state-guard-series-south-carolina|SC|South Carolina State Guard & South Carolina Naval Militia|Seal_of_South_Carolina.svg||
+state-guard-series-tennessee|TN|Tennessee State Guard|Seal_of_Tennessee.svg||
+state-guard-series-texas|TX|Texas State Guard|Seal_of_Texas.svg||
+state-guard-series-vermont|VT|Vermont State Guard|State_Seal_of_Vermont.svg||
+state-guard-series-virginia|VA|Virginia Defense Force|Seal_of_Virginia.svg||
+state-guard-series-washington|WA|Washington State Guard|Seal_of_Washington.svg||
+{% endcapture %}
+{% assign sg_entities = sg_rows | strip | split: '||' %}
+<section class="sg-series-page" data-sq-state-guard-root>
+  <div class="sg-series-wrap">
+    <header class="sg-series-header sg-series-header--title">
+      <p class="sg-series-kicker">State Guard Series</p>
+      <h1>{{ collection.title }}</h1>
+      {% if collection.description != blank %}<div class="sg-series-description">{{ collection.description }}</div>{% endif %}
+    </header>
+    <section class="sq-sg-merch-feature" data-sq-state-guard-merch-feature aria-label="State Guard themed merchandise">
+      <a class="sq-sg-merch-feature__card" href="/collections/state-guard-naval-militia-themed-merchandise">
+        <span class="sq-sg-merch-feature__media"><img src="https://cdn.shopify.com/s/files/1/0774/4602/1275/files/ninjapod_media_1201797_463281_c6cf_FRONT_759b4420-3537-464e-b49e-6eab71da868a.jpg?v=1787771125" alt="State Guard USDF logo shirt merchandise" loading="eager" decoding="async"></span>
+        <span class="sq-sg-merch-feature__copy"><span class="sq-sg-merch-feature__eyebrow">Stateside Quartermaster Originals</span><strong>State Guard Themed Merchandise</strong><span>Shop USDF and State Guard hats, shirts and other State Guard / Naval Militia themed merchandise.</span><span class="sq-sg-merch-feature__cta">Shop State Guard Themed Merchandise →</span></span>
+      </a>
+    </section>
+    <div class="sg-series-header sg-series-header--chooser">
+      <h2>Choose your state or territory</h2>
+      <p class="sg-series-intro">Choose the state or territory first. Where multiple State Guard, State Defense Force, Naval Militia, maritime, cyber, or related state military organizations exist, you will choose the organization on the next page.</p>
+    </div>
+    <div class="sg-entity-grid">
+      {% for row in sg_entities %}
+        {% assign r = row | strip %}{% if r != blank %}{% assign p = r | split: '|' %}{% assign c = collections[p[0]] %}{% assign initial_count = c.products_count | default: 0 %}{% assign seal_src = 'https://commons.wikimedia.org/wiki/Special:FilePath/' | append: p[3] %}{% assign seal_fallback = blank %}{% if p[0] == 'new-jersey-state-guard-naval-militia' %}{% assign seal_src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Seal_of_New_Jersey.svg/512px-Seal_of_New_Jersey.svg.png' %}{% assign seal_fallback = 'https://upload.wikimedia.org/wikipedia/commons/8/8d/Seal_of_New_Jersey.svg' %}{% endif %}
+        <a class="sg-entity" href="/collections/{{ p[0] | escape }}?filter.v.availability=1" aria-label="Shop {{ p[2] | escape }}" data-sg-handle="{{ p[0] | escape }}"><span class="sg-entity__media"><img class="sg-entity__seal" src="{{ seal_src }}"{% if seal_fallback != blank %} data-alt-src="{{ seal_fallback }}"{% endif %} alt="Official seal for {{ p[2] | escape }}" loading="lazy" decoding="async" referrerpolicy="no-referrer"></span><span class="sg-entity__copy"><span class="sg-entity__name">{{ p[2] }}</span><span class="sg-entity__count" data-sg-count>{{ initial_count }} {{ initial_count | pluralize: 'item', 'items' }}</span><span class="sg-entity__arrow" aria-hidden="true">→</span></span></a>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+<script data-sq-state-guard-root-layout-lock>
+(function(){if(window.__sqStateGuardRootLayoutLock)return;window.__sqStateGuardRootLayoutLock=true;function clean(){var main=document.getElementById('MainContent'),root=main&&main.querySelector('[data-sq-state-guard-root]');if(!main||!root)return false;main.classList.remove('sq-refine-v3-active','sq-global-refine-fallback-active','sq-refine-taxonomy-active');var layout=root.closest('.sq-global-refine-layout,.sq-refine-v3-layout');if(layout&&layout.parentNode){layout.parentNode.insertBefore(root,layout);layout.remove()}main.querySelectorAll('.sq-global-refine-sidebar,.sq-refine-v3-sidebar,.sq-refine-taxonomy,.sq-refine-taxonomy-products').forEach(function(node){node.remove()});main.querySelectorAll('.facets-block-wrapper,.facets-container,.facets-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer').forEach(function(node){node.style.setProperty('display','none','important')});root.hidden=false;root.removeAttribute('aria-hidden');root.style.removeProperty('display');root.style.removeProperty('visibility');root.style.removeProperty('opacity');main.dataset.sqStateGuardRootCertified='landing-no-refine';return true}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',clean,{once:true});else clean();var main=document.getElementById('MainContent');if(main){var queued=false,mo=new MutationObserver(function(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;clean()})});mo.observe(main,{childList:true,subtree:true});setTimeout(function(){clean();mo.disconnect()},2500)}[100,300,700,1200,2000].forEach(function(ms){setTimeout(clean,ms)})})();
+</script>
+<script data-sq-state-guard-seal-fallback>(function(){var root=document.querySelector('[data-sq-state-guard-root]');if(!root)return;root.addEventListener('error',function(ev){var img=ev.target;if(!img||!img.matches||!img.matches('.sg-entity__seal'))return;var alt=img.getAttribute('data-alt-src');if(alt&&img.src!==alt){img.removeAttribute('data-alt-src');img.src=alt}},true)})();</script>
+<style data-sq-state-guard-master-parity>
+#MainContent:has([data-sq-state-guard-root]) .sq-global-refine-sidebar,#MainContent:has([data-sq-state-guard-root]) .sq-refine-v3-sidebar,#MainContent:has([data-sq-state-guard-root]) .sq-refine-taxonomy,#MainContent:has([data-sq-state-guard-root]) .facets-block-wrapper,#MainContent:has([data-sq-state-guard-root]) .facets-toggle__wrapper{display:none!important;visibility:hidden!important;pointer-events:none!important}.sg-series-page{background:#f4f1e8;padding:48px 0 96px;color:#0b1c2c}.sg-series-wrap{width:calc(100% - 32px);max-width:none;margin:0 auto}.sg-series-header{max-width:1040px}.sg-series-header--title{margin-bottom:24px}.sg-series-header--chooser{margin:38px 0 28px}.sg-series-kicker{margin:0 0 10px;color:#a61f36;font-size:.8rem;font-weight:900;letter-spacing:.17em;text-transform:uppercase}.sg-series-header h1,.sg-series-header h2{font-family:Impact,Haettenschweiler,'Arial Narrow Bold',sans-serif;text-transform:uppercase;letter-spacing:.025em}.sg-series-header h1{margin:0 0 18px;font-size:clamp(3.7rem,7vw,7rem);line-height:.9}.sg-series-description{max-width:780px;font-size:1.08rem;line-height:1.65}.sg-series-header h2{margin:0 0 8px;font-size:clamp(2rem,3vw,3.3rem)}.sg-series-intro{margin:0;color:#4d565d}.sg-entity-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;width:100%}.sg-entity{position:relative;min-width:0;min-height:322px;background:#fff;border:1px solid #aeb8be;border-radius:12px;color:#fff;text-decoration:none;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 7px 18px rgba(7,29,45,.12)}.sg-entity__media{height:220px;flex:0 0 220px;display:flex;align-items:center;justify-content:center;padding:26px;box-sizing:border-box;background:#fff;border-bottom:1px solid #d9dee1;overflow:hidden}.sg-entity__seal{display:block;width:auto;height:auto;max-width:82%;max-height:82%;object-fit:contain;object-position:50% 50%;margin:auto}.sg-entity__copy{position:relative;min-height:112px;flex:1;display:flex;flex-direction:column;justify-content:center;padding:14px 40px 18px 14px;box-sizing:border-box;background:#071d2d}.sg-entity__name{font-size:.92rem;font-weight:900;line-height:1.12;color:#fff}.sg-entity__count{margin-top:8px;font-size:.76rem;font-weight:800;color:#e3e8ec}.sg-entity__arrow{position:absolute;right:13px;bottom:15px;color:#efb51d;font-size:1.55rem;font-weight:900}.sq-sg-merch-feature{margin:0}.sq-sg-merch-feature__card{display:grid;grid-template-columns:minmax(240px,30%) 1fr;min-height:250px;overflow:hidden;border:1px solid #aeb8be;border-radius:16px;background:#071d2d;color:#fff;text-decoration:none;box-shadow:0 10px 26px rgba(7,29,45,.16)}.sq-sg-merch-feature__media{display:grid;place-items:center;min-height:250px;background:#fff;overflow:hidden}.sq-sg-merch-feature__media img{width:100%;height:100%;max-height:290px;object-fit:contain;object-position:center;padding:14px;box-sizing:border-box;background:#fff}.sq-sg-merch-feature__copy{display:flex;flex-direction:column;justify-content:center;padding:30px 36px}.sq-sg-merch-feature__eyebrow{margin:0 0 8px;color:#d5ab4b;font-size:12px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}.sq-sg-merch-feature__copy strong{font-size:clamp(28px,4vw,48px);line-height:1;text-transform:uppercase}.sq-sg-merch-feature__copy span{margin-top:12px;color:#d9e0e4;font-size:16px;line-height:1.5}.sq-sg-merch-feature__cta{margin-top:18px;color:#d5ab4b!important;font-weight:900;text-transform:uppercase;letter-spacing:.06em}@media(max-width:1100px){.sg-entity-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:760px){.sg-series-wrap{width:calc(100% - 24px)}.sg-entity-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.sq-sg-merch-feature__card{grid-template-columns:1fr}}@media(max-width:430px){.sg-entity-grid{grid-template-columns:1fr}}
+</style>
+{% schema %}{"name":"State Guard Organizations","settings":[],"presets":[{"name":"State Guard Organizations"}]}{% endschema %}
