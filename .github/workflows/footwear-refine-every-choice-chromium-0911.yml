@@ -37,7 +37,7 @@ jobs:
           const norm=s=>String(s??'').replace(/\s+/g,' ').trim();
           const key=s=>norm(s).toLowerCase().replace(/\bgray\b/g,'grey');
           async function getJson(url){let last;for(let i=0;i<5;i++){try{const r=await fetch(url);if(r.ok)return await r.json();last=new Error('HTTP '+r.status)}catch(e){last=e}await sleep(500*(i+1))}throw last}
-          async function collectionProducts(handle){const out=[],seen=new Set();for(let page=1;page<=20;page++){const u=new URL(`/collections/${handle}/products.json`,ORIGIN);u.searchParams.set('limit','250');u.searchParams.set('page',String(page));const j=await getJson(u);const batch=j.products||[];for(const p of batch)if(!seen.has(p.handle)){seen.add(p.handle);out.push(p)}if(batch.length<250)break}return out}
+          async function collectionProducts(handle){const out=[],seen=new Set();for(let productPage=1;productPage<=20;productPage++){const u=new URL(`/collections/${handle}/products.json`,ORIGIN);u.searchParams.set('limit','250');u.searchParams.set('page',String(productPage));const j=await getJson(u);const batch=j.products||[];for(const p of batch)if(!seen.has(p.handle)){seen.add(p.handle);out.push(p)}if(batch.length<250)break}return out}
           const rootProducts=await collectionProducts(ROOT);
           const expectedCategory={};for(const [label,handle] of Object.entries(CATEGORIES))expectedCategory[label]=new Set((await collectionProducts(handle)).map(p=>p.handle));
           function productHasOption(p,name,value){const n=key(name),v=key(value);return (p.options||[]).some(o=>(n?key(o.name)===n:/colou?r|pattern|camo/.test(key(o.name)))&&(o.values||[]).some(x=>key(typeof x==='string'?x:x?.name)===v))}
@@ -54,68 +54,68 @@ jobs:
               return false;
             }).map(p=>p.handle));
           }
-          async function waitReady(page,needColor=false){
-            await page.waitForLoadState('domcontentloaded');
-            await page.waitForSelector('#MainContent .sq-refine-v3-sidebar',{timeout:30000});
-            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',{timeout:30000});
-            if(needColor)await page.waitForFunction(()=>{const m=document.querySelector('#MainContent');return !!(m?.dataset?.sqFootwearColorReady||m?.dataset?.sqFootwearColorError)},{timeout:30000}).catch(()=>{});
+          async function waitReady(pwPage,needColor=false){
+            await pwPage.waitForLoadState('domcontentloaded');
+            await pwPage.waitForSelector('#MainContent .sq-refine-v3-sidebar',{timeout:30000});
+            await pwPage.waitForFunction(()=>document.querySelector('#MainContent')?.dataset?.sqRefineV3Ready==='true',{timeout:30000});
+            if(needColor)await pwPage.waitForFunction(()=>{const m=document.querySelector('#MainContent');return !!(m?.dataset?.sqFootwearColorReady||m?.dataset?.sqFootwearColorError)},{timeout:30000}).catch(()=>{});
           }
-          async function rootPage(page){
+          async function rootPage(pwPage){
             let last;for(let attempt=1;attempt<=3;attempt++){
-              try{const u=new URL(`/collections/${ROOT}`,ORIGIN);u.searchParams.set('preview_theme_id',THEME);u.searchParams.set('sq_per_page','250');await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:35000});await waitReady(page,true);return}catch(e){last=e;await sleep(700*attempt)}
+              try{const u=new URL(`/collections/${ROOT}`,ORIGIN);u.searchParams.set('preview_theme_id',THEME);u.searchParams.set('sq_per_page','250');await pwPage.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:35000});await waitReady(pwPage,true);return}catch(e){last=e;await sleep(700*attempt)}
             throw last;
           }
-          async function handlesOnPage(page){return await page.evaluate(()=>[...new Set([...document.querySelectorAll('#MainContent .sq-refine-v3-results a[href*="/products/"]')].map(a=>{try{return decodeURIComponent(new URL(a.href,location.origin).pathname.split('/products/')[1]||'').split('/')[0]}catch{return''}}).filter(Boolean))])}
-          async function collectAllDisplayed(page){
+          async function handlesOnPage(pwPage){return await pwPage.evaluate(()=>[...new Set([...document.querySelectorAll('#MainContent .sq-refine-v3-results a[href*="/products/"]')].map(a=>{try{return decodeURIComponent(new URL(a.href,location.origin).pathname.split('/products/')[1]||'').split('/')[0]}catch{return''}}).filter(Boolean))])}
+          async function collectAllDisplayed(pwPage){
             const out=new Set();
             for(let n=0;n<5;n++){
-              (await handlesOnPage(page)).forEach(h=>out.add(h));
-              const next=page.locator('#MainContent .sq-refine-v3-pager a',{hasText:'Next'}).first();
+              (await handlesOnPage(pwPage)).forEach(h=>out.add(h));
+              const next=pwPage.locator('#MainContent .sq-refine-v3-pager a',{hasText:'Next'}).first();
               if(await next.count()===0)break;
               const href=await next.getAttribute('href');if(!href)break;
-              await page.goto(new URL(href,ORIGIN).toString(),{waitUntil:'domcontentloaded',timeout:35000});
-              await waitReady(page,false);
+              await pwPage.goto(new URL(href,ORIGIN).toString(),{waitUntil:'domcontentloaded',timeout:35000});
+              await waitReady(pwPage,false);
             }
             return out;
           }
           function productSetResult(actual,expected){if(!(expected instanceof Set))return{extra:[],missing:[],ok:true};const extra=[...actual].filter(h=>!expected.has(h));const missing=[...expected].filter(h=>!actual.has(h));return{extra,missing,ok:extra.length===0&&missing.length===0}}
           const browser=await chromium.launch({headless:true});
           const context=await browser.newContext({viewport:{width:1440,height:1100}});
-          const page=await context.newPage();page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(35000);
-          await rootPage(page);
-          const inventory=await page.evaluate(()=>[...document.querySelectorAll('#MainContent .sq-refine-v3-group')].flatMap(g=>{const group=(g.querySelector(':scope>summary')?.textContent||'').replace(/\s+/g,' ').trim();return [...g.querySelectorAll('.sq-refine-v3-choice input')].map(i=>({group,label:(i.closest('label')?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim(),kind:i.dataset.kind|| (i.hasAttribute('data-sq-fw-color')?'footwear-color':'other'),target:i.dataset.target||'',filterName:i.dataset.filterName||'',filterValue:i.dataset.filterValue||'',value:i.value||''}))}) );
+          const browserPage=await context.newPage();browserPage.setDefaultTimeout(12000);browserPage.setDefaultNavigationTimeout(35000);
+          await rootPage(browserPage);
+          const inventory=await browserPage.evaluate(()=>[...document.querySelectorAll('#MainContent .sq-refine-v3-group')].flatMap(g=>{const group=(g.querySelector(':scope>summary')?.textContent||'').replace(/\s+/g,' ').trim();return [...g.querySelectorAll('.sq-refine-v3-choice input')].map(i=>({group,label:(i.closest('label')?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim(),kind:i.dataset.kind|| (i.hasAttribute('data-sq-fw-color')?'footwear-color':'other'),target:i.dataset.target||'',filterName:i.dataset.filterName||'',filterValue:i.dataset.filterValue||'',value:i.value||''}))}) );
           const rows=[];
           for(const item of inventory){
             try{
-              await rootPage(page);
-              const group=page.locator('#MainContent .sq-refine-v3-group').filter({has:page.locator(':scope > summary',{hasText:item.group})}).first();
+              await rootPage(browserPage);
+              const group=browserPage.locator('#MainContent .sq-refine-v3-group').filter({has:browserPage.locator(':scope > summary',{hasText:item.group})}).first();
               if(await group.count()===0){rows.push({...item,pass:false,error:'group missing on fresh root'});continue}
               await group.evaluate(el=>{el.open=true});
-              const choice=group.locator('.sq-refine-v3-choice').filter({has:page.locator('span',{hasText:item.label})}).first();
+              const choice=group.locator('.sq-refine-v3-choice').filter({has:browserPage.locator('span',{hasText:item.label})}).first();
               const locator=choice.locator('input').first();
               if(await locator.count()===0){rows.push({...item,pass:false,error:'choice missing on fresh root'});continue}
               let expected=null,expectedHandle='';
               if(item.kind==='structural'){expectedHandle=CATEGORIES[item.label]||'';if(expectedHandle)expected=expectedCategory[item.label]}
               else if(item.kind==='native')expected=expectedNative(item.filterName,item.filterValue);
               else if(item.kind==='footwear-color')expected=new Set(rootProducts.filter(p=>productHasOption(p,'',item.value)).map(p=>p.handle));
-              const before=page.url();let clickError=null;
+              const before=browserPage.url();let clickError=null;
               try{
                 await locator.click({timeout:10000});
                 if(item.kind==='footwear-color'){
-                  await page.waitForFunction(v=>new URL(location.href).searchParams.getAll('sq_fw_color').map(x=>x.toLowerCase()).includes(String(v).toLowerCase()),item.value,{timeout:10000});
-                  await page.waitForFunction(()=>!document.querySelector('#MainContent')?.dataset?.sqFootwearColorBusy,{timeout:30000}).catch(()=>{});
+                  await browserPage.waitForFunction(v=>new URL(location.href).searchParams.getAll('sq_fw_color').map(x=>x.toLowerCase()).includes(String(v).toLowerCase()),item.value,{timeout:10000});
+                  await browserPage.waitForFunction(()=>!document.querySelector('#MainContent')?.dataset?.sqFootwearColorBusy,{timeout:30000}).catch(()=>{});
                 }else{
-                  await page.waitForURL(u=>u.toString()!==before,{timeout:15000});
-                  await waitReady(page,false);
+                  await browserPage.waitForURL(u=>u.toString()!==before,{timeout:15000});
+                  await waitReady(browserPage,false);
                 }
               }catch(e){clickError=String(e)}
-              let after=page.url(),pathOK=true,urlOK=true;
+              let after=browserPage.url(),pathOK=true,urlOK=true;
               if(item.kind==='structural'&&expectedHandle)pathOK=new URL(after).pathname===`/collections/${expectedHandle}`;
               if(item.kind==='native')urlOK=new URL(after).searchParams.getAll(item.filterName).includes(item.filterValue);
               if(item.kind==='footwear-color')urlOK=new URL(after).searchParams.getAll('sq_fw_color').map(key).includes(key(item.value));
-              let checked=false;try{checked=await page.locator('#MainContent .sq-refine-v3-choice input:checked').count()>0}catch{}
-              if(item.kind==='structural'&&pathOK){const u=new URL(after);u.searchParams.set('sq_per_page','250');u.searchParams.set('sq_view_page','1');await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:35000});await waitReady(page,false);after=page.url()}
-              const actual=await collectAllDisplayed(page);
+              let checked=false;try{checked=await browserPage.locator('#MainContent .sq-refine-v3-choice input:checked').count()>0}catch{}
+              if(item.kind==='structural'&&pathOK){const u=new URL(after);u.searchParams.set('sq_per_page','250');u.searchParams.set('sq_view_page','1');await browserPage.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:35000});await waitReady(browserPage,false);after=browserPage.url()}
+              const actual=await collectAllDisplayed(browserPage);
               const ps=productSetResult(actual,expected);
               const pass=!clickError&&pathOK&&urlOK&&checked&&ps.ok;
               rows.push({...item,before,after,expectedCount:expected instanceof Set?expected.size:null,actualCount:actual.size,pathOK,urlOK,checked,extra:ps.extra,missing:ps.missing,pass,error:clickError});
