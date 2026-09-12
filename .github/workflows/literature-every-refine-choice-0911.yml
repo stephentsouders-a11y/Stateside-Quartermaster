@@ -34,36 +34,39 @@ jobs:
           page.setDefaultNavigationTimeout(70000); page.setDefaultTimeout(30000);
           const report={started:new Date().toISOString(),root:ROOT,theme:THEME,choices:[],failures:[],groups:[]};
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          const vis=e=>e&&e.offsetWidth>0&&e.offsetHeight>0;
           function rootUrl(){const u=new URL(ROOT,BASE);u.searchParams.set('preview_theme_id',THEME);u.searchParams.set('sq_root','literature');return u.toString()}
-          async function loadRoot(){let last;for(let a=0;a<4;a++){try{const r=await page.goto(rootUrl(),{waitUntil:'domcontentloaded'});if(r?.status()===200){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:40000});await sleep(2200);return}}catch(e){last=e}await sleep(1500*(a+1))}throw last||new Error('root failed')}
-          async function inventory(){return page.evaluate(()=>{const side=[...document.querySelectorAll('.sq-refine-v3-sidebar')].find(e=>e.offsetWidth>0&&e.offsetHeight>0);if(!side)return[];return [...side.querySelectorAll(':scope > details.sq-refine-v3-group')].map((g,gi)=>({group:(g.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),gi,choices:[...g.querySelectorAll('input[type=checkbox]')].map((i,ci)=>({ci,text:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),kind:i.dataset.kind||'',target:i.dataset.target||'',author:i.dataset.author||'',name:i.name||'',value:i.value||''}))}))})}
+          async function loadRoot(){let last;for(let a=0;a<4;a++){try{const r=await page.goto(rootUrl(),{waitUntil:'domcontentloaded'});if(r?.status()===200){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:40000});await sleep(1800);return}}catch(e){last=e}await sleep(1500*(a+1))}throw last||new Error('root failed')}
+          async function inventory(){return page.evaluate(()=>{const visible=e=>e&&e.offsetWidth>0&&e.offsetHeight>0;const side=[...document.querySelectorAll('.sq-refine-v3-sidebar')].find(visible);if(!side)return[];return [...side.querySelectorAll(':scope > details.sq-refine-v3-group')].map((g,gi)=>({group:(g.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),gi,choices:[...g.querySelectorAll('input[type=checkbox]')].map((i,ci)=>({ci,text:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),kind:i.dataset.kind||'',target:i.dataset.target||'',author:i.dataset.author||'',param:i.dataset.sqPolishParam||'',polishValue:i.dataset.sqPolishValue||'',name:i.name||'',value:i.value||''}))}))})}
           await loadRoot();
           const groups=await inventory(); report.groups=groups.map(g=>({group:g.group,count:g.choices.length}));
           const flat=groups.flatMap(g=>g.choices.map(c=>({...c,group:g.group,gi:g.gi})));
           console.log('CHOICE_COUNT',flat.length,JSON.stringify(report.groups));
           for(let n=0;n<flat.length;n++){
-            const spec=flat[n]; const row={index:n+1,group:spec.group,text:spec.text,kind:spec.kind,target:spec.target,ok:false,errors:[]};
+            const spec=flat[n]; const row={index:n+1,group:spec.group,text:spec.text,kind:spec.kind,target:spec.target,param:spec.param,polishValue:spec.polishValue,ok:false,errors:[]};
             const errs=[]; const onerr=e=>errs.push(String(e)); page.on('pageerror',onerr);
             try{
               await loadRoot();
-              const locator=page.locator('.sq-refine-v3-sidebar:visible > details.sq-refine-v3-group').nth(spec.gi).locator('input[type=checkbox]').nth(spec.ci);
-              await locator.scrollIntoViewIfNeeded();
+              const group=page.locator('.sq-refine-v3-sidebar:visible > details.sq-refine-v3-group').nth(spec.gi);
+              await group.evaluate(el=>{el.open=true});
+              const locator=group.locator('input[type=checkbox]').nth(spec.ci);
               const before=page.url();
-              await locator.check({force:true});
+              await locator.evaluate(el=>el.click());
               await page.waitForFunction(b=>location.href!==b,before,{timeout:30000}).catch(()=>{});
-              await page.waitForLoadState('domcontentloaded').catch(()=>{}); await sleep(1600);
+              await page.waitForLoadState('domcontentloaded').catch(()=>{}); await sleep(1500);
               row.url=page.url(); row.urlChanged=row.url!==before;
               row.state=await page.evaluate(()=>{const m=document.querySelector('#MainContent');const visible=e=>e&&e.offsetWidth>0&&e.offsetHeight>0;const side=[...document.querySelectorAll('.sq-refine-v3-sidebar')].find(visible);const grids=[...document.querySelectorAll('.sq-refine-v3-results .product-grid')].filter(visible);return{ready:m?.dataset.sqRefineV3Ready||'',author:m?.dataset.sqRefineV3Author||'',authorError:m?.dataset.sqRefineV3AuthorError||'',cards:grids.reduce((a,g)=>Math.max(a,[...g.children].filter(x=>x.querySelector('a[href*="/products/"]')).length),0),checked:side?[...side.querySelectorAll('input[type=checkbox]:checked')].map(i=>({text:(i.closest('label')?.textContent||'').replace(/\s+/g,' ').trim(),target:i.dataset.target||'',author:i.dataset.author||'',value:i.value||''})):[],path:location.pathname,query:location.search};});
+              const actual=new URL(row.url);
               const target=spec.target?new URL(spec.target,BASE):null;
               const targetPathOk=!target||row.state.path===target.pathname;
-              const queryOk=!target||[...target.searchParams.entries()].every(([k,v])=>new URL(row.url).searchParams.getAll(k).includes(v));
-              const authorOk=spec.kind!=='author'||(!row.state.authorError&&new URL(row.url).searchParams.get('sq_author')===spec.author&&row.state.author===spec.author);
+              const targetQueryOk=!target||[...target.searchParams.entries()].every(([k,v])=>actual.searchParams.getAll(k).includes(v));
+              const nativeQueryOk=!spec.param||actual.searchParams.getAll(spec.param).includes(spec.polishValue);
+              const authorOk=spec.kind!=='author'||(!row.state.authorError&&actual.searchParams.get('sq_author')===spec.author&&row.state.author===spec.author);
               const hasGrid=row.state.cards>0;
-              row.ok=!!(row.urlChanged&&targetPathOk&&queryOk&&authorOk&&hasGrid&&errs.length===0);
+              row.ok=!!(row.urlChanged&&targetPathOk&&targetQueryOk&&nativeQueryOk&&authorOk&&hasGrid&&errs.length===0);
               if(!row.urlChanged)row.errors.push('URL did not change after click');
               if(!targetPathOk)row.errors.push('wrong destination path');
-              if(!queryOk)row.errors.push('target query not preserved');
+              if(!targetQueryOk)row.errors.push('target query not preserved');
+              if(!nativeQueryOk)row.errors.push('native filter query not preserved');
               if(!authorOk)row.errors.push('author state failed');
               if(!hasGrid)row.errors.push('no visible product cards');
               if(errs.length)row.errors.push(...errs.map(x=>'runtime: '+x));
@@ -74,7 +77,7 @@ jobs:
           }
           report.finished=new Date().toISOString(); report.total=report.choices.length; report.passed=report.choices.filter(x=>x.ok).length; report.failed=report.failures.length;
           fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
-          await page.goto(rootUrl(),{waitUntil:'domcontentloaded'}).catch(()=>{}); await sleep(2000); await page.screenshot({path:'out/final-root.png',fullPage:true}).catch(()=>{});
+          await page.goto(rootUrl(),{waitUntil:'domcontentloaded'}).catch(()=>{}); await sleep(1800); await page.screenshot({path:'out/final-root.png',fullPage:true}).catch(()=>{});
           console.log('SUMMARY',JSON.stringify({total:report.total,passed:report.passed,failed:report.failed,failures:report.failures}));
           await context.close();await browser.close();
           if(report.failed)process.exit(1);
