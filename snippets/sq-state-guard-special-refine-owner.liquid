@@ -1,0 +1,30 @@
+{% if request.page_type == 'collection' %}
+{% if collection.handle contains 'state-guard-series-' or collection.handle == 'new-jersey-state-guard-naval-militia' %}
+<style data-sq-state-guard-special-refine-owner>
+#MainContent .sq-global-refine-sidebar{display:none!important;visibility:hidden!important;pointer-events:none!important}
+</style>
+<script data-sq-state-guard-special-refine-owner>
+(function(){
+  if(window.__sqStateGuardSpecialRefineOwner)return;window.__sqStateGuardSpecialRefineOwner=true;
+  var main=document.getElementById('MainContent');if(!main)return;
+  function unwrapLegacyGlobal(){
+    var sides=[].slice.call(main.querySelectorAll('.sq-global-refine-sidebar'));
+    sides.forEach(function(side){
+      var layout=side.closest('.sq-global-refine-layout');
+      if(layout&&layout.parentNode){
+        var body=layout.querySelector(':scope > .sq-global-refine-main'),parent=layout.parentNode;
+        if(body){while(body.firstChild)parent.insertBefore(body.firstChild,layout)}
+        layout.remove();
+      }else side.remove();
+    });
+    document.documentElement.dataset.sqStateGuardRefineOwner='specialized';
+  }
+  var queued=false;
+  function queue(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;unwrapLegacyGlobal()})}
+  unwrapLegacyGlobal();
+  new MutationObserver(queue).observe(main,{childList:true,subtree:true});
+  [50,150,350,700,1400,2600,5000,8000].forEach(function(ms){setTimeout(unwrapLegacyGlobal,ms)});
+})();
+</script>
+{% endif %}
+{% endif %}
