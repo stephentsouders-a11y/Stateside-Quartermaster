@@ -44,7 +44,6 @@
   function tags(p){var t=p&&p.tags||[];return Array.isArray(t)?t:String(t).split(',').map(function(x){return x.trim()}).filter(Boolean)}
   function text(p){return norm([p&&p.title,p&&p.product_type,tags(p).join(' ')].join(' '))}
   function esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return c==='&'?'&amp;':c==='<'?'&lt;':c==='>'?'&gt;':c==='"'?'&quot;':'&#39;'})}
-  function available(p){return !p.variants||!p.variants.length||p.variants.some(function(v){return v.available===true})}
   function image(p){var x=p&&p.images&&p.images[0];return x?(typeof x==='string'?x:x.src||''):''}
   function price(p){var v=p&&p.variants&&p.variants.find(function(x){return x.available===true})||p&&p.variants&&p.variants[0];return v&&v.price?'$'+v.price:''}
   function unique(a){var seen={},out=[];(a||[]).forEach(function(p){var k=p&&p.handle;if(k&&!seen[k]){seen[k]=1;out.push(p)}});return out}
@@ -53,7 +52,7 @@
   function naval(o){return /naval militia|maritime/i.test(o||'')}
   function collection(handle,maxPages){
     if(cache[handle])return cache[handle];
-    cache[handle]=(async function(){var all=[],root=(window.Shopify&&Shopify.routes&&Shopify.routes.root)||'/';if(root.slice(-1)!=='/')root+='/';for(var page=1;page<=(maxPages||10);page++){try{var r=await fetch(root+'collections/'+encodeURIComponent(handle)+'/products.json?limit=250&page='+page,{credentials:'same-origin'});if(!r.ok)break;var j=await r.json(),b=j&&Array.isArray(j.products)?j.products:[];all=all.concat(b.filter(available));if(b.length<250)break}catch(e){break}}return unique(all)})();
+    cache[handle]=(async function(){var all=[],root=(window.Shopify&&Shopify.routes&&Shopify.routes.root)||'/';if(root.slice(-1)!=='/')root+='/';for(var page=1;page<=(maxPages||10);page++){try{var r=await fetch(root+'collections/'+encodeURIComponent(handle)+'/products.json?limit=250&page='+page,{credentials:'same-origin'});if(!r.ok)break;var j=await r.json(),b=j&&Array.isArray(j.products)?j.products:[];all=all.concat(b);if(b.length<250)break}catch(e){break}}return unique(all)})();
     return cache[handle];
   }
   function branchCat(p){var s=text(p);if(/\b(ribbon|medal|award|decoration)\b/.test(s)&&!/cap device/.test(s))return'awards';if(/\b(flag|patch|patches|tab|tabs|scroll|scrolls)\b/.test(s))return'patches';return'insignia'}
