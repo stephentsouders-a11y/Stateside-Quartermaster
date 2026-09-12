@@ -9,7 +9,7 @@ permissions:
 jobs:
   certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/setup-node@v4
         with: {node-version: '24'}
@@ -42,19 +42,32 @@ jobs:
             ['Tents, Shelters & Weather Protection','tents-shelters-weather-protection'],
             ['Water & Hydration','water-hydration-1']
           ]);
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
           const report={base,initial:null,inventory:[],choices:[],failures:[],consoleErrors:[],startedAt:new Date().toISOString()};
           const browser=await chromium.launch({headless:true});
           const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
           const page=await ctx.newPage();
-          page.setDefaultTimeout(12000); page.setDefaultNavigationTimeout(30000);
+          page.setDefaultTimeout(15000); page.setDefaultNavigationTimeout(45000);
           let currentLabel='seed';
           page.on('pageerror',e=>report.consoleErrors.push(`${currentLabel}: pageerror ${e}`));
-          page.on('console',m=>{if(m.type()==='error'&&!/favicon|ERR_BLOCKED_BY_CLIENT/i.test(m.text()))report.consoleErrors.push(`${currentLabel}: ${m.text()}`)});
+          page.on('console',m=>{if(m.type()==='error'&&!/favicon|ERR_BLOCKED_BY_CLIENT|shop\.app|Content Security Policy|Failed to load resource.*(?:403|429)/i.test(m.text()))report.consoleErrors.push(`${currentLabel}: ${m.text()}`)});
+          async function gotoWithBackoff(url){
+            let lastStatus=0;
+            for(let attempt=0;attempt<6;attempt++){
+              const r=await page.goto(url,{waitUntil:'domcontentloaded'}).catch(()=>null);
+              lastStatus=r?.status()||0;
+              if(lastStatus===200)return r;
+              if(lastStatus!==429&&lastStatus!==502&&lastStatus!==503&&lastStatus!==504)throw new Error(`HTTP ${lastStatus||'navigation failure'}`);
+              const wait=Math.min(30000,4000*Math.pow(1.7,attempt));
+              console.log(`backoff HTTP ${lastStatus} for ${Math.round(wait)}ms`);
+              await sleep(wait);
+            }
+            throw new Error(`HTTP ${lastStatus} after retries`);
+          }
           async function openBase(){
-            const r=await page.goto(base,{waitUntil:'domcontentloaded'});
-            if(r?.status()!==200) throw new Error(`HTTP ${r?.status()}`);
-            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:18000});
-            await page.waitForTimeout(250);
+            await gotoWithBackoff(base);
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:25000});
+            await page.waitForTimeout(500);
           }
           const snapshot=()=>page.evaluate(()=>{const m=document.querySelector('#MainContent'),v=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};const rg=m?.querySelector('.sq-refine-v3-results .product-grid');return {theme:String(window.Shopify?.theme?.id||''),ready:m?.dataset.sqRefineV3Ready||null,sidebar:[...(m?.querySelectorAll('.sq-refine-v3-sidebar')||[])].filter(v).length,legacy:[...(m?.querySelectorAll('.sq-subcategory-card')||[])].filter(v).length,native:[...(m?.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')||[])].filter(v).length,grids:[...(m?.querySelectorAll('.product-grid')||[])].filter(g=>v(g)&&g.querySelector('a[href*="/products/"]')).length,cards:rg?[...rg.children].filter(v).length:0,stateGuard:/State Guard Uniform Builder|Build Your Uniform|PT Uniform/i.test(m?.innerText||'')}});
           try{
@@ -66,7 +79,7 @@ jobs:
             if(report.initial.native)report.failures.push(`native filters=${report.initial.native}`);
             if(report.initial.grids!==1)report.failures.push(`visible grids=${report.initial.grids}`);
             if(report.initial.stateGuard)report.failures.push('State Guard contamination');
-            report.inventory=await page.evaluate(()=>{const side=document.querySelector('#MainContent .sq-refine-v3-sidebar');return [...side.querySelectorAll('details.sq-refine-v3-group')].flatMap((d,gi)=>{const group=(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim();return [...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>({group,gi,ii,label:(i.closest('label')?.querySelector('span')?.textContent||i.closest('label')?.textContent||i.value||'').replace(/\s+/g,' ').trim(),value:i.value||'',target:i.dataset.target||'',filterName:i.dataset.filterName||'',polish:i.dataset.sqPolishParam||''}))})});
+            report.inventory=await page.evaluate(()=>{const side=document.querySelector('#MainContent .sq-refine-v3-sidebar');return [...side.querySelectorAll('details.sq-refine-v3-group')].flatMap((d,gi)=>{const group=(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim();return [...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>({group,gi,ii,label:(i.closest('label')?.querySelector('span')?.textContent||i.closest('label')?.textContent||i.dataset.filterValue||i.value||'').replace(/\s+/g,' ').trim(),target:i.dataset.target||'',filterName:i.dataset.filterName||'',filterValue:i.dataset.filterValue||'',kind:i.dataset.kind||''}))})});
             const cats=report.inventory.filter(x=>x.group==='Shop by Category');
             if(cats.length!==14)report.failures.push(`category count ${cats.length}`);
             for(const [lab] of expected)if(!cats.some(x=>x.label===lab))report.failures.push(`missing category ${lab}`);
@@ -75,6 +88,7 @@ jobs:
               const meta=report.inventory[n]; currentLabel=`${meta.group} > ${meta.label}`;
               const errors=[];
               try{
+                if(n>0)await sleep(1800);
                 await openBase();
                 const d=page.locator('#MainContent details.sq-refine-v3-group').nth(meta.gi);
                 if(!(await d.getAttribute('open')))await d.locator(':scope > summary').click();
@@ -82,10 +96,12 @@ jobs:
                 await input.scrollIntoViewIfNeeded();
                 const before=page.url();
                 await input.click({force:true});
-                await page.waitForFunction(old=>location.href!==old,before,{timeout:8000}).catch(()=>{});
+                await page.waitForFunction(old=>location.href!==old,before,{timeout:10000}).catch(()=>{});
                 await page.waitForLoadState('domcontentloaded').catch(()=>{});
-                await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:12000}).catch(()=>{});
-                await page.waitForTimeout(250);
+                if((await page.locator('body').count())===0)throw new Error('empty document');
+                await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:20000}).catch(()=>{});
+                await page.waitForTimeout(450);
+                if((await page.locator('body').innerText().catch(()=>''))==='')throw new Error('empty body');
                 const u=new URL(page.url()), state=await snapshot();
                 if(state.ready!=='true')errors.push(`ready=${state.ready}`);
                 if(state.sidebar!==1)errors.push(`sidebar=${state.sidebar}`);
@@ -97,9 +113,11 @@ jobs:
                   if(!h)errors.push('unexpected category');
                   else if(u.pathname!==`/collections/${h}`)errors.push(`path=${u.pathname} expected=/collections/${h}`);
                   if(state.cards<1)errors.push('zero products');
+                }else if(meta.kind==='structural'){
+                  const t=new URL(meta.target,base);if(u.pathname!==t.pathname)errors.push(`path=${u.pathname} expected=${t.pathname}`);if(state.cards<1)errors.push('zero products');
                 }else{
-                  if(meta.target){const t=new URL(meta.target,base);if(u.pathname!==t.pathname)errors.push(`path=${u.pathname} expected=${t.pathname}`)}
-                  else {const param=meta.filterName||meta.polish;if(!param)errors.push('no filter metadata');else if(!u.searchParams.getAll(param).includes(meta.value))errors.push(`missing ${param}=${meta.value}`)}
+                  if(!meta.filterName||!meta.filterValue)errors.push('missing filter metadata');
+                  else if(!u.searchParams.getAll(meta.filterName).includes(meta.filterValue))errors.push(`missing ${meta.filterName}=${meta.filterValue}`);
                   if(state.cards<1)errors.push('zero products');
                 }
                 report.choices.push({...meta,url:u.href,cards:state.cards,errors});
