@@ -3,8 +3,7 @@
 (function(){
   if(window.__sqRefineV3ClickRescue)return;
   window.__sqRefineV3ClickRescue=true;
-  function rootUrl(input){
-    var main=document.getElementById('MainContent');
+  function rootUrl(){
     var root=(new URLSearchParams(location.search)).get('sq_root') || (document.querySelector('[data-current-handle]')?.dataset.currentHandle || location.pathname.split('/collections/')[1]?.split('/')[0] || '');
     var u=new URL('/collections/'+root,location.origin);
     var p=new URLSearchParams(location.search).get('preview_theme_id');
@@ -18,16 +17,17 @@
     if(!input)return;
     ev.preventDefault();
     ev.stopImmediatePropagation();
+    // For checkbox click events, input.checked is already the POST-toggle state.
     var checked=input.checked;
     if(input.dataset.kind==='structural'){
-      if(!checked && input.dataset.target){ location.assign(input.dataset.target); return; }
-      location.assign(rootUrl(input).toString());
+      if(checked && input.dataset.target){ location.assign(input.dataset.target); return; }
+      location.assign(rootUrl().toString());
       return;
     }
     var u=new URL(location.href), name=input.dataset.filterName, value=input.dataset.filterValue;
     if(!name)return;
     var vals=u.searchParams.getAll(name).filter(function(v){return v!==value});
-    if(!checked)vals.push(value);
+    if(checked)vals.push(value);
     u.searchParams.delete(name);
     Array.from(new Set(vals)).forEach(function(v){u.searchParams.append(name,v)});
     u.searchParams.delete('page');
