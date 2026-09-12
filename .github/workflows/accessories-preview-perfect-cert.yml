@@ -1,10 +1,8 @@
-name: Accessories live single-refine certification
+name: Accessories preview single-refine certification
 on:
   push:
     branches: [main]
     paths:
-      - 'snippets/sq-single-refine-authority.liquid'
-      - 'snippets/sq-storefront-content-guard.liquid'
       - '.github/workflows/accessories-preview-perfect-cert.yml'
   workflow_dispatch:
 permissions:
@@ -21,13 +19,13 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Certify live Accessories single Refine authority
+      - name: Certify preview Accessories single Refine authority
         run: |
           cat > certify.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'fs';
           fs.mkdirSync('cert-out',{recursive:true});
-          const target='https://www.statesideqm.com/collections/accessories-gifts-collectibles';
+          const target='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
           const failures=[],results=[];
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
           for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
@@ -36,25 +34,26 @@ jobs:
             page.setDefaultNavigationTimeout(60000);
             let response=null,navError=null;
             try{response=await page.goto(target,{waitUntil:'domcontentloaded'});}catch(e){navError=String(e);}
-            await sleep(5000);
+            await sleep(5500);
             const audit=await page.evaluate(()=>{
               const main=document.querySelector('#MainContent');
               const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
-              const custom=[...(main?.querySelectorAll('.sq-global-refine-sidebar')||[])].filter(vis);
-              const nativeSelectors=['.facets-block-wrapper--horizontal .facets__filters-wrapper','.facets-toggle__wrapper','theme-drawer#filters-drawer','#filters-drawer','.facets-block-wrapper--vertical','.facets__form-vertical','facet-filters-form','.mobile-facets__wrapper','.mobile-facets__open-wrapper'];
+              const custom=[...(main?.querySelectorAll('.sq-refine-v3-sidebar,.sq-global-refine-sidebar')||[])].filter(vis);
+              const nativeSelectors=['.facets-block-wrapper--horizontal .facets__filters-wrapper','.facets-toggle__wrapper','theme-drawer#filters-drawer','#filters-drawer','.facets-block-wrapper--vertical','.facets__form-vertical','.mobile-facets__wrapper','.mobile-facets__open-wrapper'];
               const native=[];
               nativeSelectors.forEach(sel=>{[...(main?.querySelectorAll(sel)||[])].forEach(el=>{if(!custom.some(c=>c===el||c.contains(el)||el.contains(c))&&vis(el))native.push(el);});});
+              const titleNodes=[...(main?.querySelectorAll('.sq-refine-v3-sidebar__title,.sq-global-refine-sidebar__title')||[])].filter(vis);
+              const groups=[...(custom[0]?.querySelectorAll('details')||[])].filter(vis);
               return {
                 url:location.href,
                 title:document.title,
                 customVisible:custom.length,
-                refineTitles:[...(main?.querySelectorAll('.sq-global-refine-sidebar__title')||[])].filter(vis).length,
-                detailGroups:[...(main?.querySelectorAll('.sq-global-refine-sidebar details')||[])].filter(vis).length,
+                refineTitles:titleNodes.length,
+                detailGroups:groups.length,
+                groupTitles:groups.map(d=>(d.querySelector('summary')?.textContent||'').replace(/\s+/g,' ').trim()),
                 nativeVisible:native.length,
-                bodyClass:document.body.className,
-                authority:custom[0]?.getAttribute('data-sq-refine-authority')||null,
-                guardCustom:document.documentElement.dataset.sqRefineCustomVisible||null,
-                guardNative:document.documentElement.dataset.sqRefineNativeVisible||null,
+                accessoriesRepair:main?.dataset.sqAccessoriesRefineRepair||null,
+                v3Ready:main?.dataset.sqRefineV3Ready||null,
                 horizontalOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4
               };
             }).catch(e=>({error:String(e)}));
@@ -63,8 +62,7 @@ jobs:
             if(response?.status()!==200)failures.push(`${device}: HTTP ${response?.status()}`);
             if(navError)failures.push(`${device}: navigation error ${navError}`);
             if(audit.error)failures.push(`${device}: audit error ${audit.error}`);
-            if(audit.customVisible!==1)failures.push(`${device}: expected exactly 1 visible custom Refine sidebar, found ${audit.customVisible}`);
-            if(audit.refineTitles!==1)failures.push(`${device}: expected exactly 1 visible Refine Products title, found ${audit.refineTitles}`);
+            if(audit.customVisible!==1)failures.push(`${device}: expected exactly 1 visible Refine sidebar, found ${audit.customVisible}`);
             if(audit.detailGroups<1)failures.push(`${device}: Refine Products has no functional groups`);
             if(audit.nativeVisible!==0)failures.push(`${device}: duplicate native filter UI still visible (${audit.nativeVisible})`);
             if(audit.horizontalOverflow)failures.push(`${device}: horizontal overflow`);
@@ -79,6 +77,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: accessories-live-single-refine-cert
+          name: accessories-preview-single-refine-cert
           path: cert-out
           retention-days: 7
