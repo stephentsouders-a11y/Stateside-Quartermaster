@@ -1,0 +1,80 @@
+{% if request.page_type == 'collection' %}
+{% if collection.handle contains 'state-guard-series-' or collection.handle == 'new-jersey-state-guard-naval-militia' %}
+<script data-sq-state-guard-head-to-toe-correction>
+(function(){
+  if(window.__sqStateGuardHeadToToeCorrection)return;
+  window.__sqStateGuardHeadToToeCorrection=true;
+  var root=document.querySelector('[data-sqsg]');if(!root)return;
+  var q=new URLSearchParams(location.search),cat=q.get('sg_category')||'',type=q.get('sg_type')||'',component=q.get('sg_component')||'';
+  if(cat!=='uniforms'||!type)return;
+  var handle=root.dataset.handle||'',state=root.dataset.state||'';
+  var ORDER={
+    'OCP / Field Uniform':['Headwear','Uniform Coat','Undershirt','Name Tape','Organization Tape','Rank','Shoulder / Unit Insignia','State Flag','Identification / Dog Tags','Belt','Trousers','Socks','Boots','Cold Weather / Outerwear','Other OCP Components'],
+    'AGSU / Green Service Uniform':['Headwear','Coat / Jacket','Shirt','Undershirt','Tie / Neck Tab','Shoulder Boards / Marks','Rank & Insignia','Badges & Devices','Ribbons & Awards','Name Plate & ID','Belt & Buckle','Trousers / Skirt','Socks & Hosiery','Dress Shoes','Outerwear','Other AGSU Components'],
+    'ASU / Blue Service Uniform':['Headwear','Coat / Jacket','Shirt','Undershirt','Tie / Neck Tab','Shoulder Boards / Marks','Rank & Insignia','Badges & Devices','Ribbons & Awards','Name Plate & ID','Belt & Buckle','Trousers / Skirt','Socks & Hosiery','Dress Shoes','Outerwear','Other ASU Components'],
+    'PT Uniform':['Short-Sleeve Shirt','Long-Sleeve Shirt','Sweatshirt / Hoodie','Reflective Belt','Shorts','Pants','Footwear','Cold Weather PT','Other PT Components'],
+    'Cold Weather & Outerwear':['Cold Weather Headwear','Base Layers','Fleece & Mid Layers','Jackets & Parkas','Gloves','Cold Weather Bottoms','Socks','Cold Weather Footwear','Other Cold Weather Gear'],
+    'Medical / Utility Uniforms':['Scrub Tops','Scrub Pants','Medical Footwear','Medical Uniform Accessories'],
+    'Undershirts':['Undershirts'],
+    'Uniform Components':['Headwear','Upper-Body Components','Rank & Insignia','Identification','Belts & Waist','Lower-Body Components','Footwear','Other Uniform Components']
+  };
+  var SERVICE={
+    'state-guard-series-alabama':{agsu:['alabama-state-guard-male-agsu-green-service-uniform','alabama-state-guard-female-agsu-green-service-uniform'],asu:['alabama-state-guard-male-asu-service-uniform','alabama-state-guard-female-asu-service-uniform']},
+    'state-guard-series-alaska':{agsu:['asdf-green-service-uniform','asdf-female-green-service-uniform'],asu:['asdf-service-uniform','asdf-female-service-uniform']},
+    'state-guard-series-california':{agsu:['csg-green-service-uniform','csg-female-green-service-uniform'],asu:['csg-service-uniform','csg-female-service-uniform']},
+    'state-guard-series-connecticut':{agsu:['connecticut-state-militia-male-agsu-green-service-uniform','connecticut-state-militia-female-agsu-green-service-uniform'],asu:['connecticut-state-militia-male-asu-service-uniform','connecticut-state-militia-female-asu-service-uniform']},
+    'state-guard-series-florida':{agsu:['fsg-green-service-uniform','fsg-female-green-service-uniform'],asu:['fsg-service-uniform','fsg-female-service-uniform']},
+    'state-guard-series-georgia':{agsu:['gsdf-green-service-uniform','gsdf-female-green-service-uniform'],asu:['gsdf-service-uniform','gsdf-female-service-uniform']},
+    'state-guard-series-indiana':{agsu:['igr-green-service-uniform','igr-female-green-service-uniform'],asu:['igr-service-uniform','igr-female-service-uniform']},
+    'state-guard-series-louisiana':{agsu:['lsg-green-service-uniform','lsg-female-green-service-uniform'],asu:['lsg-service-uniform','lsg-female-service-uniform']},
+    'state-guard-series-maryland':{agsu:['mddf-green-service-uniform','mddf-female-green-service-uniform'],asu:['mddf-service-uniform','mddf-female-service-uniform']},
+    'state-guard-series-massachusetts':{agsu:['massachusetts-state-military-organizations-male-agsu-green-service-uniform','massachusetts-state-military-organizations-female-agsu-green-service-uniform'],asu:['massachusetts-state-military-organizations-male-asu-service-uniform','massachusetts-state-military-organizations-female-asu-service-uniform']},
+    'state-guard-series-michigan':{agsu:['midf-green-service-uniform','midf-female-green-service-uniform'],asu:['midf-service-uniform','midf-female-service-uniform']},
+    'state-guard-series-mississippi':{agsu:['mssg-green-service-uniform','mssg-female-green-service-uniform'],asu:['mssg-service-uniform','mssg-female-service-uniform']},
+    'state-guard-series-new-mexico':{agsu:['nmsdf-green-service-uniform','nmsdf-female-green-service-uniform'],asu:['nmsdf-service-uniform','nmsdf-female-service-uniform']},
+    'new-jersey-state-guard-naval-militia':{agsu:['new-jersey-state-guard-naval-militia-male-green-service-uniform','new-jersey-state-guard-naval-militia-female-green-service-uniform'],asu:['new-jersey-state-guard-naval-militia-male-service-uniform','new-jersey-state-guard-naval-militia-female-service-uniform']},
+    'state-guard-series-new-york':{agsu:['nyg-green-service-uniform','nyg-female-green-service-uniform'],asu:['nyg-service-uniform','nyg-female-service-uniform']},
+    'state-guard-series-ohio':{agsu:['sdf-green-service-uniform','ohmr-female-green-service-uniform'],asu:['sdf-service-uniform','ohmr-female-service-uniform']},
+    'state-guard-series-oregon':{agsu:['ocdf-green-service-uniform','ocdf-female-green-service-uniform'],asu:['ocdf-service-uniform','ocdf-female-service-uniform']},
+    'state-guard-series-puerto-rico':{agsu:['prsg-green-service-uniform','prsg-female-green-service-uniform'],asu:['prsg-service-uniform','prsg-female-service-uniform']},
+    'state-guard-series-rhode-island':{agsu:['rhode-island-military-organizations-male-agsu-green-service-uniform','rhode-island-military-organizations-female-agsu-green-service-uniform'],asu:['rhode-island-military-organizations-male-asu-service-uniform','rhode-island-military-organizations-female-asu-service-uniform']},
+    'state-guard-series-south-carolina':{agsu:['scsg-green-service-uniform','scsg-female-green-service-uniform'],asu:['scsg-service-uniform','scsg-female-service-uniform']},
+    'state-guard-series-tennessee':{agsu:['tnsg-green-service-uniform','tnsg-female-green-service-uniform'],asu:['tnsg-service-uniform','tnsg-female-service-uniform']},
+    'state-guard-series-texas':{agsu:['txsg-green-service-uniform','txsg-female-green-service-uniform'],asu:['txsg-service-uniform','txsg-female-service-uniform']},
+    'state-guard-series-vermont':{agsu:['vsg-green-service-uniform','vsg-female-green-service-uniform'],asu:['vsg-service-uniform','vsg-female-service-uniform']},
+    'state-guard-series-virginia':{agsu:['vdf-green-service-uniform','vdf-female-green-service-uniform'],asu:['vdf-service-uniform','vdf-female-service-uniform']},
+    'state-guard-series-washington':{agsu:['wsg-green-service-uniform','wsg-female-green-service-uniform'],asu:['wsg-service-uniform','wsg-female-service-uniform']}
+  };
+  var SHARED={
+    agsu:['uniforms-army-agsu-green-service-uniforms','uniforms-agsu-insignia-uniform-accessories','sta-brite-u-s-army-agsu-rank-insignia'],
+    asu:['armyng-asu-dress-uniforms','sta-brite-u-s-army-asu-rank-insignia','u-s-army-asu-service-stripes-overseas-bars']
+  };
+  var cache={};
+  function norm(x){return String(x||'').trim().toLowerCase().replace(/\s+/g,' ')}
+  function esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return c==='&'?'&amp;':c==='<'?'&lt;':c==='>'?'&gt;':c==='"'?'&quot;':'&#39;'})}
+  function available(p){return p&&p.product_type!=='OPTIONS_HIDDEN_PRODUCT'&&(!p.variants||!p.variants.length||p.variants.some(function(v){return v.available===true}))}
+  function image(p){var x=p&&p.images&&p.images[0];return x?(typeof x==='string'?x:(x.src||'')):''}
+  function price(p){var v=p&&p.variants&&p.variants.find(function(x){return x.available===true})||p&&p.variants&&p.variants[0];return v&&v.price?'$'+v.price:''}
+  function preview(){return new URL(location.href).searchParams.get('preview_theme_id')||''}
+  function route(comp){var u=new URL(location.href);u.searchParams.set('sg_component',comp);return u.pathname+'?'+u.searchParams.toString()}
+  function productHref(p){var u=new URL('/products/'+p.handle,location.origin),pv=preview();if(pv)u.searchParams.set('preview_theme_id',pv);return u.pathname+(u.search?'?'+u.searchParams.toString():'')}
+  function unique(list,shared){var seen={},out=[];(list||[]).forEach(function(p){if(!p||!p.handle||seen[p.handle])return;seen[p.handle]=1;var x=Object.assign({},p);x.__sqShared=!!shared;out.push(x)});return out}
+  async function fetchCollection(h,max){if(cache[h])return cache[h];cache[h]=(async function(){var all=[],base=(window.Shopify&&Shopify.routes&&Shopify.routes.root)||'/';if(base.slice(-1)!=='/')base+='/';for(var page=1;page<=(max||8);page++){try{var r=await fetch(base+'collections/'+encodeURIComponent(h)+'/products.json?limit=250&page='+page,{credentials:'same-origin'});if(!r.ok)break;var j=await r.json(),a=j&&Array.isArray(j.products)?j.products:[];a.filter(available).forEach(function(p){all.push(p)});if(a.length<250)break}catch(e){break}}return unique(all,false)})();return cache[h]}
+  async function fetchMany(handles,shared){var parts=await Promise.all((handles||[]).map(function(h){return fetchCollection(h,8)})),seen={},out=[];[].concat.apply([],parts).forEach(function(p){if(!p||!p.handle||seen[p.handle])return;seen[p.handle]=1;var x=Object.assign({},p);x.__sqShared=!!shared;out.push(x)});return out}
+  function sock(p){var tags=Array.isArray(p.tags)?p.tags.join(' '):String(p.tags||''),s=norm([p.title,p.product_type,tags].join(' '));return /\b(sock|socks|hosiery|stocking|stockings|dress sock|dress socks)\b/.test(s)}
+  async function socks(){var key=type.indexOf('AGSU')===0?'agsu':type.indexOf('ASU')===0?'asu':'';if(!key)return[];var m=SERVICE[handle]||{},local=await fetchMany(m[key]||[],false),shared=await fetchMany(SHARED[key]||[],true),seen={},out=[];local.concat(shared).forEach(function(p){if(sock(p)&&!seen[p.handle]){seen[p.handle]=1;out.push(p)}});return out}
+  function label(a){var s=a&&a.querySelector('strong');return s?s.textContent.trim():''}
+  function setCardCount(a,count){if(!a)return;var s=a.querySelector('small');if(s)s.textContent=count+' '+(count===1?'item':'items');a.dataset.sqItemCount=String(count);if(count<=0)a.remove()}
+  function makeCard(count,p){var src=image(p);var a=document.createElement('a');a.className='sqsg-card';a.href=route('Socks & Hosiery');a.dataset.sqAuthorityCard='1';a.dataset.sqHeadToToe='socks';a.innerHTML='<span class="sqsg-media">'+(src?'<img src="'+esc(src)+'" alt="" loading="lazy" decoding="async">':'SQ')+'</span><span class="sqsg-copy"><strong>Socks &amp; Hosiery</strong><small>'+count+' '+(count===1?'item':'items')+'</small><b>→</b></span>';return a}
+  function reorder(grid){var order=ORDER[type]||[],cards=[].slice.call(grid.children);cards.sort(function(a,b){var ai=order.indexOf(label(a)),bi=order.indexOf(label(b));if(ai<0)ai=999;if(bi<0)bi=999;return ai-bi});cards.forEach(function(a){grid.appendChild(a)});grid.dataset.sqHeadToToeOrder='true'}
+  function productCard(p){var src=image(p),pr=price(p);return '<a class="sqsg-product" href="'+esc(productHref(p))+'"><span class="sqsg-pmedia">'+(src?'<img src="'+esc(src)+'" alt="'+esc(p.title)+'" loading="lazy" decoding="async">':'SQ')+'</span><span class="sqsg-pcopy"><strong>'+esc(p.title)+'</strong><small>'+esc(pr)+'</small></span></a>'}
+  function section(title,list){if(!list.length)return'';list=list.slice().sort(function(a,b){return String(a.title||'').localeCompare(String(b.title||''),undefined,{numeric:true,sensitivity:'base'})});return '<section class="sqsg-section"><h3>'+esc(title)+'</h3><div class="sqsg-products">'+list.map(productCard).join('')+'</div></section>'}
+  function backHref(){var u=new URL(location.href);u.searchParams.delete('sg_component');return u.pathname+'?'+u.searchParams.toString()}
+  function head(count){return '<div class="sqsg-head"><a class="sqsg-back" href="'+esc(backHref())+'">← Uniform Components</a><div><p>'+esc(type)+'</p><h2>Socks &amp; Hosiery</h2><small>'+count+' '+(count===1?'item':'items')+'</small></div></div>'}
+  async function patchComponents(view){var grid=view.querySelector('.sqsg-grid');if(!grid)return;if(type.indexOf('AGSU')===0||type.indexOf('ASU')===0){var list=await socks(),existing=[].slice.call(grid.querySelectorAll('.sqsg-card')).find(function(a){return label(a)==='Socks & Hosiery'});if(list.length&&!existing)grid.appendChild(makeCard(list.length,list[0]));var otherName=type.indexOf('AGSU')===0?'Other AGSU Components':'Other ASU Components',other=[].slice.call(grid.querySelectorAll('.sqsg-card')).find(function(a){return label(a)===otherName});if(other){var small=other.querySelector('small'),old=parseInt(String(small&&small.textContent||'0').replace(/[^0-9]/g,''),10)||0;setCardCount(other,Math.max(0,old-list.length))}}reorder(grid)}
+  async function patchSocksFinal(view){var list=await socks(),local=list.filter(function(p){return !p.__sqShared}),shared=list.filter(function(p){return p.__sqShared});view.innerHTML=head(list.length)+section(state.toUpperCase()+' / STATE-SPECIFIC UNIFORM ITEMS',local)+section('SHARED U.S. ARMY UNIFORM ITEMS',shared)+(list.length?'':'<div class="sqsg-empty">No customer-purchasable socks or hosiery are currently available in this uniform system.</div>');view.dataset.sqHeadToToeFinal='socks'}
+  async function patchOtherFinal(view){var list=await socks(),handles={};list.forEach(function(p){handles[p.handle]=1});var removed=0;[].slice.call(view.querySelectorAll('.sqsg-product')).forEach(function(a){var m=(a.getAttribute('href')||'').match(/\/products\/([^?]+)/);if(m&&handles[decodeURIComponent(m[1])]){a.remove();removed++}});[].slice.call(view.querySelectorAll('.sqsg-section')).forEach(function(s){if(!s.querySelector('.sqsg-product'))s.remove()});if(removed){var small=view.querySelector('.sqsg-head small');if(small){var old=parseInt(String(small.textContent||'0').replace(/[^0-9]/g,''),10)||0,n=Math.max(0,old-removed);small.textContent=n+' '+(n===1?'item':'items')}}view.dataset.sqHeadToToeOtherDedup='true'}
+  var tries=0,t=setInterval(async function(){tries++;var view=root.querySelector('[data-sqsg-view]');if(!view){if(tries>120)clearInterval(t);return}if(!component&&view.dataset.sqUniformAuthority==='components'){clearInterval(t);await patchComponents(view);return}if(component==='Socks & Hosiery'&&view.dataset.sqUniformAuthority==='final'){clearInterval(t);await patchSocksFinal(view);return}if((component==='Other AGSU Components'||component==='Other ASU Components')&&view.dataset.sqUniformAuthority==='final'){clearInterval(t);await patchOtherFinal(view);return}if(tries>120)clearInterval(t)},100);
+})();
+</script>
+{% endif %}{% endif %}
