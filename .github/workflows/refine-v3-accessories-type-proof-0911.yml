@@ -103,3 +103,4 @@ jobs:
           console.log('ACCESSORIES_TYPE_PROOF_PASS');
           EOF
           node accessories-type-proof.mjs
+# rerun-marker: observer-loop-fix-3797ba1
