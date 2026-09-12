@@ -81,3 +81,4 @@ jobs:
           name: tactical-color-pattern-final-cert
           path: out
           retention-days: 14
+# certification trigger 2026-09-11
