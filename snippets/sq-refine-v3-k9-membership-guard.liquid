@@ -1,0 +1,45 @@
+{% doc %}
+K9 membership safety guard for Refine Products V3.
+Shopify has intermittently returned products explicitly tagged SQ Exclude: K9 Working Dog Gear from the smart K9 collection. This guard removes those known non-K9 handles from every rendered V3 product surface, including late pagination/filter rerenders, without affecting the products in their correct collections.
+{% enddoc %}
+{% if request.page_type == 'collection' %}
+<style data-sq-k9-membership-guard>
+#MainContent [data-sq-k9-membership-rejected='true']{display:none!important;visibility:hidden!important;pointer-events:none!important}
+</style>
+<script data-sq-k9-membership-guard>
+(function(){
+  'use strict';
+  var main=document.getElementById('MainContent');if(!main)return;
+  var q=new URLSearchParams(location.search),root=q.get('sq_root')||'{{ collection.handle | escape }}';
+  if(root!=='k9-dog-gear')return;
+  var BAD=new Set([
+    'army-tactical-desert-combat-suits-with-knee-pads-g3',
+    'french-cce-camo-fleece-shirt-w-zipper-new-unissued',
+    'german-od-tricot-shirt-w-zipper-used-l',
+    'harlej-bag-car-seat-organizer-mobile-office',
+    'lula®-loader-unloader-ruger-10-22®-22lr',
+    'meow-morale-patch',
+    'rotc-collar-insignia-cut-out-letters-pin-on-device-pair',
+    'spikevest-for-cats',
+    'surfing-surfboard-sup-coil-paddle-leash-cord-w-quick-release-buckles-clips'
+  ]);
+  function handleFrom(a){try{return decodeURIComponent(new URL(a.href,location.origin).pathname.split('/products/')[1]||'').replace(/\/$/,'')}catch(_){return''}}
+  function reject(){
+    var removed=0;
+    main.querySelectorAll('a[href*="/products/"]').forEach(function(a){
+      var h=handleFrom(a);if(!BAD.has(h))return;
+      var card=a.closest('.product-grid__item,product-card,.product-card,.card-wrapper,.grid__item')||a;
+      if(card.dataset&&card.dataset.sqK9MembershipRejected==='true')return;
+      if(card.dataset)card.dataset.sqK9MembershipRejected='true';
+      card.setAttribute('aria-hidden','true');
+      card.remove();removed++;
+    });
+    if(removed)main.dataset.sqK9MembershipRejected=String((Number(main.dataset.sqK9MembershipRejected)||0)+removed);
+    main.dataset.sqK9MembershipGuardReady='true';
+  }
+  reject();
+  var mo=new MutationObserver(reject);mo.observe(main,{childList:true,subtree:true});
+  window.__sqK9MembershipGuard={bad:Array.from(BAD),reject:reject,observer:mo};
+})();
+</script>
+{% endif %}
