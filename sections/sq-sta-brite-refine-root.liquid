@@ -1,3 +1,9 @@
+{% if request.page_type == 'collection' and collection.handle == 'sta-brite-insignia' %}
+<script data-sq-stabrite-special-refine-owner>
+  window.__sqRefineV3 = true;
+  document.documentElement.dataset.sqStaBriteRefineOwner = 'specialized';
+</script>
+{% endif %}
 {% render 'sq-sta-brite-refine-root-v2' %}
 
 {% schema %}
