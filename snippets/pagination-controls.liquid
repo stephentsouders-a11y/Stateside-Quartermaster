@@ -1,60 +1,14 @@
 {%- doc -%}
-  Renders numbered pagination. On collection pages, in-stock pages are shown first and sold-out pages follow them.
-  Customers can choose 50 or 100 products per page. Design Concept One shows every page number with previous/next arrows.
+  Renders numbered Concept One pagination without introducing inventory/availability filters.
+  Customers can choose 50 or 100 products per page. Every page number remains visible with previous/next arrows.
 {%- enddoc -%}
 
 {% if template.name == 'collection' %}
   {% liquid
-    assign in_stock_count = 0
-    assign sold_out_count = 0
-    assign availability_value = '1'
-    assign has_availability_partition = false
-
-    for filter in collection.filters
-      if filter.param_name == 'filter.v.availability'
-        assign has_availability_partition = true
-        for active_value in filter.active_values
-          assign availability_value = active_value.value
-        endfor
-        for filter_value in filter.values
-          if filter_value.value == '1'
-            assign in_stock_count = filter_value.count
-          elsif filter_value.value == '0'
-            assign sold_out_count = filter_value.count
-          endif
-        endfor
-      endif
-    endfor
-
-    if in_stock_count > 25000
-      assign in_stock_count = 25000
-    endif
-    if sold_out_count > 25000
-      assign sold_out_count = 25000
-    endif
-
-    assign page_size = paginate.page_size
-    assign in_stock_pages = in_stock_count | plus: page_size | minus: 1 | divided_by: page_size
-    assign sold_out_pages = sold_out_count | plus: page_size | minus: 1 | divided_by: page_size
-    assign total_pages = in_stock_pages | plus: sold_out_pages
-
-    comment
-      Some collection surfaces do not expose the availability facet even though Shopify's
-      paginate object has multiple pages. Never let the custom stock partition collapse a
-      real multi-page collection to zero/one page.
-    endcomment
-    if total_pages < paginate.pages
-      assign total_pages = paginate.pages
-      if in_stock_pages == 0 and sold_out_pages == 0
-        assign in_stock_pages = paginate.pages
-        assign has_availability_partition = false
-      endif
-    endif
-
-    assign global_page = paginate.current_page
-    if has_availability_partition and availability_value == '0'
-      assign global_page = in_stock_pages | plus: paginate.current_page
-    endif
+    assign total_pages = paginate.pages
+    assign current_page = paginate.current_page
+    assign prev_page = current_page | minus: 1
+    assign next_page = current_page | plus: 1
 
     assign sq_100_view = '100'
     assign sq_is_100_view = false
@@ -76,66 +30,29 @@
     </div>
 
     {% if total_pages > 1 %}
-      <nav class="pagination vac-stock-pagination" aria-label="Product pages" data-pagination-design="concept-one" data-vac-in-stock-pages="{{ in_stock_pages }}" data-vac-total-pages="{{ total_pages }}" data-vac-current-page="{{ global_page }}">
+      <nav class="pagination vac-stock-pagination" aria-label="Product pages" data-pagination-design="concept-one" data-vac-total-pages="{{ total_pages }}" data-vac-current-page="{{ current_page }}">
         <ul class="pagination__list" role="list">
-          {% liquid
-            assign prev_global = global_page | minus: 1
-            assign next_global = global_page | plus: 1
-          %}
           <li class="pagination__item pagination__item--arrow">
-            {% if global_page > 1 %}
-              {% liquid
-                assign prev_local = prev_global
-                assign prev_availability = ''
-                if has_availability_partition
-                  assign prev_availability = '1'
-                  if prev_global > in_stock_pages
-                    assign prev_local = prev_global | minus: in_stock_pages
-                    assign prev_availability = '0'
-                  endif
-                endif
-              %}
-              <a href="{{ collection.url }}?page={{ prev_local }}{% if sq_is_100_view %}&view={{ sq_100_view }}{% endif %}{% if prev_availability != blank %}&filter.v.availability={{ prev_availability }}{% endif %}" class="pagination__link pagination__link--arrow" aria-label="Previous page" data-vac-global-page="{{ prev_global }}">{{ 'icon-chevron-left.svg' | inline_asset_content }}</a>
+            {% if current_page > 1 %}
+              <a href="{{ collection.url }}?page={{ prev_page }}{% if sq_is_100_view %}&view={{ sq_100_view }}{% endif %}" class="pagination__link pagination__link--arrow" aria-label="Previous page" data-vac-global-page="{{ prev_page }}">{{ 'icon-chevron-left.svg' | inline_asset_content }}</a>
             {% else %}
               <span class="pagination__link pagination__link--arrow pagination__link--disabled" aria-disabled="true">{{ 'icon-chevron-left.svg' | inline_asset_content }}</span>
             {% endif %}
           </li>
 
           {% for page_number in (1..total_pages) %}
-            {% liquid
-              assign local_page = page_number
-              assign page_availability = ''
-              if has_availability_partition
-                assign page_availability = '1'
-                if page_number > in_stock_pages
-                  assign local_page = page_number | minus: in_stock_pages
-                  assign page_availability = '0'
-                endif
-              endif
-            %}
             <li class="pagination__item pagination__item--page">
-              {% if page_number == global_page %}
+              {% if page_number == current_page %}
                 <span class="pagination__link pagination__link--page pagination__link--current" aria-current="page">{{ page_number }}</span>
               {% else %}
-                <a href="{{ collection.url }}?page={{ local_page }}{% if sq_is_100_view %}&view={{ sq_100_view }}{% endif %}{% if page_availability != blank %}&filter.v.availability={{ page_availability }}{% endif %}" class="pagination__link pagination__link--page" data-vac-global-page="{{ page_number }}">{{ page_number }}</a>
+                <a href="{{ collection.url }}?page={{ page_number }}{% if sq_is_100_view %}&view={{ sq_100_view }}{% endif %}" class="pagination__link pagination__link--page" data-vac-global-page="{{ page_number }}">{{ page_number }}</a>
               {% endif %}
             </li>
           {% endfor %}
 
           <li class="pagination__item pagination__item--arrow">
-            {% if global_page < total_pages %}
-              {% liquid
-                assign next_local = next_global
-                assign next_availability = ''
-                if has_availability_partition
-                  assign next_availability = '1'
-                  if next_global > in_stock_pages
-                    assign next_local = next_global | minus: in_stock_pages
-                    assign next_availability = '0'
-                  endif
-                endif
-              %}
-              <a href="{{ collection.url }}?page={{ next_local }}{% if sq_is_100_view %}&view={{ sq_100_view }}{% endif %}{% if next_availability != blank %}&filter.v.availability={{ next_availability }}{% endif %}" class="pagination__link pagination__link--arrow" aria-label="Next page" data-vac-global-page="{{ next_global }}">{{ 'icon-chevron-right.svg' | inline_asset_content }}</a>
+            {% if current_page < total_pages %}
+              <a href="{{ collection.url }}?page={{ next_page }}{% if sq_is_100_view %}&view={{ sq_100_view }}{% endif %}" class="pagination__link pagination__link--arrow" aria-label="Next page" data-vac-global-page="{{ next_page }}">{{ 'icon-chevron-right.svg' | inline_asset_content }}</a>
             {% else %}
               <span class="pagination__link pagination__link--arrow pagination__link--disabled" aria-disabled="true">{{ 'icon-chevron-right.svg' | inline_asset_content }}</span>
             {% endif %}
