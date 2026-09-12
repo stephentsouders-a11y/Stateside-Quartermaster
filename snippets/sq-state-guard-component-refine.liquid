@@ -1,0 +1,77 @@
+{% comment %}
+  State Guard component-specific Refine Products sidebar.
+  Applies only to individual State Guard / Naval Militia state collections.
+  The State Guard landing page remains a button landing page with no refine sidebar.
+{% endcomment %}
+{% if request.page_type == 'collection' %}
+{% if collection.handle contains 'state-guard-series-' or collection.handle == 'new-jersey-state-guard-naval-militia' %}
+<style data-sq-state-guard-component-refine>
+#MainContent .sqsg .sqsg-refine-layout{display:grid;grid-template-columns:minmax(240px,280px) minmax(0,1fr);gap:22px;align-items:start}
+#MainContent .sqsg .sqsg-refine-main{min-width:0}
+#MainContent .sqsg .sqsg-refine-sidebar{min-width:0;border:1px solid #dfe4e7;border-radius:10px;background:#fff;padding:14px;color:#071d2d}
+#MainContent .sqsg .sqsg-refine-sidebar__title{margin:0 0 8px;font-size:1.15rem;font-weight:900}
+#MainContent .sqsg .sqsg-refine-group{border-top:1px solid #dfe4e7;padding:0;margin:0}
+#MainContent .sqsg .sqsg-refine-group>summary{position:relative;cursor:pointer;list-style:none;padding:13px 34px 13px 2px;font-weight:900;line-height:1.25}
+#MainContent .sqsg .sqsg-refine-group>summary::-webkit-details-marker{display:none}
+#MainContent .sqsg .sqsg-refine-group>summary::marker{content:''}
+#MainContent .sqsg .sqsg-refine-group>summary::after{content:'+';position:absolute;right:4px;top:50%;transform:translateY(-50%);width:24px;height:24px;display:grid;place-items:center;font-size:21px;font-weight:900;line-height:1}
+#MainContent .sqsg .sqsg-refine-group[open]>summary::after{content:'\2212'}
+#MainContent .sqsg .sqsg-refine-choices{display:grid;gap:6px;padding:0 0 12px}
+#MainContent .sqsg .sqsg-refine-choice{display:flex;align-items:center;gap:9px;min-height:38px;padding:7px 8px;border:1px solid #e0e5e8;border-radius:7px;background:#f8f9f8;color:#071d2d;font-size:12px;font-weight:800;line-height:1.2;cursor:default}
+#MainContent .sqsg .sqsg-refine-choice:hover{border-color:#a91827;background:#fff}
+#MainContent .sqsg .sqsg-refine-choice input{appearance:none;-webkit-appearance:none;width:18px;height:18px;min-width:18px;margin:0;border:2px solid #7b8790;border-radius:3px;background:#fff;display:grid;place-items:center;cursor:pointer}
+#MainContent .sqsg .sqsg-refine-choice input:checked{border-color:#a91827;background:#a91827}
+#MainContent .sqsg .sqsg-refine-choice input:checked::after{content:'\2713';color:#fff;font-size:13px;font-weight:900;line-height:1}
+#MainContent .sqsg .sqsg-refine-choice input:focus-visible,#MainContent .sqsg .sqsg-refine-group>summary:focus-visible{outline:3px solid #d5ab4b;outline-offset:2px}
+#MainContent .sqsg .sqsg-refine-choice>span{min-width:0;flex:1 1 auto;cursor:default;pointer-events:none}
+#MainContent .sqsg .sqsg-refine-selected .sqsg-refine-choice{background:#fff7e5;border-color:#d5ab4b}
+#MainContent .sqsg .sqsg-themed-merch-card .sqsg-copy{background:#071d2d}
+#MainContent .sqsg .sqsg-themed-merch-card .sqsg-copy strong{color:#fff}
+#MainContent .sqsg .sqsg-themed-merch-card .sqsg-copy small{color:#d5ab4b;font-weight:900}
+@media (min-width:901px){#MainContent .sqsg .sqsg-refine-sidebar{position:sticky;top:18px;max-height:calc(100vh - 36px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable;padding-bottom:28px}}
+@media (max-width:900px){#MainContent .sqsg .sqsg-refine-layout{display:block}#MainContent .sqsg .sqsg-refine-sidebar{position:static;max-height:none;overflow:visible;margin-bottom:16px}}
+</style>
+<script data-sq-state-guard-component-refine data-state-guard-handle="{{ collection.handle | escape }}">
+(function(){
+  if(window.__sqStateGuardComponentRefine)return;window.__sqStateGuardComponentRefine=true;
+  var root=document.querySelector('[data-sqsg]');if(!root)return;
+  var wrap=root.querySelector('.sqsg-w'),view=root.querySelector('[data-sqsg-view]');if(!wrap||!view)return;
+  var q=new URLSearchParams(location.search),cat=q.get('sg_category')||'',type=q.get('sg_type')||'',comp=q.get('sg_component')||'',acc=q.get('sg_accessory_type')||'';
+  var CAT={uniforms:'Uniforms',insignia:'Insignia & Identification',awards:'Awards & Decorations',headwear:'Headwear',patches:'Patches & Flags',footwear:'Footwear & Uniform Accessories',apparel:'Apparel & Merchandise',equipment:'Equipment & Field Gear',reference:'Reference & Training',displays:'Flags, Displays & Memorials'};
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
+  function esc(v){return clean(v).replace(/[&<>"']/g,function(k){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[k]})}
+  function withPreview(raw){try{var u=new URL(raw,location.origin),pv=q.get('preview_theme_id');if(pv&&!u.searchParams.has('preview_theme_id'))u.searchParams.set('preview_theme_id',pv);return u.pathname+(u.searchParams.toString()?'?'+u.searchParams.toString():'')}catch(_){return raw}}
+  function backUrl(level){var u=new URL(location.pathname,location.origin),pv=q.get('preview_theme_id'),org=q.get('sg_org');if(pv)u.searchParams.set('preview_theme_id',pv);if(org)u.searchParams.set('sg_org',org);if(level==='cat'&&cat)u.searchParams.set('sg_category',cat);if(level==='type'&&cat){u.searchParams.set('sg_category',cat);if(type)u.searchParams.set('sg_type',type)}return u.pathname+(u.searchParams.toString()?'?'+u.searchParams.toString():'')}
+  function ensureLayout(){
+    if(wrap.querySelector(':scope > .sqsg-refine-layout'))return;
+    var layout=document.createElement('div'),side=document.createElement('aside'),main=document.createElement('div');layout.className='sqsg-refine-layout';side.className='sqsg-refine-sidebar';side.setAttribute('aria-label','Refine Products');main.className='sqsg-refine-main';
+    var kids=[].slice.call(wrap.children);kids.forEach(function(n){main.appendChild(n)});layout.appendChild(side);layout.appendChild(main);wrap.appendChild(layout);
+  }
+  function choice(label,href,checked){return '<div class="sqsg-refine-choice"><input type="checkbox" data-sqsg-refine-href="'+esc(href)+'" aria-label="'+esc(label)+'"'+(checked?' checked':'')+'><span>'+esc(label)+'</span></div>'}
+  function group(title,rows,open,selected){if(!rows.length)return'';return '<details class="sqsg-refine-group'+(selected?' sqsg-refine-selected':'')+'"'+(open?' open':'')+'><summary>'+esc(title)+'</summary><div class="sqsg-refine-choices">'+rows.join('')+'</div></details>'}
+  function selectedMarkup(){var rows=[];if(cat)rows.push(choice(CAT[cat]||cat,backUrl('root'),true));if(type)rows.push(choice(type,backUrl('cat'),true));if(comp)rows.push(choice(comp,backUrl('type'),true));if(acc)rows.push(choice(acc,backUrl('type'),true));return group('Current Selection',rows,true,true)}
+  function choiceTitle(){if(!cat)return'Shop by Category';if(!type)return cat==='uniforms'?'Uniform Systems':'Shop by Type';if(cat==='uniforms'&&!comp)return'Uniform Components';return'Refine Further'}
+  function rebuildSidebar(){
+    var side=wrap.querySelector('.sqsg-refine-sidebar');if(!side)return;
+    var cards=[].slice.call(view.querySelectorAll(':scope .sqsg-grid .sqsg-card')).filter(function(a){return !a.classList.contains('sqsg-themed-merch-card')});
+    var rows=cards.map(function(a){var label=clean((a.querySelector('strong')||{}).textContent),href=withPreview(a.getAttribute('href')||a.href);return label&&href?choice(label,href,false):''}).filter(Boolean);
+    side.innerHTML='<h2 class="sqsg-refine-sidebar__title">Refine Products</h2>'+selectedMarkup()+group(choiceTitle(),rows,true,false);
+    side.querySelectorAll('input[data-sqsg-refine-href]').forEach(function(input){input.addEventListener('change',function(ev){ev.stopPropagation();location.assign(input.dataset.sqsgRefineHref)})});
+    root.dataset.sqStateGuardRefine='ready';root.dataset.sqStateGuardRefineBoxOnly='true';
+  }
+  async function merchData(){var total=0,first=null;for(var page=1;page<=4;page++){try{var r=await fetch('/collections/state-guard-naval-militia-themed-merchandise/products.json?limit=250&page='+page,{credentials:'same-origin'});if(!r.ok)break;var j=await r.json(),a=j&&Array.isArray(j.products)?j.products:[];a.forEach(function(p){var pt=String(p&&p.product_type||'').toLowerCase().replace(/[_-]+/g,' ');if(pt==='options hidden product')return;total++;if(!first)first=p});if(a.length<250)break}catch(_){break}}return{count:total,product:first}}
+  function productImage(p){var x=p&&p.images&&p.images[0];return x?(typeof x==='string'?x:(x.src||'')):''}
+  var merchPromise=null;
+  function ensureMerch(){
+    var params=new URLSearchParams(location.search);if(params.get('sg_category'))return;
+    var grid=view.querySelector('.sqsg-grid');if(!grid||grid.querySelector('.sqsg-themed-merch-card'))return;
+    merchPromise=merchPromise||merchData();merchPromise.then(function(d){var current=view.querySelector('.sqsg-grid');if(!current||current.querySelector('.sqsg-themed-merch-card')||new URLSearchParams(location.search).get('sg_category'))return;var href=withPreview('/collections/state-guard-naval-militia-themed-merchandise'),src=productImage(d.product),a=document.createElement('a');a.className='sqsg-card sqsg-themed-merch-card';a.href=href;a.setAttribute('aria-label','Shop State Guard Themed Merchandise');a.innerHTML='<span class="sqsg-media">'+(src?'<img src="'+esc(src)+'" alt="State Guard themed merchandise" loading="lazy" decoding="async">':'SQ')+'</span><span class="sqsg-copy"><strong>State Guard Themed Merchandise</strong><small>'+d.count+' '+(d.count===1?'item':'items')+'</small><b>→</b></span>';current.appendChild(a);rebuildSidebar();root.dataset.sqStateGuardMerch='ready'}).catch(function(){})
+  }
+  function refresh(){ensureLayout();ensureMerch();rebuildSidebar()}
+  ensureLayout();
+  var queued=false,observer=new MutationObserver(function(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;refresh()})});observer.observe(view,{childList:true,subtree:true,characterData:true});
+  [100,300,700,1400,2600,5000,8000].forEach(function(ms){setTimeout(refresh,ms)});
+})();
+</script>
+{% endif %}
+{% endif %}
