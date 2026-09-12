@@ -1,0 +1,99 @@
+{% if request.page_type == 'collection' %}
+<style data-sq-refine-v3-box-only>
+#MainContent .sq-refine-v3-choice{cursor:default!important}
+#MainContent .sq-refine-v3-choice>span,#MainContent .sq-refine-v3-choice>small{cursor:default!important;pointer-events:none!important}
+#MainContent .sq-refine-v3-choice input[type='checkbox']{cursor:pointer!important}
+</style>
+<script data-sq-refine-v3-click-rescue data-revision="box-only-firearm-zero-result-prune-20260912-v2">
+(function(){
+  if(window.__sqRefineV3ClickRescue)return;
+  window.__sqRefineV3ClickRescue=true;
+  function currentRoot(){
+    return (new URLSearchParams(location.search)).get('sq_root') || (document.querySelector('[data-current-handle]')?.dataset.currentHandle || location.pathname.split('/collections/')[1]?.split('/')[0] || '');
+  }
+  function rootUrl(){
+    var root=currentRoot();
+    var u=new URL('/collections/'+root,location.origin);
+    var p=new URLSearchParams(location.search).get('preview_theme_id');
+    if(p)u.searchParams.set('preview_theme_id',p);
+    return u;
+  }
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
+  function key(name,value){return clean(name)+'\u0000'+clean(value)}
+  function pruneFirearmZeroResultChoices(){
+    if(currentRoot()!=='firearm-accessories')return false;
+    var main=document.getElementById('MainContent');
+    if(!main || main.dataset.sqRefineV3Ready!=='true')return false;
+    var side=main.querySelector('.sq-refine-v3-sidebar'), results=main.querySelector('.sq-refine-v3-results');
+    if(!side || !results)return false;
+    var source=[].slice.call(results.querySelectorAll('input[name^="filter."]'));
+    if(!source.length)return false;
+    var all=new Set(), enabled=new Set();
+    source.forEach(function(i){
+      var k=key(i.name,i.value);all.add(k);
+      var disabled=i.disabled || i.getAttribute('aria-disabled')==='true' || !!i.closest('[aria-disabled="true"],.disabled,[class*="disabled"]');
+      if(!disabled)enabled.add(k);
+    });
+    var removed=0;
+    side.querySelectorAll('.sq-refine-v3-choice input[type="checkbox"]').forEach(function(i){
+      if(i.dataset.kind==='structural' || i.dataset.target)return;
+      var name=i.dataset.filterName || i.dataset.sqPolishParam || i.name || '';
+      var value=i.dataset.filterValue || i.dataset.sqPolishValue || (i.value==='on'?'':i.value) || '';
+      var k=key(name,value);
+      if(name && value && all.has(k) && !enabled.has(k)){
+        var row=i.closest('.sq-refine-v3-choice');if(row){row.remove();removed++;}
+      }
+    });
+    side.querySelectorAll(':scope > details.sq-refine-v3-group').forEach(function(d){
+      if(!d.querySelector('.sq-refine-v3-choices input[type="checkbox"]'))d.remove();
+    });
+    main.dataset.sqFirearmZeroResultPruned='true';
+    main.dataset.sqFirearmZeroResultRemoved=String(removed);
+    return true;
+  }
+  function blockNonBoxActivation(ev){
+    var choice=ev.target.closest && ev.target.closest('.sq-refine-v3-sidebar .sq-refine-v3-choice');
+    if(!choice)return false;
+    if(ev.target.matches && ev.target.matches('input[type="checkbox"]'))return false;
+    ev.preventDefault();
+    ev.stopPropagation();
+    if(typeof ev.stopImmediatePropagation==='function')ev.stopImmediatePropagation();
+    return true;
+  }
+  document.addEventListener('pointerdown',blockNonBoxActivation,true);
+  document.addEventListener('mousedown',blockNonBoxActivation,true);
+  document.addEventListener('click',function(ev){
+    if(blockNonBoxActivation(ev))return;
+    var choice=ev.target.closest && ev.target.closest('.sq-refine-v3-sidebar .sq-refine-v3-choice');
+    if(!choice)return;
+    var input=choice.querySelector('input[type="checkbox"]');
+    if(!input || ev.target!==input)return;
+    var target=input.dataset.target||'';
+    var kind=input.dataset.kind||'';
+    var name=input.dataset.filterName||input.dataset.sqPolishParam||input.name||'';
+    var value=input.dataset.filterValue||input.dataset.sqPolishValue||(input.value==='on'?'':input.value)||'';
+    if(!target && !name && !kind)return;
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    var checked=input.checked;
+    if(kind==='structural' || target){
+      if(checked && target){ location.assign(target); return; }
+      location.assign(rootUrl().toString());
+      return;
+    }
+    if(!name || !value)return;
+    var u=new URL(location.href);
+    var vals=u.searchParams.getAll(name).filter(function(v){return v!==value});
+    if(checked)vals.push(value);
+    u.searchParams.delete(name);
+    Array.from(new Set(vals)).forEach(function(v){u.searchParams.append(name,v)});
+    u.searchParams.delete('page');
+    u.searchParams.delete('sq_view_page');
+    location.assign(u.pathname+'?'+u.searchParams.toString());
+  },true);
+  var n=0,t=setInterval(function(){n++;if(pruneFirearmZeroResultChoices()||n>160)clearInterval(t)},100);
+  var main=document.getElementById('MainContent');
+  if(main){var mo=new MutationObserver(function(){if(main.dataset.sqRefineV3Ready==='true')pruneFirearmZeroResultChoices()});mo.observe(main,{childList:true,subtree:true});setTimeout(function(){mo.disconnect()},15000)}
+})();
+</script>
+{% endif %}
