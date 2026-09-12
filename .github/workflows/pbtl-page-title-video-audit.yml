@@ -39,7 +39,9 @@ jobs:
             ['state-guard','/collections/state-guard-series','State Guard Series'],
             ['rotc','/collections/rotc-series','ROTC Series'],
             ['jrotc','/collections/jrotc-series','JROTC Series'],
-            ['military-schools-academies','/collections/military-schools-academies','Military Schools & Academies']
+            ['military-schools-academies','/collections/military-schools-academies','Military Schools & Academies'],
+            ['law-enforcement-corrections','/collections/law-enforcement-corrections','Law Enforcement & Corrections'],
+            ['firefighting-ems-search-rescue','/collections/firefighting-ems-search-rescue','Firefighting, EMS & Search & Rescue']
           ];
 
           fs.mkdirSync('out/screens',{recursive:true});
