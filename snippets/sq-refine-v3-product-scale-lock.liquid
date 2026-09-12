@@ -45,4 +45,46 @@ Locks V3 product-card sizing so every desktop three-column collection uses the s
 </style>
 {% endif %}
 {% render 'sq-refine-v3-visible-grid-rescue' %}
-{% render 'sq-refine-v3-k9-membership-guard' %}
+{% if request.page_type == 'collection' %}
+<style data-sq-k9-membership-guard-style>
+#MainContent [data-sq-k9-membership-rejected='true']{display:none!important;visibility:hidden!important;pointer-events:none!important}
+</style>
+<script data-sq-k9-membership-guard data-current-handle="{{ collection.handle | escape }}">
+(function(){
+  'use strict';
+  var script=document.currentScript,currentHandle=(script&&script.dataset.currentHandle)||'';
+  var q=new URLSearchParams(location.search),root=q.get('sq_root')||currentHandle;
+  if(root!=='k9-dog-gear')return;
+  var main=document.getElementById('MainContent');if(!main)return;
+  var bad=[
+    'army tactical desert combat suits with knee pads - g3',
+    'french cce camo fleece shirt w/zipper new unissued',
+    'german od tricot shirt w/zipper used (l)',
+    'harlej bag - car seat organizer, mobile office',
+    'lula® loader / unloader - ruger 10/22® .22lr',
+    'meow morale patch',
+    'rotc collar insignia',
+    'spikevest for cats',
+    'surfing surfboard sup coil paddle leash cord'
+  ];
+  function normalize(v){return String(v||'').replace(/\s+/g,' ').trim().toLowerCase()}
+  function reject(){
+    var removed=0,seen=new Set();
+    main.querySelectorAll('a[href*="/products/"]').forEach(function(a){
+      var href=(a.getAttribute('href')||'').split('?')[0];if(seen.has(href))return;seen.add(href);
+      var card=a.closest('.product-grid__item,product-card,.product-card,.card-wrapper,.grid__item')||a;
+      var text=normalize(card.innerText||a.innerText);
+      if(!bad.some(function(needle){return text.indexOf(needle)>-1}))return;
+      if(card.dataset)card.dataset.sqK9MembershipRejected='true';
+      card.setAttribute('aria-hidden','true');
+      card.remove();removed++;
+    });
+    if(removed)main.dataset.sqK9MembershipRejected=String((Number(main.dataset.sqK9MembershipRejected)||0)+removed);
+    main.dataset.sqK9MembershipGuardReady='true';
+  }
+  reject();
+  var mo=new MutationObserver(function(){reject()});mo.observe(main,{childList:true,subtree:true});
+  window.__sqK9MembershipGuard={bad:bad.slice(),reject:reject,observer:mo};
+})();
+</script>
+{% endif %}
