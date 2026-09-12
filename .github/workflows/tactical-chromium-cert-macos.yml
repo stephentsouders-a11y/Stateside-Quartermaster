@@ -1,0 +1,108 @@
+name: Tactical Gear Chromium certification macOS
+on:
+  push:
+    paths:
+      - '.github/workflows/tactical-chromium-cert-macos.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install chromium
+      - name: Certify Tactical Gear in Chromium
+        run: |
+          cat > tactical-cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const BASE='https://www.statesideqm.com/collections/tactical-gear?preview_theme_id=158561894555';
+          const bad=/^(?:Captain\b|Major\b|Colonel\b|Private\b|Sergeant\b|E\d+\s|O\d+\s|Only Ptt\b|Empty Bag\b|Full Set\b|\d+pc\s)/i;
+          const results=[];
+          function check(name,pass,detail=''){ results.push({name,pass:!!pass,detail}); console.log(JSON.stringify(results.at(-1))); if(!pass) throw new Error(name+' '+JSON.stringify(detail)); }
+          async function waitReady(page, filtered=false){
+            await page.waitForFunction(filtered=>{
+              const main=document.querySelector('#MainContent');
+              const group=document.querySelector('[data-sq-tactical-colors]');
+              const surface=document.querySelector('[data-sq-tactical-color-results]');
+              return main?.dataset.sqTacticalColorError || (main?.dataset.sqTacticalColorVersion==='2' && group?.dataset.sqTacticalColorReady==='true' && (!filtered || surface?.dataset.sqTacticalColorReady==='true'));
+            },filtered,{timeout:150000});
+            const err=await page.locator('#MainContent').getAttribute('data-sq-tactical-color-error');
+            if(err) throw new Error('Tactical color loader error: '+err);
+          }
+          async function nav(page, fn){ await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}),fn()]); await waitReady(page,new URL(page.url()).searchParams.has('sq_tactical_color')); }
+          async function inspect(page,device,label,expectedColumns){
+            const s=await page.evaluate(()=>{
+              const vis=e=>!!e&&e.getBoundingClientRect().width>1&&e.getBoundingClientRect().height>1&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden';
+              const cards=[...document.querySelectorAll('.sq-tactical-color-grid>li')];
+              const surf=document.querySelector('[data-sq-tactical-color-results]');
+              return {theme:Shopify.theme.id,total:Number(surf?.dataset.sqTacticalColorTotal||0),handles:cards.map(e=>e.dataset.productHandle),customVisible:vis(surf),nativeVisible:[...document.querySelectorAll('#MainContent .product-grid')].filter(vis).length,columns:cards.length?new Set(cards.slice(0,6).map(e=>Math.round(e.getBoundingClientRect().left))).size:0,overflow:document.documentElement.scrollWidth>innerWidth+3,broken:[...document.querySelectorAll('.sq-tactical-color-grid img')].filter(i=>i.complete&&!i.naturalWidth).map(i=>i.src)};
+            });
+            check(device+' '+label+' correct theme',s.theme===158561894555,s.theme);
+            check(device+' '+label+' has results',s.total>0,s.total);
+            check(device+' '+label+' single custom grid',s.customVisible&&s.nativeVisible===0,s.nativeVisible);
+            check(device+' '+label+' no duplicate cards',new Set(s.handles).size===s.handles.length,s.handles.length);
+            check(device+' '+label+' responsive',!s.overflow&&(!s.handles.length||s.columns===Math.min(expectedColumns,s.handles.length)),s);
+            check(device+' '+label+' no broken loaded images',s.broken.length===0,s.broken);
+          }
+          const browser=await chromium.launch({headless:true});
+          for(const [device,viewport,cols] of [['desktop',{width:1440,height:1000},3],['mobile',{width:390,height:844},2]]){
+            const context=await browser.newContext({viewport});
+            const page=await context.newPage();
+            const runtime=[]; page.on('pageerror',e=>runtime.push(String(e)));
+            const response=await page.goto(BASE,{waitUntil:'domcontentloaded',timeout:90000});
+            check(device+' HTTP 200',response?.status()===200,response?.status());
+            await waitReady(page,false);
+            const group=page.locator('[data-sq-tactical-colors]');
+            check(device+' one color group',await group.count()===1,await group.count());
+            check(device+' correct group title',(await group.locator('summary').innerText()).trim()==='Shop by Color / Pattern');
+            if(!await group.evaluate(e=>e.open)) await group.locator('summary').click();
+            await waitReady(page,false);
+            const opts=await group.locator('input[name="sq_tactical_color"]').evaluateAll(xs=>xs.map(x=>x.value));
+            check(device+' Black present',opts.includes('Black'),opts.length);
+            check(device+' Multicam present',opts.includes('Multicam'),opts.length);
+            check(device+' rank-kit noise removed',!opts.some(x=>bad.test(x)),opts.filter(x=>bad.test(x)));
+            const search=group.locator('input[type="search"]');
+            await search.fill('black');
+            check(device+' search works',await group.locator('[data-sq-tactical-color-label]:visible').evaluateAll(xs=>xs.length>0&&xs.every(x=>x.textContent.toLowerCase().includes('black'))));
+            await search.fill('');
+            await nav(page,()=>page.locator('input[name="sq_tactical_color"][value="Black"]').check());
+            await inspect(page,device,'Black',cols);
+            const black=page.locator('input[name="sq_tactical_color"][value="Black"]');
+            const d=black.locator('xpath=ancestor::details[1]'); if(!await d.evaluate(e=>e.open)) await d.locator(':scope>summary').click();
+            await nav(page,()=>black.uncheck());
+            check(device+' Black uncheck clears custom param',!new URL(page.url()).searchParams.has('sq_tactical_color'));
+            const g2=page.locator('[data-sq-tactical-colors]'); if(!await g2.evaluate(e=>e.open)) await g2.locator('summary').click();
+            await waitReady(page,false);
+            await nav(page,()=>page.locator('input[name="sq_tactical_color"][value="Multicam"]').check());
+            await inspect(page,device,'Multicam',cols);
+            const clear=page.locator('[data-sq-tactical-color-results] a').filter({hasText:'Clear color / pattern'});
+            check(device+' clear link exists',await clear.count()>0,await clear.count());
+            await nav(page,()=>clear.first().click());
+            check(device+' clear removes custom filter',!new URL(page.url()).searchParams.has('sq_tactical_color'));
+            check(device+' original grid restored',await page.locator('.sq-refine-v3-results .product-grid').first().isVisible());
+            check(device+' zero runtime errors',runtime.length===0,runtime);
+            await page.screenshot({path:'tactical-'+device+'-cert.png',fullPage:true});
+            await context.close();
+          }
+          await browser.close();
+          fs.writeFileSync('tactical-cert-report.json',JSON.stringify({passed:true,checks:results},null,2));
+          console.log('TACTICAL CERTIFICATION PASS '+results.length+' checks');
+          EOF
+          node tactical-cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tactical-chromium-cert-macos
+          path: |
+            tactical-cert-report.json
+            tactical-*-cert.png
+          retention-days: 14
