@@ -14,7 +14,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,7 +33,7 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/search_docs.mjs -o search_docs.mjs
           curl -fsSL https://raw.githubusercontent.com/openai/plugins/main/plugins/shopify/skills/shopify-liquid/scripts/validate.mjs -o validate.mjs
           node search_docs.mjs 'collection product tag url filtering current_tags' --model gpt-6-astra-pro --client-name ChatGPT --client-version '2026-09-11' > out/docs-search.txt
-          node validate.mjs --filename sq-refine-v3-morale-color-pattern.liquid --filetype snippets --file "$GITHUB_WORKSPACE/snippets/sq-refine-v3-morale-color-pattern.liquid" --model gpt-6-astra-pro --client-name ChatGPT --client-version '2026-09-11' --artifact-id morale-color-pattern-native-0911 --revision 3 --json > out/liquid-validation.json
+          node validate.mjs --filename sq-refine-v3-morale-color-pattern.liquid --filetype snippets --file "$GITHUB_WORKSPACE/snippets/sq-refine-v3-morale-color-pattern.liquid" --model gpt-6-astra-pro --client-name ChatGPT --client-version '2026-09-11' --artifact-id morale-color-pattern-native-0911 --revision 4 --json > out/liquid-validation.json
       - name: Inspect storefront with agent-browser Chromium
         continue-on-error: true
         run: |
@@ -44,6 +44,7 @@ jobs:
           npx agent-browser --session morale snapshot -i > out/agent-browser-snapshot.txt
           npx agent-browser --session morale screenshot out/agent-browser.png
           npx agent-browser --session morale close
+          sleep 8
       - name: Verify desktop mobile native tag filtering and product truth
         run: |
           cat > /tmp/morale-verify/test.mjs <<'JS'
@@ -54,7 +55,7 @@ jobs:
           const theme='158561894555';
           const base=root+'?preview_theme_id='+theme;
           const canonical=['Black','Blue','Brown / Tan','Camouflage','Gray','Green','Orange','Pink','Red','White'];
-          const report={status:'RUNNING',theme,publication:'UNPUBLISHED',sourceCommit:process.env.GITHUB_SHA,started:new Date().toISOString(),checks:[],pageErrors:[],tests:[]};
+          const report={status:'RUNNING',theme,publication:'UNPUBLISHED',sourceCommit:process.env.GITHUB_SHA,started:new Date().toISOString(),checks:[],pageErrors:[],tests:[],rateLimitRetries:0};
           const out='/tmp/morale-verify/out';
           const browser=await chromium.launch({headless:true});
           report.browserVersion=browser.version();
@@ -69,6 +70,7 @@ jobs:
           const productCache=new Map();
           const handleize=s=>String(s).toLowerCase().replace(/[’']/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
           const expectedTag=label=>'SQ Color/Pattern: '+label;
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
           async function ready(){
             await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:65000});
             await page.waitForFunction(()=>!!document.querySelector('.sq-refine-v3-sidebar [data-sq-morale-color-pattern]'),null,{timeout:15000});
@@ -76,13 +78,51 @@ jobs:
             assert.equal(await side().count(),1,'One sidebar');
             assert.equal(await group().count(),1,'One combined color/pattern group');
           }
-          async function go(url){const r=await page.goto(url,{waitUntil:'domcontentloaded'}); assert.ok(r?.ok(),'Page response '+r?.status()); await ready();}
+          async function go(url){
+            for(let attempt=1;attempt<=5;attempt++){
+              const r=await page.goto(url,{waitUntil:'domcontentloaded'});
+              const status=r?.status()||0;
+              if(status===429){report.rateLimitRetries++; await sleep(attempt*12000); continue;}
+              assert.ok(r?.ok(),'Page response '+status);
+              await ready();
+              await sleep(2500);
+              return;
+            }
+            throw new Error('Storefront remained rate limited after retries: '+url);
+          }
           async function open(){if(!await group().evaluate(d=>d.open)) await group().locator(':scope > summary').click();}
           async function handles(){return cards().evaluateAll(es=>es.map(e=>{const a=e.querySelector('a[href*="/products/"]'); return a?new URL(a.href).pathname.split('/products/')[1].split('/')[0]:null}).filter(Boolean));}
-          async function product(handle){if(productCache.has(handle)) return productCache.get(handle); const r=await page.request.get('https://www.statesideqm.com/products/'+handle+'.js'); assert.ok(r.ok(),'Product JSON '+handle+' '+r.status()); const data=await r.json(); productCache.set(handle,data); return data;}
+          async function product(handle){
+            if(productCache.has(handle)) return productCache.get(handle);
+            for(let attempt=1;attempt<=4;attempt++){
+              const r=await page.request.get('https://www.statesideqm.com/products/'+handle+'.js');
+              if(r.status()===429){report.rateLimitRetries++; await sleep(attempt*6000); continue;}
+              assert.ok(r.ok(),'Product JSON '+handle+' '+r.status());
+              const data=await r.json(); productCache.set(handle,data); await sleep(350); return data;
+            }
+            throw new Error('Product JSON remained rate limited: '+handle);
+          }
           async function truth(tags,{allowEmpty=false}={}){const list=await handles(); if(!allowEmpty) assert.ok(list.length>0,'Filtered grid contains products'); assert.equal(new Set(list).size,list.length,'No repeated products in grid'); const samples=[]; for(const h of list.slice(0,12)){const p=await product(h); for(const t of tags) assert.ok(p.tags.includes(t),'Product '+h+' missing selected tag '+t); samples.push({handle:h,colorTags:p.tags.filter(t=>/^SQ Color\/Pattern:/.test(t))});} return {visibleCount:list.length,samples};}
           function input(label){return group().locator('input[data-sq-morale-color-tag='+JSON.stringify(expectedTag(label))+']');}
-          async function select(label,on){await open(); const h=handleize(expectedTag(label)); await Promise.all([page.waitForURL(u=>{const seg=u.pathname.startsWith('/collections/morale-patches-tactical-id/')?u.pathname.split('/collections/morale-patches-tactical-id/')[1].split('/')[0]:''; const hs=seg?seg.split('+'):[]; return hs.includes(h)===on;},{waitUntil:'domcontentloaded'}),input(label).setChecked(on)]); await ready(); assert.equal(String(await page.evaluate(()=>window.Shopify?.theme?.id)),theme,'Draft preview theme remains loaded after '+label+' navigation'); assert.equal(await input(label).isChecked(),on,'Correct checked state for '+label); assert.equal(new URL(page.url()).searchParams.has('filter.p.tag'),false,'Obsolete filter.p.tag is absent');}
+          async function select(label,on){
+            await open(); await sleep(1800);
+            const h=handleize(expectedTag(label));
+            let response;
+            for(let attempt=1;attempt<=4;attempt++){
+              const nav=page.waitForNavigation({waitUntil:'domcontentloaded'});
+              await input(label).setChecked(on);
+              response=await nav;
+              if(response?.status()===429){report.rateLimitRetries++; await sleep(attempt*12000); await go(on?root+'/'+h+'?preview_theme_id='+theme:base);}
+              else break;
+            }
+            await ready(); await sleep(2200);
+            const seg=new URL(page.url()).pathname.startsWith('/collections/morale-patches-tactical-id/')?new URL(page.url()).pathname.split('/collections/morale-patches-tactical-id/')[1].split('/')[0]:'';
+            const hs=seg?seg.split('+'):[];
+            assert.equal(hs.includes(h),on,'Native tag route reflects '+label+' checked state');
+            assert.equal(String(await page.evaluate(()=>window.Shopify?.theme?.id)),theme,'Draft preview theme remains loaded after '+label+' navigation');
+            assert.equal(await input(label).isChecked(),on,'Correct checked state for '+label);
+            assert.equal(new URL(page.url()).searchParams.has('filter.p.tag'),false,'Obsolete filter.p.tag is absent');
+          }
           try{
             await go(base); await open();
             report.groups=await side().locator(':scope > details > summary').allTextContents();
@@ -96,7 +136,7 @@ jobs:
             report.checks.push('Desktop exact heading, 10 canonical tag-backed options, one sidebar, unique baseline grid');
             for(const label of ['Gray','Black','White']){await go(base); await select(label,true); const tag=expectedTag(label); const result=await truth([tag]); const filtered=await handles(); assert.notDeepEqual(filtered,baseline,label+' changes results'); assert.ok(await group().evaluate(d=>d.open),'Selected group remains open'); report.tests.push({label,tag,url:page.url(),...result}); await group().scrollIntoViewIfNeeded(); await page.screenshot({path:out+'/desktop-'+label.toLowerCase()+'.png'}); await select(label,false); assert.equal(new URL(page.url()).pathname,'/collections/morale-patches-tactical-id','Clearing '+label+' restores base collection route'); assert.deepEqual(await handles(),baseline,'Clearing '+label+' restores baseline');}
             report.checks.push('Gray Black White each change results and sampled products carry selected canonical tag; clear restores baseline');
-            await go(base); await select('Gray',true); const persisted=page.url(); await page.reload({waitUntil:'domcontentloaded'}); await ready(); assert.ok(await input('Gray').isChecked(),'Gray persists after reload'); await truth([expectedTag('Gray')]); report.checks.push('Selected native tag persists after reload');
+            await go(base); await select('Gray',true); const persisted=page.url(); await sleep(3500); await page.reload({waitUntil:'domcontentloaded'}); await ready(); assert.ok(await input('Gray').isChecked(),'Gray persists after reload'); await truth([expectedTag('Gray')]); report.checks.push('Selected native tag persists after reload');
             await select('Black',true); const multiPath=new URL(page.url()).pathname; assert.ok(multiPath.includes('sq-color-pattern-gray')&&multiPath.includes('sq-color-pattern-black'),'Native multi-tag path contains both selections'); const multi=await truth([expectedTag('Gray'),expectedTag('Black')],{allowEmpty:true}); report.tests.push({label:'Gray + Black',url:page.url(),...multi}); assert.ok(await input('Gray').isChecked()&&await input('Black').isChecked(),'Both multi-select boxes remain checked'); await select('Black',false); await truth([expectedTag('Gray')]); assert.ok(await input('Gray').isChecked(),'Removing Black retains Gray'); report.checks.push('Multi-selection uses native + routes; removing one retains the other');
             for(const size of [100,250]){const u=new URL(persisted); u.searchParams.set('sq_per_page',String(size)); await go(u.href); assert.ok(await input('Gray').isChecked(),'Gray retained for '+size+' per page'); await truth([expectedTag('Gray')]); report.checks.push('Color remains applied at '+size+' products per page');}
             await page.setViewportSize({width:390,height:844}); await go(base); await open(); await group().scrollIntoViewIfNeeded(); await page.screenshot({path:out+'/mobile-options.png'}); await select('Gray',true); await truth([expectedTag('Gray')]); assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'No mobile horizontal overflow'); await group().scrollIntoViewIfNeeded(); await page.screenshot({path:out+'/mobile-gray.png'}); await select('Gray',false); assert.deepEqual(await handles(),baseline,'Mobile clear restores baseline'); report.checks.push('Mobile 390px Gray filters truthfully clears correctly and has no horizontal overflow');
