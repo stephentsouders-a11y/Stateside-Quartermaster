@@ -1,0 +1,47 @@
+name: Storefront targeted diagnostic v2
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-targeted-diagnostic-v2.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Diagnose routes one at a time
+        run: |
+          cat > diag.mjs <<'EOF'
+          import { chromium } from 'playwright'; import fs from 'fs';
+          const BASE='https://www.statesideqm.com'; const OUT='out'; fs.mkdirSync(OUT,{recursive:true});
+          const routes=[
+            '/collections/literature-u-s-conflicts-world-war-ii','/collections/shield-republic-apparel','/collections/notebooks-books-manuals','/collections/army','/collections/literature-legacy-contaminated','/collections/pew-pews',
+            '/collections/state-guard-series-alabama','/collections/state-guard-series-california','/collections/state-guard-series-connecticut','/collections/state-guard-series-georgia','/collections/state-guard-series-indiana','/collections/state-guard-series-ohio','/collections/state-guard-series-washington',
+            '/collections/air-national-guard-flags-displays-memorials','/collections/armyng-flag-displays-shadow-boxes'
+          ];
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms)); const browser=await chromium.launch({headless:true}); const results=[];
+          for(const path of routes){
+            const ctx=await browser.newContext({viewport:{width:1365,height:900}}); const page=await ctx.newPage(); page.setDefaultNavigationTimeout(60000);
+            const rec={path,status:null,title:null,pageErrors:[],consoleErrors:[],responses:[],scripts:[]};
+            page.on('pageerror',e=>rec.pageErrors.push({message:e.message,stack:e.stack||''}));
+            page.on('console',m=>{if(m.type()==='error')rec.consoleErrors.push(m.text())});
+            page.on('response',r=>{if(r.status()>=400)rec.responses.push({status:r.status(),url:r.url()})});
+            try{const r=await page.goto(BASE+path,{waitUntil:'domcontentloaded'});rec.status=r?.status()??null;await sleep(1800);rec.title=await page.title();rec.scripts=await page.locator('script').evaluateAll(ss=>ss.map((s,i)=>({i,src:s.src||'',mark:[...s.attributes].filter(a=>a.name.startsWith('data-sq')).map(a=>a.name+'='+a.value).join(' '),text:!s.src?(s.textContent||'').slice(0,220):''})).filter(x=>x.mark||x.src.includes('shopify')).slice(0,120));await page.screenshot({path:`${OUT}/${path.split('/').pop()}.png`,fullPage:false}).catch(()=>{})}catch(e){rec.navError=String(e)}
+            results.push(rec); fs.writeFileSync(`${OUT}/results.json`,JSON.stringify(results,null,2)); await ctx.close(); await sleep(5000);
+          }
+          await browser.close(); console.log(JSON.stringify(results.map(r=>({path:r.path,status:r.status,pageErrors:r.pageErrors,consoleErrors:r.consoleErrors,responses:r.responses.slice(0,8)})),null,2));
+          EOF
+          node diag.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: storefront-targeted-diagnostic-v2
+          path: out
+          retention-days: 7
