@@ -1,10 +1,11 @@
 name: Home PBTL count and department dedupe certification
-# corrected 2026-09-12: legacy public-safety cards must not appear in PBTL
+# Public-safety series belong in PBTL, not in Browse 27 departments.
 on:
   push:
     paths:
       - '.github/workflows/home-pbtl-dept-cert-0909.yml'
       - 'sections/sq-home-series-canonical.liquid'
+      - 'sections/sq-home-departments-canonical.liquid'
 permissions:
   contents: read
 jobs:
@@ -46,15 +47,24 @@ jobs:
                 for(const [name,el] of [['desc',desc],['title',title]])if(el&&visible(el)){const r=el.getBoundingClientRect();const overlap=!(cr.right<=r.left||cr.left>=r.right||cr.bottom<=r.top||cr.top>=r.bottom);if(overlap)failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'count-overlaps-'+name});}
                 if(getComputedStyle(count).whiteSpace!=='nowrap')failures.push({card:card.getAttribute('data-sq-series-handle'),reason:'count-wrap-enabled'});
               }
+              const allCards=[...document.querySelectorAll('.sqhc-card')].filter(visible);
+              const deptCards=allCards.filter(card=>{
+                const root=card.closest('.sqhc');
+                return !!root && /Browse 27 organized departments/i.test(root.innerText||'');
+              });
+              const hrefs=deptCards.map(a=>a.getAttribute('href')||'');
               return {
                 seriesCount:series.length,
                 hasLawPBTL:series.some(a=>a.dataset.sqSeriesHandle==='law-enforcement-corrections'),
                 hasFirePBTL:series.some(a=>a.dataset.sqSeriesHandle==='firefighting-ems-search-rescue'),
+                deptCount:deptCards.length,
+                hasLawDept:hrefs.some(h=>h.includes('/collections/law-enforcement-corrections')),
+                hasFireDept:hrefs.some(h=>h.includes('/collections/firefighting-ems-search-rescue')),
                 countFailures:failures
               };
             });
             console.log(cfg.name.toUpperCase(),JSON.stringify(result));
-            if(result.hasLawPBTL||result.hasFirePBTL||result.countFailures.length){failed=true;await page.screenshot({path:`failure-${cfg.name}.png`,fullPage:true});}
+            if(!result.hasLawPBTL||!result.hasFirePBTL||result.deptCount!==27||result.hasLawDept||result.hasFireDept||result.countFailures.length){failed=true;await page.screenshot({path:`failure-${cfg.name}.png`,fullPage:true});}
             await page.close();
           }
           await browser.close();
