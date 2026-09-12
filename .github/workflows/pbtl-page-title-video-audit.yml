@@ -1,0 +1,140 @@
+name: PBTL page title Chromium video audit
+on:
+  push:
+    paths:
+      - '.github/workflows/pbtl-page-title-video-audit.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Record and certify all PBTL page titles
+        env:
+          BASE: https://www.statesideqm.com
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+
+          const routes = [
+            ['army','/collections/products-built-for-the-line-u-s-army','Products Built for the Line — U.S. Army'],
+            ['navy','/collections/products-built-for-the-line-u-s-navy','Products Built for the Line — U.S. Navy'],
+            ['air-force','/collections/products-built-for-the-line-u-s-air-force','Products Built for the Line — U.S. Air Force'],
+            ['marine-corps','/collections/products-built-for-the-line-u-s-marine-corps','Products Built for the Line — U.S. Marine Corps'],
+            ['coast-guard','/collections/products-built-for-the-line-u-s-coast-guard','Products Built for the Line — U.S. Coast Guard'],
+            ['space-force','/collections/products-built-for-the-line-u-s-space-force','Products Built for the Line — U.S. Space Force'],
+            ['army-national-guard','/collections/army-national-guard-series','Army National Guard Series'],
+            ['air-national-guard','/collections/air-national-guard-series','Air National Guard Series'],
+            ['state-guard','/collections/state-guard-series','State Guard Series'],
+            ['rotc','/collections/rotc-series','ROTC Series'],
+            ['jrotc','/collections/jrotc-series','JROTC Series'],
+            ['military-schools-academies','/collections/military-schools-academies','Military Schools & Academies']
+          ];
+
+          fs.mkdirSync('out/screens',{recursive:true});
+          fs.mkdirSync('out/videos',{recursive:true});
+          const browser = await chromium.launch({headless:true});
+          const report = [];
+
+          async function auditViewport(kind, viewport) {
+            const context = await browser.newContext({
+              viewport,
+              recordVideo: {dir:`out/videos/${kind}`, size:viewport}
+            });
+            const page = await context.newPage();
+            page.setDefaultNavigationTimeout(60000);
+            const rows = [];
+
+            for (const [slug,path,expected] of routes) {
+              const url = new URL(path, process.env.BASE).toString();
+              let status = null, navError = null;
+              try {
+                const response = await page.goto(url,{waitUntil:'domcontentloaded'});
+                status = response?.status() ?? null;
+              } catch (e) {
+                navError = String(e);
+              }
+              await page.waitForTimeout(2500);
+
+              const data = await page.evaluate(({expected}) => {
+                const h1s = [...document.querySelectorAll('h1')].map((el,index) => {
+                  const cs = getComputedStyle(el);
+                  const r = el.getBoundingClientRect();
+                  return {
+                    index,
+                    text:(el.textContent||'').replace(/\s+/g,' ').trim(),
+                    display:cs.display,
+                    visibility:cs.visibility,
+                    opacity:cs.opacity,
+                    rect:{x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height)},
+                    visible:cs.display!=='none' && cs.visibility!=='hidden' && Number(cs.opacity)!==0 && r.width>0 && r.height>0
+                  };
+                });
+                const exact = h1s.find(x => x.text === expected) || null;
+                const bodyText = (document.querySelector('#MainContent')?.innerText || document.body.innerText || '').replace(/\s+/g,' ').trim();
+                return {
+                  documentTitle:document.title,
+                  finalUrl:location.href,
+                  h1s,
+                  exact,
+                  pass:!!exact?.visible,
+                  bodyTop:bodyText.slice(0,800)
+                };
+              }, {expected}).catch(e => ({pass:false,extractError:String(e),h1s:[]}));
+
+              await page.screenshot({path:`out/screens/${kind}-${slug}.png`,fullPage:true}).catch(()=>{});
+              rows.push({kind,slug,path,expected,status,navError,...data});
+              await page.evaluate(() => window.scrollTo({top:Math.min(document.body.scrollHeight,700),behavior:'smooth'})).catch(()=>{});
+              await page.waitForTimeout(300);
+              await page.evaluate(() => window.scrollTo({top:0,behavior:'smooth'})).catch(()=>{});
+              await page.waitForTimeout(250);
+            }
+
+            const video = page.video();
+            await page.close();
+            await context.close();
+            if (video) {
+              const src = await video.path().catch(()=>null);
+              if (src) fs.copyFileSync(src,`out/videos/${kind}-pbtl-title-walkthrough.webm`);
+            }
+            return rows;
+          }
+
+          report.push(...await auditViewport('desktop',{width:1440,height:1100}));
+          report.push(...await auditViewport('mobile',{width:390,height:844}));
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+
+          console.table(report.map(r => ({
+            viewport:r.kind,
+            page:r.slug,
+            status:r.status,
+            pass:r.pass,
+            h1:r.exact?.text || r.h1s?.map(x=>x.text).join(' | ') || '(none)',
+            visible:r.exact?.visible ?? false
+          })));
+
+          const failures = report.filter(r => !r.pass || (r.status && r.status >= 400));
+          await browser.close();
+          if (failures.length) {
+            console.error('\nPBTL TITLE FAILURES:');
+            console.error(JSON.stringify(failures,null,2));
+            process.exit(1);
+          }
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pbtl-page-title-video-audit
+          path: out
+          retention-days: 7
