@@ -30,7 +30,26 @@ Ensures the V3 Refine Products navy title bar reaches both rounded top corners w
 #MainContent .sq-refine-v3-sidebar__title{position:relative!important;z-index:2!important;display:flex!important;align-items:center!important;width:100%!important;max-width:none!important;min-height:40px!important;box-sizing:border-box!important;margin:0!important;padding:0 12px!important;border-radius:9px 9px 0 0!important;background:#08283f!important;color:#fff!important}
 #MainContent .sq-refine-v3-sidebar__title::after{display:none!important;content:none!important}
 @media (min-width:901px){#MainContent.sq-refine-v3-active .sq-refine-v3-sidebar{position:sticky!important;top:18px!important}}
-@media (max-width:900px){#MainContent.sq-refine-v3-active .sq-refine-v3-sidebar{position:static!important}}
+@media (max-width:900px){
+  #MainContent.sq-refine-v3-active{max-width:100%!important;overflow-x:clip!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-sidebar{position:static!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-layout,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results>collection-component,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .sq-collection-layout,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .sq-collection-products-column,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results results-list,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid-container,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .collection-wrapper,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results #ResultsList,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid{
+    width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important
+  }
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results .product-grid>*{min-width:0!important;max-width:100%!important;box-sizing:border-box!important}
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results img,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results video,
+  #MainContent.sq-refine-v3-active .sq-refine-v3-results svg{max-width:100%!important;height:auto}
+}
 </style>
 <script data-sq-afg-three-filter-lock data-revision="afg-three-groups-20260911-v2">
 (function(){
@@ -96,7 +115,7 @@ Ensures the V3 Refine Products navy title bar reaches both rounded top corners w
     if(group.dataset.sqTacticalColorReady==='true')group.dataset.optionCount=String(remaining);
     group.dataset.sqTacticalColorNoiseClean='true';
     if(changed)main.dataset.sqTacticalColorNoisePruned='true';
-    return true;
+    return true
   }
   var queued=false;
   var mo=new MutationObserver(function(){if(queued)return;queued=true;queueMicrotask(function(){queued=false;scrub();});});
