@@ -1,0 +1,180 @@
+name: Outdoor Refine every-choice LIVE Chromium certification
+
+on:
+  push:
+    paths:
+      - '.github/workflows/outdoor-refine-every-choice-live-chromium.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  every-choice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Click every Outdoor Refine Products choice on LIVE storefront
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+
+          const basePath='/collections/outdoor-preparedness-gear';
+          const base=`https://www.statesideqm.com${basePath}?sq_per_page=50`;
+          const expectedCategories=new Map([
+            ['Survival & Emergency Kits','survival-emergency-kits-1'],
+            ['Emergency Food & Camp Meals','emergency-food-camp-meals-1'],
+            ['Water & Hydration','water-hydration-1'],
+            ['Tents, Shelters & Weather Protection','tents-shelters-weather-protection'],
+            ['Sleeping Systems','sleeping-systems'],
+            ['Bushcraft, Field Tools & Carabiners','bushcraft-field-tools-carabiners'],
+            ['Fire Starting & Hand Warmers','fire-starting-hand-warmers'],
+            ['Navigation, Binoculars & Signaling','navigation-binoculars-signaling'],
+            ['Outdoor Lighting & Headlamps','outdoor-lighting-headlamps-1'],
+            ['Outdoor Packs, Pouches & Dry Bags','outdoor-packs-pouches-dry-bags'],
+            ['Solar & Portable Power','solar-portable-power-1'],
+            ['Camp Cooking & Utensils','camp-cooking-utensils'],
+            ['Cold Weather & Thermal Gear','cold-weather-thermal-gear'],
+            ['Fishing, Hunting & Trail Gear','fishing-hunting-trail-gear'],
+          ]);
+
+          fs.mkdirSync('out/screens',{recursive:true});
+          const report={base,startedAt:new Date().toISOString(),initial:null,choices:[],failures:[],warnings:[],runtimeErrors:[]};
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await ctx.newPage();
+          page.setDefaultNavigationTimeout(90000);
+          page.setDefaultTimeout(30000);
+          page.on('pageerror',e=>report.runtimeErrors.push(String(e)));
+          page.on('console',msg=>{ if(msg.type()==='error') report.runtimeErrors.push(`console: ${msg.text()}`); });
+
+          async function ready(){
+            await page.waitForFunction(()=>{
+              const main=document.querySelector('#MainContent');
+              return main && (main.dataset.sqRefineV3Ready==='true' || main.querySelector('.sq-refine-v3-sidebar,.sq-global-refine-sidebar'));
+            },null,{timeout:35000});
+            await page.waitForTimeout(700);
+          }
+          async function openBase(){
+            const r=await page.goto(base,{waitUntil:'domcontentloaded'});
+            if(!r || r.status()!==200) throw new Error(`Base HTTP ${r?.status()}`);
+            await ready();
+          }
+          const isVisible=async loc=>await loc.evaluate(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2});
+          const safe=s=>(s||'choice').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').slice(0,80).toLowerCase();
+
+          await openBase();
+          report.initial=await page.evaluate(()=>{
+            const main=document.querySelector('#MainContent');
+            const side=main?.querySelector('.sq-refine-v3-sidebar,.sq-global-refine-sidebar');
+            const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};
+            const old=[...main.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length;
+            const grids=[...main.querySelectorAll('.product-grid')].filter(g=>vis(g)&&g.querySelector('a[href*="/products/"]')).length;
+            const cards=[...main.querySelectorAll('.sq-refine-v3-results .product-grid > *')].filter(vis).length;
+            return {ready:main?.dataset.sqRefineV3Ready||null,sidebar:!!side,oldNativeVisible:old,visibleProductGrids:grids,cards,stateGuard:/State Guard Uniform Builder|Build Your Uniform|PT Uniform/i.test(main?.innerText||'')};
+          });
+          if(!report.initial.sidebar) report.failures.push('Refine Products sidebar missing');
+          if(report.initial.oldNativeVisible) report.failures.push(`Old native filter surfaces visible: ${report.initial.oldNativeVisible}`);
+          if(report.initial.stateGuard) report.failures.push('State Guard builder contamination visible');
+          if(report.initial.visibleProductGrids>1) report.failures.push(`Multiple visible product grids at base: ${report.initial.visibleProductGrids}`);
+          if(report.initial.cards<1) report.failures.push('Base collection has zero visible product cards');
+          await page.screenshot({path:'out/screens/000-base.png',fullPage:true}).catch(()=>{});
+
+          const inventory=await page.evaluate(()=>{
+            const side=document.querySelector('#MainContent .sq-refine-v3-sidebar,#MainContent .sq-global-refine-sidebar');
+            if(!side)return [];
+            return [...side.querySelectorAll('details.sq-refine-v3-group')].flatMap((d,gi)=>{
+              const group=(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim();
+              return [...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>({
+                group,gi,ii,value:i.value||'',target:i.dataset.target||'',filterName:i.dataset.filterName||'',polish:i.dataset.sqPolishParam||'',label:(i.closest('.sq-refine-v3-choice')?.innerText||i.value||'').replace(/\s+/g,' ').trim()
+              }));
+            });
+          });
+          fs.writeFileSync('out/inventory.json',JSON.stringify(inventory,null,2));
+          if(!inventory.length) report.failures.push('No Refine checkbox choices found');
+
+          const categoryInventory=inventory.filter(x=>x.group==='Shop by Category');
+          for(const [label] of expectedCategories){ if(!categoryInventory.some(x=>x.label===label)) report.failures.push(`Missing expected category checkbox: ${label}`); }
+          for(const x of categoryInventory){ if(!expectedCategories.has(x.label)) report.failures.push(`Unexpected Outdoor category checkbox: ${x.label}`); }
+
+          for(let index=0;index<inventory.length;index++){
+            const meta=inventory[index];
+            await openBase();
+            const details=page.locator('#MainContent details.sq-refine-v3-group').nth(meta.gi);
+            if(!(await details.getAttribute('open'))) await details.locator(':scope > summary').click();
+            const input=details.locator('input[type="checkbox"]').nth(meta.ii);
+            const row=input.locator('xpath=ancestor::*[contains(concat(" ",normalize-space(@class)," ")," sq-refine-v3-choice ")][1]');
+            if(!(await isVisible(input).catch(()=>false)) && await row.count()) await row.scrollIntoViewIfNeeded().catch(()=>{});
+            const beforeUrl=page.url();
+            let clickError=null;
+            try{
+              await Promise.all([
+                page.waitForURL(u=>u.href!==beforeUrl,{timeout:15000}).catch(()=>null),
+                input.click({force:true})
+              ]);
+              await page.waitForLoadState('domcontentloaded').catch(()=>{});
+              await ready().catch(()=>{});
+            }catch(e){clickError=String(e)}
+
+            const u=new URL(page.url());
+            const state=await page.evaluate(()=>{
+              const main=document.querySelector('#MainContent');
+              const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};
+              const resultGrid=main?.querySelector('.sq-refine-v3-results .product-grid');
+              const cards=resultGrid?[...resultGrid.children].filter(vis):[];
+              const allVisibleGrids=[...main.querySelectorAll('.product-grid')].filter(g=>vis(g)&&g.querySelector('a[href*="/products/"]'));
+              const checked=[...main.querySelectorAll('.sq-refine-v3-sidebar input[type="checkbox"]:checked,.sq-global-refine-sidebar input[type="checkbox"]:checked')].map(i=>({value:i.value,filterName:i.dataset.filterName||'',target:i.dataset.target||''}));
+              return {ready:main?.dataset.sqRefineV3Ready||null,cards:cards.length,error:main?.dataset.sqRefineV3Error||null,visibleGrids:allVisibleGrids.length,checked};
+            }).catch(()=>({ready:null,cards:0,error:'evaluation failed',visibleGrids:0,checked:[]}));
+
+            const errors=[];
+            if(clickError) errors.push(`click/navigation error: ${clickError}`);
+            if(state.ready && state.ready!=='true') errors.push(`V3 not ready (${state.ready})`);
+            if(state.visibleGrids>1) errors.push(`duplicate visible product grids: ${state.visibleGrids}`);
+            if(meta.group==='Shop by Category'){
+              const expected=expectedCategories.get(meta.label);
+              if(!expected) errors.push(`unexpected category label ${meta.label}`);
+              else if(u.pathname!==`/collections/${expected}`) errors.push(`wrong category target ${u.pathname}; expected /collections/${expected}`);
+              if(state.cards<1) errors.push('category returned zero visible product cards');
+            } else {
+              const param=meta.filterName||meta.polish;
+              if(meta.target){
+                const target=new URL(meta.target,base);
+                if(u.pathname!==target.pathname) errors.push(`wrong target path ${u.pathname}; expected ${target.pathname}`);
+              } else if(param){
+                if(!u.searchParams.getAll(param).includes(meta.value)) errors.push(`filter URL missing ${param}=${meta.value}`);
+              } else {
+                errors.push('checkbox has no target/filter metadata');
+              }
+              if(state.cards<1) errors.push('filter returned zero visible product cards');
+            }
+            const entry={index:index+1,...meta,url:u.href,cards:state.cards,checked:state.checked,errors};
+            report.choices.push(entry);
+            if(errors.length){
+              report.failures.push(`${meta.group} > ${meta.label}: ${errors.join('; ')}`);
+              await page.screenshot({path:`out/screens/${String(index+1).padStart(3,'0')}-${safe(meta.group)}-${safe(meta.label)}.png`,fullPage:true}).catch(()=>{});
+            }
+          }
+
+          report.finishedAt=new Date().toISOString();
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify({initial:report.initial,totalChoices:report.choices.length,groups:[...new Set(report.choices.map(x=>x.group))],failures:report.failures,runtimeErrors:report.runtimeErrors.slice(0,40),choices:report.choices.map(x=>({group:x.group,label:x.label,url:x.url,cards:x.cards,errors:x.errors}))},null,2));
+          await browser.close();
+          if(report.failures.length || report.runtimeErrors.length) process.exitCode=2;
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: outdoor-refine-every-choice-live-chromium
+          path: out
+          retention-days: 14
