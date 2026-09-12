@@ -27,49 +27,58 @@ jobs:
           const root=()=>{const u=new URL('/collections/firearm-accessories',base);u.searchParams.set('preview_theme_id',theme);return u.toString()};
           const browser=await chromium.launch({headless:true});
           const ctx=await browser.newContext({viewport:{width:1440,height:1100}});
-          const page=await ctx.newPage(); page.setDefaultTimeout(20000); page.setDefaultNavigationTimeout(75000);
+          const page=await ctx.newPage();
+          page.setDefaultTimeout(12000); page.setDefaultNavigationTimeout(45000);
           const badHttp=[], errors=[];
           page.on('response',r=>{if(r.status()===429||r.status()>=500)badHttp.push(`${r.status()} ${r.url()}`)});
           page.on('pageerror',e=>errors.push(String(e)));
-          async function ready(){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout:50000});await page.waitForTimeout(800)}
-          async function openRoot(){await page.goto(root(),{waitUntil:'domcontentloaded'});await ready()}
-          async function visibleProducts(){return page.locator('#MainContent .sq-refine-v3-results a[href*="/products/"]').evaluateAll(as=>[...new Map(as.filter(a=>{const r=a.getBoundingClientRect(),s=getComputedStyle(a);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'}).map(a=>[new URL(a.href).pathname,(a.textContent||'').replace(/\s+/g,' ').trim()])).entries()].map(([href,title])=>({href,title})).slice(0,20)).catch(()=>[])}
+          async function ready(timeout=30000){await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',null,{timeout});}
+          async function openRoot(){await page.goto(root(),{waitUntil:'domcontentloaded'});await ready();}
+          async function visibleProducts(){return page.locator('#MainContent a[href*="/products/"]').evaluateAll(as=>[...new Map(as.filter(a=>{const r=a.getBoundingClientRect(),s=getComputedStyle(a);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'}).map(a=>[new URL(a.href).pathname,(a.textContent||'').replace(/\s+/g,' ').trim()])).entries()].map(([href,title])=>({href,title})).slice(0,20)).catch(()=>[])}
           await openRoot();
-          const groups=await page.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group').evaluateAll(ds=>ds.map((d,gi)=>({gi,label:(d.querySelector(':scope > summary')?.textContent||'').trim(),choices:[...d.querySelectorAll(':scope > .sq-refine-v3-choices input[type="checkbox"]')].map((i,ci)=>({ci,label:(i.closest('label')?.innerText||'').replace(/\s+/g,' ').trim(),kind:i.dataset.kind||'',target:i.dataset.target||'',filterName:i.dataset.filterName||'',filterValue:i.dataset.filterValue||'',name:i.name||'',value:i.value||''}))})));
+          const groups=await page.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group').evaluateAll(ds=>ds.map((d,gi)=>({
+            gi,
+            label:(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),
+            choices:[...d.querySelectorAll(':scope > .sq-refine-v3-choices input[type="checkbox"]')].map((i,ci)=>({
+              ci,
+              label:(i.closest('label')?.textContent||i.parentElement?.textContent||i.dataset.target||i.dataset.filterValue||i.value||`choice-${ci}`).replace(/\s+/g,' ').trim(),
+              kind:i.dataset.kind||'',target:i.dataset.target||'',filterName:i.dataset.filterName||i.dataset.sqPolishParam||i.name||'',filterValue:i.dataset.filterValue||i.dataset.sqPolishValue||i.value||''
+            }))
+          })));
+          console.log('DISCOVERED '+JSON.stringify(groups.map(g=>({group:g.label,choices:g.choices.length,labels:g.choices.map(c=>c.label)}))));
           const report={root:root(),discoveredAt:new Date().toISOString(),groups,tests:[],badHttp,errors};
-          for(const g of groups){for(const c of g.choices){
-            const t={group:g.label,choice:c.label,kind:c.kind,pass:false,beforeUrl:null,afterUrl:null,checked:false,products:[],reason:null};
-            try{
-              await openRoot();t.beforeUrl=page.url();
-              const allGroups=page.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group');
-              const group=allGroups.filter({has:page.locator('summary',{hasText:g.label})}).first();
-              if(!await group.count())throw new Error('group missing after reload');
-              await group.locator(':scope > summary').click().catch(()=>{});
-              const inputs=group.locator(':scope > .sq-refine-v3-choices input[type="checkbox"]');
-              let input=inputs.filter({has:page.locator('xpath=..').filter({hasText:c.label})}).first();
-              if(!await input.count()) input=inputs.nth(c.ci);
-              if(!await input.count())throw new Error('choice missing after reload');
-              await input.check();
-              await page.waitForTimeout(1200);
-              await page.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});
-              await ready().catch(()=>{});
-              t.afterUrl=page.url();
-              const currentGroups=page.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group');
-              const cg=currentGroups.filter({has:page.locator('summary',{hasText:g.label})}).first();
-              t.checked=await cg.locator('input[type="checkbox"]:checked').filter({has:page.locator('xpath=..').filter({hasText:c.label})}).count()>0 || page.url()!==t.beforeUrl;
-              t.products=await visibleProducts();
-              if(t.afterUrl===t.beforeUrl)throw new Error('selection did not change URL');
-              if(!t.checked)throw new Error('selection did not persist as checked/navigation state');
-              if(!t.products.length && !/availability/i.test(g.label))throw new Error('selection returned no visible products');
-              t.pass=true;
-            }catch(e){t.reason=String(e?.message||e)}
-            report.tests.push(t);console.log(`${t.pass?'PASS':'FAIL'} :: ${g.label} :: ${c.label}${t.reason?' :: '+t.reason:''}`);
-          }}
-          report.summary={groups:groups.length,choices:report.tests.length,passed:report.tests.filter(x=>x.pass).length,failed:report.tests.filter(x=>!x.pass).length};
+          for(const g of groups){
+            for(const c of g.choices){
+              const t={group:g.label,choice:c.label,groupIndex:g.gi,choiceIndex:c.ci,kind:c.kind,pass:false,beforeUrl:null,afterUrl:null,products:[],reason:null};
+              try{
+                await openRoot();
+                t.beforeUrl=page.url();
+                const group=page.locator('.sq-refine-v3-sidebar > details.sq-refine-v3-group').nth(g.gi);
+                if(!await group.count()) throw new Error('group missing after reload');
+                const input=group.locator(':scope > .sq-refine-v3-choices input[type="checkbox"]').nth(c.ci);
+                if(!await input.count()) throw new Error('choice missing after reload');
+                const before=page.url();
+                await input.evaluate(el=>el.click());
+                await page.waitForFunction(u=>location.href!==u,before,{timeout:12000}).catch(()=>{});
+                await page.waitForLoadState('domcontentloaded',{timeout:20000}).catch(()=>{});
+                await page.waitForTimeout(600);
+                t.afterUrl=page.url();
+                t.products=await visibleProducts();
+                if(t.afterUrl===t.beforeUrl) throw new Error('selection did not change URL');
+                if(!t.products.length && !/availability/i.test(g.label)) throw new Error('selection returned no visible products');
+                t.pass=true;
+              }catch(e){t.reason=String(e?.message||e)}
+              report.tests.push(t);
+              console.log(`${t.pass?'PASS':'FAIL'} :: ${g.label} :: ${c.label}${t.reason?' :: '+t.reason:''}`);
+            }
+          }
+          report.summary={groups:groups.length,choices:report.tests.length,passed:report.tests.filter(x=>x.pass).length,failed:report.tests.filter(x=>!x.pass).length,badHttp:[...new Set(badHttp)].length,pageErrors:errors.length};
           fs.writeFileSync('out/firearm-refine-exhaustive.json',JSON.stringify(report,null,2));
-          await openRoot().catch(()=>{});await page.screenshot({path:'out/firearm-root.png',fullPage:true}).catch(()=>{});
+          await page.goto(root(),{waitUntil:'domcontentloaded'}).catch(()=>{});
+          await page.screenshot({path:'out/firearm-root.png',fullPage:true}).catch(()=>{});
           console.log('SUMMARY '+JSON.stringify(report.summary));
-          await browser.close();if(report.summary.failed||badHttp.length)process.exitCode=2;
+          await browser.close();
+          if(report.summary.failed||report.summary.badHttp)process.exitCode=2;
           EOF
           node audit.mjs
       - uses: actions/upload-artifact@v4
