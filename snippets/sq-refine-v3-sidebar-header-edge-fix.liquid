@@ -56,4 +56,29 @@ Ensures the V3 Refine Products navy title bar reaches both rounded top corners w
   setTimeout(function(){enforce();mo.disconnect()},12000);
 })();
 </script>
+<script data-sq-tactical-color-noise-cleanup data-revision="tactical-color-noise-20260911-v1">
+(function(){
+  var main=document.getElementById('MainContent');if(!main)return;
+  var params=new URLSearchParams(location.search),core=document.querySelector('script[data-sq-refine-v3]'),current=core&&core.dataset.currentHandle||'';
+  if(current!=='tactical-gear'&&params.get('sq_root')!=='tactical-gear')return;
+  var bad=/^(?:captain\b|major\b|colonel\b|private\b|sergeant\b|e\d+\s|o\d+\s|only ptt\b|empty bag\b|full set\b|\d+pc\s)/i;
+  function scrub(){
+    var group=main.querySelector('[data-sq-tactical-colors]');if(!group)return false;
+    var changed=false;
+    group.querySelectorAll('[data-sq-tactical-color-label]').forEach(function(row){
+      var input=row.querySelector('input'),label=String(row.dataset.sqTacticalColorLabel||(input&&input.value)||'').replace(/\s+/g,' ').trim();
+      if(bad.test(label)){row.remove();changed=true;}
+    });
+    var remaining=group.querySelectorAll('[data-sq-tactical-color-label]').length;
+    if(group.dataset.sqTacticalColorReady==='true')group.dataset.optionCount=String(remaining);
+    group.dataset.sqTacticalColorNoiseClean='true';
+    if(changed)main.dataset.sqTacticalColorNoisePruned='true';
+    return true;
+  }
+  var queued=false;
+  var mo=new MutationObserver(function(){if(queued)return;queued=true;queueMicrotask(function(){queued=false;scrub();});});
+  mo.observe(main,{childList:true,subtree:true});
+  scrub();
+})();
+</script>
 {% endif %}
