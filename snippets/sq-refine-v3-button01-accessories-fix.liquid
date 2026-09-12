@@ -71,8 +71,7 @@ Accessories, Gifts & Collectibles Refine Products hard repair. Ensures the nine 
     map.forEach(function(g){var d=ensureGroup(s,g.title),host=d.querySelector(':scope > .sq-refine-v3-choices');if(host.children.length)return;g.items.forEach(function(x){var row=document.createElement('label');row.className='sq-refine-v3-choice';var input=document.createElement('input');input.type='checkbox';input.dataset.kind='native';input.dataset.filterName=x.name;input.dataset.filterValue=x.value;input.value=x.value;input.checked=params.getAll(x.name).indexOf(x.value)>-1;var span=document.createElement('span');span.textContent=x.label;row.append(input,span);input.addEventListener('change',function(e){e.stopImmediatePropagation();location.assign(filterUrl(x.name,x.value,input.checked))},true);host.appendChild(row)});if(host.querySelector('input:checked')){d.dataset.active='true';d.open=true}})
   }
   function repair(){var s=sidebar();ensureCategories(s);recoverNative(s);reveal(s);s.dataset.sqButton01Fixed='true';main.dataset.sqAccessoriesRefineRepair='true';return s.querySelectorAll('input[type="checkbox"]').length>0}
-  var tries=0,t=setInterval(function(){tries++;repair();if(tries>200)clearInterval(t)},50);[0,100,250,500,1000,2000,4000,8000].forEach(function(ms){setTimeout(repair,ms)});
-  new MutationObserver(function(){repair()}).observe(main,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','aria-hidden','data-sq-refine-v3-hidden-nav','style']});
+  [0,100,250,500,1000,2000,4000,8000].forEach(function(ms){setTimeout(repair,ms)});
 })();
 </script>
 {% endif %}
