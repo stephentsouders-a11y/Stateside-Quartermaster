@@ -1,0 +1,134 @@
+name: Zippos Refine Every Choice Chromium Cert 0911
+on:
+  push:
+    paths:
+      - '.github/workflows/zippos-refine-every-choice-cert-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refine-restart-v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium Playwright
+        run: |
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Click every Refine Products choice and verify Shopify result surface
+        run: |
+          mkdir -p out/screens
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+
+          const BASE='https://www.statesideqm.com/collections/zippos-lighters-torches';
+          const PREVIEW='158561894555';
+          const browser=await chromium.launch({headless:true});
+          const report={browser:browser.version(),base:BASE,previewThemeId:PREVIEW,cases:[],summary:{}};
+          const badConsole=/uncaught|referenceerror|typeerror|syntaxerror|failed to fetch/i;
+
+          async function settle(page){
+            await page.waitForLoadState('domcontentloaded',{timeout:90000}).catch(()=>{});
+            await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true' || document.querySelector('#MainContent')?.dataset.sqRefineV3Error,{timeout:30000}).catch(()=>{});
+            await page.waitForTimeout(1200);
+          }
+          async function state(page){
+            return await page.evaluate(()=>{
+              const main=document.querySelector('#MainContent');
+              const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'};
+              const grids=[...document.querySelectorAll('#MainContent .product-grid')].filter(vis);
+              const cards=grids.flatMap(g=>[...g.querySelectorAll(':scope > .product-grid__item')].filter(vis));
+              const products=cards.map(c=>({title:(c.innerText||'').replace(/\s+/g,' ').trim().slice(0,240),href:c.querySelector('a[href*="/products/"]')?.pathname||''})).filter(x=>x.href);
+              const groups=[...document.querySelectorAll('.sq-refine-v3-sidebar .sq-refine-v3-group')].map((d,gi)=>({
+                groupIndex:gi,
+                label:(d.querySelector(':scope>summary')?.textContent||'').replace(/\s+/g,' ').trim(),
+                choices:[...d.querySelectorAll('.sq-refine-v3-choice input[data-kind]')].map((i,ii)=>({
+                  choiceIndex:ii,
+                  label:(i.closest('label')?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim(),
+                  kind:i.dataset.kind||'',
+                  target:i.dataset.target||'',
+                  filterName:i.dataset.filterName||'',
+                  filterValue:i.dataset.filterValue||'',
+                  checked:i.checked
+                }))
+              }));
+              return {url:location.href,path:location.pathname,ready:main?.dataset.sqRefineV3Ready||'',error:main?.dataset.sqRefineV3Error||'',categorySource:main?.dataset.sqRefineV3CategorySource||'',groups,visibleGrids:grids.length,products};
+            });
+          }
+          async function openBase(context){
+            const page=await context.newPage();
+            const errors=[],consoleErrors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error'&&badConsole.test(m.text()))consoleErrors.push(m.text())});
+            const u=new URL(BASE);u.searchParams.set('preview_theme_id',PREVIEW);
+            const resp=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:90000});
+            await settle(page);
+            return {page,errors,consoleErrors,status:resp?.status()||0};
+          }
+          const context=await browser.newContext({viewport:{width:1440,height:1000}});
+          const baseRun=await openBase(context); const base=await state(baseRun.page);
+          await baseRun.page.screenshot({path:'out/screens/base.png',fullPage:true});
+          report.baseState={status:baseRun.status,errors:baseRun.errors,consoleErrors:baseRun.consoleErrors,...base};
+          await baseRun.page.close();
+
+          let ordinal=0;
+          for(const group of base.groups){
+            for(const choice of group.choices){
+              ordinal++;
+              const run=await openBase(context); const page=run.page;
+              const entry={ordinal,group:group.label,label:choice.label,kind:choice.kind,expectedTarget:choice.target,filterName:choice.filterName,filterValue:choice.filterValue,status:run.status,errors:run.errors,consoleErrors:run.consoleErrors};
+              try{
+                const locator=page.locator('.sq-refine-v3-sidebar .sq-refine-v3-group').nth(group.groupIndex).locator('.sq-refine-v3-choice input[data-kind]').nth(choice.choiceIndex);
+                await locator.scrollIntoViewIfNeeded();
+                await Promise.all([
+                  page.waitForNavigation({waitUntil:'domcontentloaded',timeout:90000}).catch(()=>null),
+                  locator.click({force:true})
+                ]);
+                await settle(page);
+                const after=await state(page); entry.after=after;
+                const u=new URL(after.url);
+                if(choice.kind==='structural'){
+                  const exp=new URL(choice.target,BASE);
+                  entry.navigationOk=(u.pathname===exp.pathname && u.searchParams.get('sq_root')===exp.searchParams.get('sq_root'));
+                }else{
+                  entry.navigationOk=u.searchParams.getAll(choice.filterName).includes(choice.filterValue);
+                }
+                entry.checkedOk=after.groups.some(g=>g.choices.some(c=>c.checked&&c.label===choice.label));
+                entry.productSurfaceOk=after.visibleGrids===1 && after.products.length>0;
+                entry.v3Ok=after.ready==='true'&&!after.error;
+                entry.pass=entry.navigationOk&&entry.checkedOk&&entry.productSurfaceOk&&entry.v3Ok&&entry.errors.length===0;
+                if(!entry.pass || ordinal<=3) await page.screenshot({path:`out/screens/${String(ordinal).padStart(3,'0')}-${choice.kind}.png`,fullPage:true});
+              }catch(e){entry.exception=String(e);entry.pass=false;}
+              report.cases.push(entry); await page.close();
+            }
+          }
+          await context.close();
+
+          // Live sanity pass after all preview choice-clicks.
+          const liveCtx=await browser.newContext({viewport:{width:1440,height:1000}});const live=await liveCtx.newPage();const liveErrors=[];
+          live.on('pageerror',e=>liveErrors.push(String(e)));
+          const liveResp=await live.goto(BASE,{waitUntil:'domcontentloaded',timeout:90000});await settle(live);const liveState=await state(live);
+          await live.screenshot({path:'out/screens/live.png',fullPage:true});
+          report.live={status:liveResp?.status()||0,errors:liveErrors,...liveState};await liveCtx.close();
+
+          report.summary={choices:report.cases.length,passed:report.cases.filter(x=>x.pass).length,failed:report.cases.filter(x=>!x.pass).length,groups:base.groups.map(g=>({label:g.label,count:g.choices.length})),previewBaseReady:base.ready,previewBaseVisibleGrids:base.visibleGrids,liveReady:liveState.ready,liveVisibleGrids:liveState.visibleGrids};
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          fs.writeFileSync('out/failures.json',JSON.stringify(report.cases.filter(x=>!x.pass),null,2));
+          console.log(JSON.stringify(report.summary,null,2));
+          if(report.summary.failed || base.ready!=='true' || base.visibleGrids!==1 || liveState.visibleGrids!==1) process.exit(2);
+          await browser.close();
+          EOF
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zippos-refine-every-choice-cert-0911
+          path: out
+          retention-days: 7
