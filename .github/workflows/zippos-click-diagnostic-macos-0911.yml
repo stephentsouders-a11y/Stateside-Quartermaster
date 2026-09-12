@@ -1,0 +1,33 @@
+name: Zippos Refine Click Diagnostic macOS 0911
+on:
+  push:
+    paths:
+      - '.github/workflows/zippos-click-diagnostic-macos-0911.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: macos-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm install --no-save playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install chromium >/dev/null 2>&1
+      - name: Inspect structural and native click behavior
+        run: |
+          cat > diag.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          const BASE='https://www.statesideqm.com/collections/zippos-lighters-torches?preview_theme_id=158561894555';
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1000}});
+          async function load(){const p=await context.newPage();await p.goto(BASE,{waitUntil:'domcontentloaded',timeout:60000});await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:30000});await p.waitForTimeout(1200);return p}
+          async function inspect(p,label){const s=await p.evaluate(()=>({url:location.href,rescueFlag:!!window.__sqRefineV3ClickRescue,rescueScript:!!document.querySelector('script[data-sq-refine-v3-click-rescue]'),ready:document.querySelector('#MainContent')?.dataset.sqRefineV3Ready,groups:[...document.querySelectorAll('.sq-refine-v3-sidebar .sq-refine-v3-group')].map(d=>({label:d.querySelector(':scope>summary')?.textContent.trim(),choices:[...d.querySelectorAll('input[data-kind]')].map(i=>({label:i.closest('label')?.querySelector('span')?.textContent.trim(),checked:i.checked,kind:i.dataset.kind,target:i.dataset.target,name:i.dataset.filterName,value:i.dataset.filterValue}))}))}));console.log(label,JSON.stringify(s,null,2));return s}
+          let p=await load();let s=await inspect(p,'BASELINE-STRUCTURAL');let loc=p.locator('.sq-refine-v3-sidebar input[data-kind="structural"]').first();console.log('STRUCTURAL-ELEMENT',await loc.evaluate(i=>({checked:i.checked,target:i.dataset.target,outer:i.outerHTML})));await loc.click({force:true});await p.waitForTimeout(5000);console.log('STRUCTURAL-AFTER-URL',p.url());await inspect(p,'AFTER-STRUCTURAL').catch(e=>console.log('AFTER-STRUCTURAL-STATE-ERROR',String(e)));await p.close();
+          p=await load();s=await inspect(p,'BASELINE-NATIVE');loc=p.locator('.sq-refine-v3-sidebar input[data-kind="native"]').filter({has:p.locator('xpath=..')}).first();const native=p.locator('.sq-refine-v3-sidebar input[data-kind="native"]').first();console.log('NATIVE-ELEMENT',await native.evaluate(i=>({checked:i.checked,name:i.dataset.filterName,value:i.dataset.filterValue,outer:i.outerHTML})));await native.click({force:true});await p.waitForTimeout(5000);console.log('NATIVE-AFTER-URL',p.url());await inspect(p,'AFTER-NATIVE').catch(e=>console.log('AFTER-NATIVE-STATE-ERROR',String(e)));await p.close();
+          await context.close();await browser.close();
+          EOF
+          node diag.mjs
