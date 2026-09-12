@@ -56,6 +56,29 @@ Ensures the V3 Refine Products navy title bar reaches both rounded top corners w
   setTimeout(function(){enforce();mo.disconnect()},12000);
 })();
 </script>
+<script data-sq-tactical-color-429-retry data-revision="tactical-color-429-retry-20260911-v1">
+(function(){
+  var params=new URLSearchParams(location.search),core=document.querySelector('script[data-sq-refine-v3]'),current=core&&core.dataset.currentHandle||'';
+  if(current!=='tactical-gear'&&params.get('sq_root')!=='tactical-gear')return;
+  if(window.__sqTacticalColorFetchRetry)return;window.__sqTacticalColorFetchRetry=true;
+  var nativeFetch=window.fetch.bind(window);
+  function sleep(ms){return new Promise(function(resolve){setTimeout(resolve,ms)})}
+  function isColorData(input){try{var u=new URL(typeof input==='string'?input:input.url,location.origin);return u.searchParams.get('view')==='sq-tactical-color-data'}catch(_){return false}}
+  window.fetch=function(input,init){
+    if(!isColorData(input))return nativeFetch(input,init);
+    return (async function(){
+      var response,last;
+      for(var attempt=0;attempt<7;attempt++){
+        response=await nativeFetch(input,init);last=response;
+        if(response.status!==429)return response;
+        var retryAfter=Number(response.headers.get('Retry-After')||0),delay=Math.max(retryAfter*1000,Math.min(12000,1000*Math.pow(2,attempt)));
+        if(attempt<6)await sleep(delay+Math.floor(Math.random()*350));
+      }
+      return last;
+    })();
+  };
+})();
+</script>
 <script data-sq-tactical-color-noise-cleanup data-revision="tactical-color-noise-20260911-v1">
 (function(){
   var main=document.getElementById('MainContent');if(!main)return;
