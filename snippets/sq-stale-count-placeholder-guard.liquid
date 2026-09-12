@@ -1,0 +1,22 @@
+{% if request.page_type == 'collection' %}
+<script data-sq-stale-count-placeholder-guard data-revision="20260912-v1">
+(function(){
+  if(window.__sqStaleCountPlaceholderGuard)return;
+  window.__sqStaleCountPlaceholderGuard=true;
+  var main=document.getElementById('MainContent');if(!main)return;
+  var rx=/^(checking items|loading items|counting items|building the customer-facing product tree|organizing .* products)[.\u2026]*$/i;
+  function neutralize(){
+    main.querySelectorAll('[data-sq-nav-count],.sq-nav-count,.vac-uniform-insignia-button__meta').forEach(function(el){
+      var text=String(el.textContent||'').trim();
+      if(rx.test(text) && !el.closest('[data-sq-count-ready="true"]')){
+        el.textContent='View items';
+        el.setAttribute('data-sq-count-ready','deferred');
+        var card=el.closest('[data-sq-nav-card],a');
+        if(card)card.setAttribute('data-sq-count-ready','deferred');
+      }
+    });
+  }
+  [3500,5000,8000].forEach(function(ms){setTimeout(neutralize,ms)});
+})();
+</script>
+{% endif %}
