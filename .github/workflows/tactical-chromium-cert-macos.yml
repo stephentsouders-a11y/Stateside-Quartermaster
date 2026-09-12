@@ -106,3 +106,4 @@ jobs:
             tactical-cert-report.json
             tactical-*-cert.png
           retention-days: 14
+# certification trigger after Tactical snippet render sync 2026-09-11
