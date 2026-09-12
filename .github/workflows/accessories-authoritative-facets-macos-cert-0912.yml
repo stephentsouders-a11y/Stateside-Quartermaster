@@ -1,0 +1,33 @@
+name: Accessories authoritative facets macOS Chromium cert 0912
+on:
+  push:
+    paths:
+      - '.github/workflows/accessories-authoritative-facets-macos-cert-0912.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install chromium >/dev/null 2>&1
+      - name: Run focused certification
+        run: |
+          cat > /tmp/cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          const BASE='https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=158561894555';
+          const CATS=['Challenge Coins & Displays','Collectibles & Cards','Drinkware','Keychains & Lanyards','Memorial & Personalized Gifts','Military Surplus & Collectibles','Pins, Buttons & Small Insignia','Sword & Knife Display Cases','Wallets & Pocket Gifts'];
+          const browser=await chromium.launch({headless:true});const fail=[];
+          const inspect=p=>p.evaluate(()=>{const vis=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||1)>0};const m=document.querySelector('#MainContent'),ss=[...m.querySelectorAll('.sq-refine-v3-sidebar')].filter(vis),s=ss[0],gs=s?[...s.querySelectorAll(':scope > details.sq-refine-v3-group')]:[],gm=Object.fromEntries(gs.map(g=>{const n=(g.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim(),labels=[...g.querySelectorAll('.sq-refine-v3-choice span')].map(x=>(x.textContent||'').replace(/\s+/g,' ').trim()).filter(Boolean);return[n,{count:labels.length,labels}]})),grids=[...m.querySelectorAll('.product-grid')].filter(g=>vis(g)&&[...g.querySelectorAll(':scope > *')].some(c=>vis(c)&&c.querySelector('a[href*="/products/"]'))),grid=grids.find(g=>g.closest('.sq-refine-v3-results'))||grids[0],cards=grid?[...grid.querySelectorAll(':scope > *')].filter(c=>vis(c)&&c.querySelector('a[href*="/products/"]')):[],t=s?.querySelector('.sq-refine-v3-sidebar__title');return{sidebars:ss.length,groups:gs.map(g=>(g.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim()),gm,grids:grids.length,cards:cards.length,repair:m?.dataset.sqAccessoriesRefineRepair||null,bg:s?getComputedStyle(s).backgroundColor:null,title:(t?.textContent||'').replace(/\s+/g,' ').trim(),titleBg:t?getComputedStyle(t).backgroundColor:null}});
+          async function nav(p,url){let r,e;for(let i=1;i<=3;i++){try{r=await p.goto(url,{waitUntil:'commit',timeout:30000});await p.waitForSelector('#MainContent .sq-refine-v3-sidebar',{timeout:30000});await p.waitForTimeout(1800);return r}catch(x){e=x;await p.waitForTimeout(i*1000)}}throw e}
+          async function click(p,title,param){const v=await p.evaluate(title=>{const s=document.querySelector('#MainContent .sq-refine-v3-sidebar'),d=[...s.querySelectorAll(':scope > details.sq-refine-v3-group')].find(g=>(g.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim()===title),i=d?.querySelector('input[type="checkbox"]');if(!i)return null;const v=i.dataset.filterValue||i.value;i.click();return v},title);if(!v){fail.push(title+' no option');return}await p.waitForURL(u=>u.searchParams.has(param),{timeout:30000}).catch(()=>fail.push(title+' URL missing '+param));await p.waitForSelector('#MainContent .sq-refine-v3-sidebar',{timeout:30000});await p.waitForTimeout(1000);const a=await inspect(p);if(a.sidebars!==1||a.grids!==1||a.cards<1||a.repair!=='true')fail.push(title+' post-click '+JSON.stringify(a));console.log('CLICK',title,v,p.url(),JSON.stringify(a))}
+          for(const [label,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){const c=await browser.newContext({viewport}),p=await c.newPage(),errs=[];p.on('pageerror',e=>errs.push(String(e)));const r=await nav(p,BASE),s=await inspect(p);console.log('STATE',label,JSON.stringify({status:r.status(),errors:errs,state:s}));if(r.status()!==200||errs.length||s.sidebars!==1||s.grids!==1||s.cards!==50||s.repair!=='true')fail.push(label+' base '+JSON.stringify({status:r.status(),errs,s}));const need=['Shop by Category','Shop by Type','Shop by Manufacturers','Availability'];if(JSON.stringify(s.groups.slice(0,4))!==JSON.stringify(need))fail.push(label+' group order '+JSON.stringify(s.groups));if(JSON.stringify(s.gm['Shop by Category']?.labels)!==JSON.stringify(CATS))fail.push(label+' categories '+JSON.stringify(s.gm['Shop by Category']));if((s.gm['Shop by Type']?.count||0)<1)fail.push(label+' no Type');if((s.gm['Shop by Manufacturers']?.count||0)<1)fail.push(label+' no Manufacturers');if(s.bg!=='rgb(255, 255, 255)'||s.title.toUpperCase()!=='REFINE PRODUCTS'||s.titleBg!=='rgb(8, 40, 63)')fail.push(label+' style '+JSON.stringify(s));await click(p,'Shop by Type','filter.p.product_type');await nav(p,BASE);await click(p,'Shop by Manufacturers','filter.p.vendor');await c.close()}
+          await browser.close();if(fail.length){console.error(fail.join('\n'));process.exit(2)}console.log('ACCESSORIES_AUTHORITATIVE_FACETS_MACOS_CERT_PASS');
+          EOF
+          node /tmp/cert.mjs
