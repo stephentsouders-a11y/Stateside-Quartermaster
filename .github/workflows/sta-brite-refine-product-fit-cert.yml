@@ -18,10 +18,10 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Certify Sta-Brite root refinements on current preview theme
+      - name: Certify Sta-Brite root refinements on clean candidate theme
         env:
           BASE: https://www.statesideqm.com
-          THEME: '158561894555'
+          THEME: '158671503515'
         run: |
           cat > certify.mjs <<'EOF'
           import { chromium } from 'playwright';
