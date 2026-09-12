@@ -4,10 +4,33 @@
 (function(){
   var route='{{ collection.handle | escape }}';
   var falseHandles=new Set(['all','stateside-quartermaster-logo-merch','air-national-guard-series','state-guard-series','rotc-series','jrotc-series','military-schools-academies','public-safety-series','army-national-guard-series']);
+  var diveTargets={
+    'bcd weights buoyancy':'/collections/dive-scuba-bcd-weights-buoyancy-1',
+    'dive apparel lifestyle':'/collections/dive-scuba-dive-apparel-lifestyle',
+    'dive bags clips accessories':'/collections/dive-scuba-dive-bags-clips-accessories-1',
+    'dive watches':'/collections/dive-scuba-dive-watches-computers',
+    'instruments lights safety':'/collections/dive-scuba-instruments-lights-safety-1',
+    'masks snorkels fins':'/collections/dive-scuba-masks-snorkels-fins-1',
+    'regulators hoses tanks':'/collections/dive-scuba-regulators-hoses-tanks-1',
+    'spearfishing hunting':'/collections/dive-scuba-spearfishing-hunting-1',
+    'underwater scooters accessories':'/collections/dive-scuba-underwater-scooters-accessories'
+  };
   var timer=null;
   function h(raw){try{var m=new URL(raw,location.origin).pathname.match(/^\/collections\/([^/?#]+)/);return m?decodeURIComponent(m[1]):''}catch(_){return''}}
+  function norm(raw){return String(raw||'').toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').replace(/\band\b/g,' ').replace(/\s+/g,' ').trim()}
   function hide(node){if(!node)return;node.hidden=true;node.setAttribute('aria-hidden','true');node.style.setProperty('display','none','important');node.style.setProperty('visibility','hidden','important');node.style.setProperty('pointer-events','none','important')}
   function hasProducts(node){return !!(node&&node.querySelector('.product-grid .product-grid__item a[href*="/products/"]'))}
+  function suppressDiveContamination(main){
+    if(route!=='dive-scuba')return;
+    var rx=/^(?:state guard uniform builder|pt uniform checklist)$/i;
+    main.querySelectorAll('h1,h2,h3,h4,h5,strong,p,label,button,a,summary').forEach(function(el){
+      var text=String(el.textContent||'').replace(/\s+/g,' ').trim();
+      if(!rx.test(text))return;
+      var box=el.closest('section,.shopify-section,[data-section-id],[class*="builder"],[class*="checklist"]')||el.parentElement;
+      if(!box||box.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results,.sq-refine-v3-page-size'))return;
+      hide(box);
+    });
+  }
   function clean(){
     var main=document.getElementById('MainContent');
     if(!main||main.dataset.sqRefineV3Ready!=='true')return false;
@@ -15,11 +38,22 @@
       if(node.closest('.sq-refine-v3-sidebar,.sq-refine-v3-results,.sq-refine-v3-page-size'))return;
       hide(node);
     });
+    suppressDiveContamination(main);
     var side=main.querySelector('.sq-refine-v3-sidebar'),results=main.querySelector('.sq-refine-v3-results');if(!side||!results)return false;
     side.querySelectorAll('input[data-kind="structural"][data-target]').forEach(function(input){
       var target=h(input.dataset.target||'');
-      if(falseHandles.has(target)&&target!==route){var row=input.closest('.sq-refine-v3-choice');if(row)row.remove()}
-      else if((input.dataset.target||'').includes('filter.v.availability=1')){try{var u=new URL(input.dataset.target,location.origin);u.searchParams.delete('filter.v.availability');input.dataset.target=u.pathname+(u.search?'?'+u.searchParams.toString():'')}catch(_){}}
+      if(falseHandles.has(target)&&target!==route){var row=input.closest('.sq-refine-v3-choice');if(row)row.remove();return}
+      if(route==='dive-scuba'){
+        var row=input.closest('.sq-refine-v3-choice'),key=norm(row?row.textContent:'');
+        if(diveTargets[key]){
+          var u0=new URL(diveTargets[key],location.origin);
+          var current=new URL(input.dataset.target||location.href,location.origin);
+          ['preview_theme_id','sq_root','sq_per_page'].forEach(function(k){if(current.searchParams.get(k))u0.searchParams.set(k,current.searchParams.get(k))});
+          input.dataset.target=u0.pathname+(u0.search?'?'+u0.searchParams.toString():'');
+          target=h(input.dataset.target);
+        }
+      }
+      if((input.dataset.target||'').includes('filter.v.availability=1')){try{var u=new URL(input.dataset.target,location.origin);u.searchParams.delete('filter.v.availability');input.dataset.target=u.pathname+(u.search?'?'+u.searchParams.toString():'')}catch(_){}}
     });
     side.querySelectorAll('.sq-refine-v3-group:not([data-sq-tactical-colors])').forEach(function(group){if(!group.querySelector('input[type="checkbox"]'))group.remove()});
     if(!hasProducts(results)){
@@ -33,6 +67,7 @@
       }
     }
     main.dataset.sqRefineV3RootCleanup='true';
+    if(route==='dive-scuba')main.dataset.sqDiveScubaCleanup='true';
     return true;
   }
   function queue(){clearTimeout(timer);timer=setTimeout(clean,30)}
