@@ -1,5 +1,5 @@
 {% doc %}
-Adds tag-backed Color / Pattern filtering to the Morale Patches and Patriotic & American Heritage V3 Refine Products sidebars. The visible filter state is mirrored in filter.p.tag while the Shopify collection-tag path guarantees that the product grid is actually filtered.
+Adds tag-backed Color / Pattern filtering to the Morale Patches and Patriotic & American Heritage V3 Refine Products sidebars. Morale uses native Shopify collection-tag paths, including multi-tag + routes, so the product grid is actually filtered without relying on filter.p.tag.
 {% enddoc %}
 {% if request.page_type == 'collection' %}
   {% assign sq_color_root = '' %}
@@ -19,6 +19,7 @@ Adds tag-backed Color / Pattern filtering to the Morale Patches and Patriotic & 
   var script = document.currentScript;
   var root = script && script.dataset.sqColorRoot || '';
   if (!root) return;
+  var isMorale = root === 'morale-patches-tactical-id';
   var guard = '__sqColorPattern_' + root.replace(/[^a-z0-9]/gi, '_');
   if (window[guard]) return;
   window[guard] = true;
@@ -41,12 +42,9 @@ Adds tag-backed Color / Pattern filtering to the Morale Patches and Patriotic & 
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
   }
-  var tags = readJson('[data-sq-color-pattern-tags]').filter(function (tag) {
+  var tags = isMorale ? readJson('[data-sq-color-pattern-fallback]') : readJson('[data-sq-color-pattern-tags]').filter(function (tag) {
     return prefix.test(tag) && tag.replace(prefix, '').trim();
   });
-  if (!tags.length && root === 'morale-patches-tactical-id') {
-    tags = readJson('[data-sq-color-pattern-fallback]');
-  }
   tags = Array.from(new Set(tags.filter(function (tag) {
     return prefix.test(tag) && tag.replace(prefix, '').trim();
   })));
@@ -67,7 +65,10 @@ Adds tag-backed Color / Pattern filtering to the Morale Patches and Patriotic & 
     var side = main.querySelector('.sq-refine-v3-sidebar');
     if (!side || main.dataset.sqRefineV3Ready !== 'true') return false;
     var owned = side.querySelector('[data-sq-color-pattern-owned="' + root + '"]');
-    if (owned) return true;
+    if (owned) {
+      if (isMorale) owned.dataset.sqMoraleColorPattern = owned.dataset.sqMoraleColorPattern || 'native-v4';
+      return true;
+    }
     Array.from(side.querySelectorAll(':scope > details.sq-refine-v3-group')).forEach(function (details) {
       var summary = details.querySelector(':scope > summary');
       if (summary && summary.textContent.trim() === 'Shop by Color / Pattern') details.remove();
@@ -75,6 +76,7 @@ Adds tag-backed Color / Pattern filtering to the Morale Patches and Patriotic & 
     var group = document.createElement('details');
     group.className = 'sq-refine-v3-group';
     group.dataset.sqColorPatternOwned = root;
+    if (isMorale) group.dataset.sqMoraleColorPattern = 'native-v4';
     var summary = document.createElement('summary');
     summary.textContent = 'Shop by Color / Pattern';
     var choices = document.createElement('div');
@@ -91,17 +93,31 @@ Adds tag-backed Color / Pattern filtering to the Morale Patches and Patriotic & 
       input.value = tag;
       input.dataset.sqColorPatternTag = tag;
       input.dataset.sqColorPatternHandle = tagHandle;
-      input.checked = selectedTag === tag || handles.indexOf(tagHandle) !== -1;
+      if (isMorale) {
+        input.dataset.sqMoraleColorTag = tag;
+        input.dataset.sqMoraleColorHandle = tagHandle;
+      }
+      input.checked = isMorale ? handles.indexOf(tagHandle) !== -1 : (selectedTag === tag || handles.indexOf(tagHandle) !== -1);
       var text = document.createElement('span');
       text.textContent = tag.replace(prefix, '').trim();
       input.addEventListener('change', function () {
         var url = new URL(location.href);
+        url.searchParams.delete('page');
+        url.searchParams.delete('sq_view_page');
+        if (isMorale) {
+          var nextHandles = selectedHandles().filter(function (value) { return value !== tagHandle; });
+          if (input.checked) nextHandles.push(tagHandle);
+          nextHandles = Array.from(new Set(nextHandles));
+          url.pathname = collectionPath + (nextHandles.length ? '/' + nextHandles.join('+') : '');
+          url.searchParams.delete('filter.p.tag');
+          url.searchParams.delete('sq_root');
+          location.assign(url.pathname + (url.search ? url.search : ''));
+          return;
+        }
         url.pathname = collectionPath + (input.checked ? '/' + tagHandle : '');
         url.searchParams.delete('filter.p.tag');
         if (input.checked) url.searchParams.append('filter.p.tag', tag);
         url.searchParams.set('sq_root', root);
-        url.searchParams.delete('page');
-        url.searchParams.delete('sq_view_page');
         location.assign(url.pathname + '?' + url.searchParams.toString());
       });
       row.append(input, text);
