@@ -1,5 +1,5 @@
 {% doc %}
-Ensures supported Stateside Quartermaster root collections expose exactly one Refine Products interface. When the custom SQ Refine sidebar is present, duplicate SQ sidebars are removed and Shopify/theme-native facet drawers/forms are suppressed so two filter systems cannot render at once.
+Ensures supported Stateside Quartermaster root collections expose exactly one Refine Products interface. When the custom SQ Refine sidebar is present, duplicate SQ sidebars are removed and Shopify/theme-native facet drawers/forms are suppressed so two filter systems cannot render at once. Also upgrades the authoritative Refine taxonomy product surface to Concept One pagination with Previous, every numbered page, and Next while preserving the Products Per Page controls.
 {% enddoc %}
 {% if request.page_type == 'collection' %}
 {% assign sq_refine_roots = 'accessories-gifts-collectibles|airsoft-milsim|apparel|armed-forces-gear|art|body-armor-ballistic-protection|literature|child-safety-shop|dive-scuba|firearm-accessories|first-aid-medical-ifak|flags-patriotic-decor|flashlights-lighting|footwear-gloves-eyewear|k9-dog-gear|knives-axes-cutlery|morale-patches-tactical-id|outdoor-preparedness-gear|patriotic-american-heritage|safety-rescue-climbing|sta-brite-insignia|tactical-gear|thin-line|uniforms|watches|zippos-lighters-torches|stateside-quartermaster-logo-merch|army-national-guard-series|air-national-guard-series|state-guard-series|products-built-for-the-line-u-s-army|products-built-for-the-line-u-s-navy|products-built-for-the-line-u-s-air-force|products-built-for-the-line-u-s-marine-corps|products-built-for-the-line-u-s-coast-guard|products-built-for-the-line-u-s-space-force|rotc-series|jrotc-series|military-schools-academies|law-enforcement-corrections|firefighting-ems-search-rescue' | split: '|' %}
@@ -18,6 +18,16 @@ Ensures supported Stateside Quartermaster root collections expose exactly one Re
     visibility:hidden!important;
     pointer-events:none!important;
   }
+  #MainContent .sq-refine-taxonomy-pager{display:none!important}
+  #MainContent .sq-taxonomy-concept-one-pager{display:flex!important;align-items:center!important;justify-content:center!important;gap:10px!important;width:100%!important;margin:22px 0 10px!important;box-sizing:border-box!important}
+  #MainContent .sq-taxonomy-concept-one-rail{display:flex!important;align-items:center!important;justify-content:center!important;gap:8px!important;flex-wrap:wrap!important;min-width:0!important;max-width:calc(100% - 108px)!important}
+  #MainContent .sq-taxonomy-page-btn{box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;width:44px!important;min-width:44px!important;height:44px!important;min-height:44px!important;padding:0!important;border:1px solid #cfd8df!important;border-radius:10px!important;background:#fff!important;color:#0b3a63!important;font:inherit!important;font-weight:900!important;line-height:1!important;cursor:pointer!important;box-shadow:0 1px 2px rgba(7,29,45,.08)!important}
+  #MainContent .sq-taxonomy-page-btn:hover{border-color:#0b3a63!important;background:#eef4f8!important;color:#071d2d!important}
+  #MainContent .sq-taxonomy-page-btn--arrow,#MainContent .sq-taxonomy-page-btn--current{border-color:#0b3a63!important;background:#0b3a63!important;color:#fff!important}
+  #MainContent .sq-taxonomy-page-btn--arrow{font-size:30px!important;font-family:Arial,sans-serif!important}
+  #MainContent .sq-taxonomy-page-btn:disabled{opacity:.34!important;cursor:not-allowed!important}
+  #MainContent .sq-taxonomy-page-btn:focus-visible{outline:3px solid #d5ab4b!important;outline-offset:2px!important}
+  @media(max-width:749px){#MainContent .sq-taxonomy-concept-one-pager{gap:7px!important;padding-inline:2px!important}#MainContent .sq-taxonomy-concept-one-rail{flex:1 1 auto!important;justify-content:flex-start!important;flex-wrap:nowrap!important;overflow-x:auto!important;overscroll-behavior-inline:contain!important;scrollbar-width:thin!important;max-width:none!important;padding:3px 1px 6px!important}#MainContent .sq-taxonomy-page-btn{width:42px!important;min-width:42px!important;height:42px!important;min-height:42px!important}}
 </style>
 <script data-sq-single-refine-authority data-root-handle="{{ collection.handle | escape }}">
 (function(){
@@ -70,11 +80,42 @@ Ensures supported Stateside Quartermaster root collections expose exactly one Re
     document.documentElement.dataset.sqRefineCustomVisible=String(custom.length);
     document.documentElement.dataset.sqRefineNativeVisible=String(native.length);
   }
+  function taxonomyState(){
+    var old=root.querySelector('.sq-refine-taxonomy-pager'),span=old&&old.querySelector('span');
+    var m=span&&String(span.textContent||'').match(/(\d+)\s*\/\s*(\d+)/);
+    return m?{current:Math.max(1,parseInt(m[1],10)||1),total:Math.max(1,parseInt(m[2],10)||1)}:null;
+  }
+  function makeButton(text,label,cls){var b=document.createElement('button');b.type='button';b.className='sq-taxonomy-page-btn '+(cls||'');b.textContent=text;if(label)b.setAttribute('aria-label',label);return b}
+  async function goTaxonomyPage(target){
+    target=Math.max(1,target|0);var guard=0;
+    while(guard++<500){
+      var st=taxonomyState();if(!st||st.current===target)break;
+      var old=root.querySelector('.sq-refine-taxonomy-pager');if(!old)break;
+      var dir=target>st.current?'next':'prev',b=old.querySelector('[data-page="'+dir+'"]');if(!b||b.disabled)break;
+      b.click();
+      await new Promise(function(resolve){setTimeout(resolve,45)});
+    }
+    setTimeout(upgradeTaxonomyPager,20);
+  }
+  function upgradeTaxonomyPager(){
+    var old=root.querySelector('.sq-refine-taxonomy-pager'),st=taxonomyState();if(!old||!st||!old.parentElement)return;
+    var host=old.parentElement,existing=host.querySelector(':scope > .sq-taxonomy-concept-one-pager');
+    if(existing&&existing.dataset.current===String(st.current)&&existing.dataset.total===String(st.total))return;
+    if(existing)existing.remove();
+    var nav=document.createElement('nav');nav.className='sq-taxonomy-concept-one-pager';nav.setAttribute('aria-label','Product pages');nav.dataset.paginationDesign='concept-one';nav.dataset.sqTaxonomyPagination='concept-one';nav.dataset.current=String(st.current);nav.dataset.total=String(st.total);
+    var prev=makeButton('‹','Previous product page','sq-taxonomy-page-btn--arrow');prev.disabled=st.current<=1;if(!prev.disabled)prev.addEventListener('click',function(){goTaxonomyPage(st.current-1)});nav.appendChild(prev);
+    var rail=document.createElement('div');rail.className='sq-taxonomy-concept-one-rail';rail.setAttribute('role','list');rail.setAttribute('aria-label','All product pages');
+    for(var n=1;n<=st.total;n++)(function(pageNo){var current=pageNo===st.current,b=makeButton(String(pageNo),'Product page '+pageNo+(current?', current page':''),current?'sq-taxonomy-page-btn--current':'');b.dataset.sqPageNumber=String(pageNo);b.setAttribute('role','listitem');if(current){b.disabled=true;b.setAttribute('aria-current','page')}else b.addEventListener('click',function(){goTaxonomyPage(pageNo)});rail.appendChild(b)})(n);
+    nav.appendChild(rail);
+    var next=makeButton('›','Next product page','sq-taxonomy-page-btn--arrow');next.disabled=st.current>=st.total;if(!next.disabled)next.addEventListener('click',function(){goTaxonomyPage(st.current+1)});nav.appendChild(next);
+    old.insertAdjacentElement('afterend',nav);
+  }
   var timer=null;
-  function run(){enforce();certifyState();}
+  function run(){enforce();certifyState();upgradeTaxonomyPager();}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();
   window.addEventListener('load',run,{once:true});
   new MutationObserver(function(){clearTimeout(timer);timer=setTimeout(run,40);}).observe(root,{childList:true,subtree:true});
+  [250,700,1400,2600,4200].forEach(function(ms){setTimeout(run,ms)});
 })();
 </script>
 {% endif %}
