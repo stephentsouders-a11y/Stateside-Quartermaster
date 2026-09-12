@@ -1,3 +1,4 @@
+# Triggered after v4 diagnosis: serialized Chromium, real URL filter assertions, anti-bot retries.
 name: Airsoft Refine every-choice Chromium audit v5
 
 on:
