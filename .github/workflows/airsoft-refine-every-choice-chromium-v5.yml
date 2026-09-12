@@ -1,0 +1,155 @@
+name: Airsoft Refine every-choice Chromium audit v5
+
+on:
+  push:
+    paths:
+      - '.github/workflows/airsoft-refine-every-choice-chromium-v5.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  every-choice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Audit every Airsoft Refine choice serially
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const themeId='158561894555';
+          const base=`https://www.statesideqm.com/collections/airsoft-milsim?preview_theme_id=${themeId}&sq_per_page=50`;
+          const expectedCategory=new Map([
+            ['Airsoft Accessories','airsoft-milsim-airsoft-accessories'],
+            ['Ammo & Magazines','airsoft-milsim-airsoft-ammo-magazines'],
+            ['Batteries & Chargers','airsoft-milsim-batteries-chargers'],
+            ['Field Gear & Training','airsoft-milsim-field-gear-training'],
+            ['Internal Parts & Electronics','airsoft-milsim-internal-parts-electronics'],
+            ['Protection & Apparel','airsoft-milsim-protection-apparel'],
+            ['Replicas & Launchers','airsoft-milsim-airsoft-replicas-launchers'],
+            ['Starter Kits & Bundles','airsoft-milsim-starter-kits-bundles']
+          ]);
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const report={startedAt:new Date().toISOString(),base,inventoryTotal:0,choices:[],failures:[],infraFailures:[],runtimeErrors:[]};
+          fs.mkdirSync('out/screens',{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          async function loadBase(label){
+            for(let attempt=1;attempt<=6;attempt++){
+              const context=await browser.newContext({viewport:{width:1440,height:1000}});
+              const page=await context.newPage();
+              page.setDefaultTimeout(30000); page.setDefaultNavigationTimeout(90000);
+              page.on('pageerror',e=>report.runtimeErrors.push(`${label}: ${String(e)}`));
+              let r=null;
+              try{r=await page.goto(base,{waitUntil:'domcontentloaded'});}catch(e){await context.close();await sleep(attempt*4000);continue;}
+              const status=r?.status()??null;
+              const body=(await page.locator('body').innerText().catch(()=>''));
+              if(status===429||/connection needs to be verified|verify you are human|cloudflare/i.test(body)){
+                await context.close(); await sleep(Math.min(8000*attempt,40000)); continue;
+              }
+              if(status!==200){await context.close();throw new Error(`HTTP ${status}`);}
+              try{
+                await page.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqRefineV3Ready==='true',{timeout:45000});
+                await page.waitForTimeout(700);
+                return {context,page};
+              }catch(e){await context.close();await sleep(attempt*3000);}
+            }
+            throw new Error('BASE_BLOCKED_AFTER_RETRIES');
+          }
+          async function clickChoice(meta){
+            for(let attempt=1;attempt<=4;attempt++){
+              let session=null;
+              try{
+                session=await loadBase(`choice-${meta.n}-attempt-${attempt}`);
+                const {page,context}=session;
+                const group=page.locator('#MainContent details.sq-refine-v3-group').nth(meta.gi);
+                if(!(await group.getAttribute('open')))await group.locator(':scope > summary').click();
+                const input=group.locator('input[type="checkbox"]').nth(meta.ii);
+                await input.scrollIntoViewIfNeeded();
+                const before=page.url();
+                await Promise.all([
+                  page.waitForURL(u=>u.href!==before,{timeout:20000}).catch(()=>null),
+                  input.click({force:true})
+                ]);
+                await page.waitForLoadState('domcontentloaded').catch(()=>{});
+                await page.waitForTimeout(1300);
+                const body=(await page.locator('body').innerText().catch(()=>''));
+                if(/connection needs to be verified|verify you are human|cloudflare/i.test(body)){
+                  await context.close(); session=null; await sleep(Math.min(8000*attempt,30000)); continue;
+                }
+                const u=new URL(page.url());
+                const state=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return {ready:m?.dataset.sqRefineV3Ready||null,cards:[...m.querySelectorAll('.sq-refine-v3-results .product-grid > *')].filter(vis).length,duplicate:[...m.querySelectorAll('.product-grid')].filter(g=>vis(g)&&!m.querySelector('.sq-refine-v3-results')?.contains(g)&&g.querySelector('a[href*="/products/"]')).length}}).catch(()=>({ready:null,cards:0,duplicate:0}));
+                const errors=[];
+                if(state.ready!=='true')errors.push(`V3 not ready: ${state.ready}`);
+                if(state.duplicate)errors.push(`duplicate grids: ${state.duplicate}`);
+                if(meta.group==='Shop by Category'){
+                  const h=expectedCategory.get(meta.label);
+                  if(!h)errors.push(`unexpected category ${meta.label}`);
+                  else if(u.pathname!==`/collections/${h}`)errors.push(`wrong target ${u.pathname} expected /collections/${h}`);
+                  if(state.cards<1)errors.push('zero visible products');
+                } else {
+                  const p=meta.filterName||meta.polish;
+                  if(p){
+                    const vals=u.searchParams.getAll(p);
+                    if(!vals.length)errors.push(`missing filter parameter ${p}`);
+                    if(vals.some(v=>v==='on'))errors.push(`${p} incorrectly set to on`);
+                  } else if(meta.target) {
+                    const target=new URL(meta.target,base);
+                    if(u.pathname!==target.pathname && !u.href.includes(meta.target))errors.push(`wrong target ${u.pathname}`);
+                  } else {
+                    errors.push('no filter/target metadata');
+                  }
+                }
+                report.choices.push({...meta,url:u.href,cards:state.cards,errors});
+                if(errors.length){
+                  report.failures.push(`${meta.group} > ${meta.label}: ${errors.join('; ')}`);
+                  await page.screenshot({path:`out/screens/${String(meta.n+1).padStart(3,'0')}.png`,fullPage:true}).catch(()=>{});
+                }
+                await context.close();
+                return;
+              }catch(e){
+                if(session?.context)await session.context.close().catch(()=>{});
+                const msg=String(e);
+                if(attempt===4){report.infraFailures.push(`${meta.group} > ${meta.label}: ${msg}`);return;}
+                await sleep(Math.min(7000*attempt,25000));
+              }
+            }
+          }
+          try{
+            const seed=await loadBase('inventory');
+            const initial=await seed.page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};return {sidebar:!!m?.querySelector('.sq-refine-v3-sidebar'),oldNative:[...m.querySelectorAll('.facets-block-wrapper--horizontal .facets__filters-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length,oldButtons:[...m.querySelectorAll('.sq-subcategory-section,.sq-subcategory-card')].filter(vis).length,stateGuard:/State Guard Uniform Builder|Build Your Uniform|PT Uniform/i.test(m?.innerText||'')}});
+            if(!initial.sidebar)report.failures.push('Refine sidebar missing');
+            if(initial.oldNative)report.failures.push(`Old native filters visible: ${initial.oldNative}`);
+            if(initial.oldButtons)report.failures.push(`Legacy category buttons visible: ${initial.oldButtons}`);
+            if(initial.stateGuard)report.failures.push('State Guard contamination visible');
+            const inventory=await seed.page.evaluate(()=>{const side=document.querySelector('#MainContent .sq-refine-v3-sidebar');return [...side.querySelectorAll('details.sq-refine-v3-group')].flatMap((d,gi)=>{const group=(d.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim();return [...d.querySelectorAll('input[type="checkbox"]')].map((i,ii)=>{const lab=i.closest('label')||i.parentElement;const label=(lab?.querySelector('span')?.textContent||lab?.textContent||i.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim();return {group,gi,ii,label,value:i.value||'',target:i.dataset.target||'',filterName:i.dataset.filterName||'',polish:i.dataset.sqPolishParam||''}})})});
+            report.inventoryTotal=inventory.length;
+            await seed.context.close();
+            if(!inventory.length)report.failures.push('No checkboxes found');
+            for(let n=0;n<inventory.length;n++){
+              await clickChoice({...inventory[n],n});
+              await sleep(2500);
+            }
+          }catch(e){report.infraFailures.push(String(e));}
+          report.finishedAt=new Date().toISOString();
+          fs.writeFileSync('out/report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify({inventoryTotal:report.inventoryTotal,tested:report.choices.length,failures:report.failures,infraFailures:report.infraFailures,runtimeErrors:report.runtimeErrors},null,2));
+          await browser.close();
+          if(report.failures.length||report.infraFailures.length||report.runtimeErrors.length)process.exitCode=2;
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: airsoft-refine-every-choice-chromium-v5
+          path: out
+          retention-days: 14
