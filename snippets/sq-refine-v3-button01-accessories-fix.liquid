@@ -1,5 +1,5 @@
 {% doc %}
-Accessories, Gifts & Collectibles Refine Products hard repair. Ensures the nine canonical page-specific categories always render as checkbox choices, keeps the V3 disclosure surface visible and interactive after legacy cleanup, and recovers Shopify native Type, Manufacturer and Availability facets when available.
+Accessories, Gifts & Collectibles Refine Products hard repair. Ensures the nine canonical page-specific categories always render as checkbox choices, keeps the V3 disclosure surface visible and interactive after legacy cleanup, and restores Type, Manufacturer and Availability facets from authoritative collection/native data.
 {% enddoc %}
 {% if request.page_type == 'collection' and collection.handle != 'state-guard-series' %}
 {% assign sq_accessories_root = request.params.sq_root | default: collection.handle %}
@@ -20,6 +20,8 @@ Accessories, Gifts & Collectibles Refine Products hard repair. Ensures the nine 
 (function(){
   var main=document.getElementById('MainContent');if(!main)return;
   var params=new URLSearchParams(location.search),root='accessories-gifts-collectibles';
+  var TYPES={{ collection.all_types | json }};
+  var VENDORS={{ collection.all_vendors | json }};
   var CATS=[
     ['Challenge Coins & Displays','challenge-coins-display-holders'],
     ['Collectibles & Cards','collectibles-cards'],
@@ -51,26 +53,27 @@ Accessories, Gifts & Collectibles Refine Products hard repair. Ensures the nine 
   }
   function reveal(s){
     main.classList.add('sq-refine-v3-active');
-    var n=s;
-    while(n&&n!==main){unhide(n);n=n.parentElement}
+    var n=s;while(n&&n!==main){unhide(n);n=n.parentElement}
     var layout=main.querySelector('.sq-refine-v3-layout');if(layout)unhide(layout);
     s.style.setProperty('display','block','important');
-    s.querySelectorAll(':scope > details.sq-refine-v3-group').forEach(function(d){unhide(d);d.style.setProperty('display','block','important');var summary=d.querySelector(':scope > summary');if(summary){unhide(summary);summary.style.setProperty('display','block','important');summary.style.setProperty('min-height','44px','important')}})
+    s.querySelectorAll(':scope > details.sq-refine-v3-group').forEach(function(d){unhide(d);d.style.setProperty('display','block','important');var summary=d.querySelector(':scope > summary');if(summary){unhide(summary);summary.style.setProperty('display','block','important');summary.style.setProperty('min-height','44px','important')}});
     main.dataset.sqAccessoriesRefineVisible='true';
   }
   function groups(s){return [].slice.call(s.querySelectorAll(':scope > details.sq-refine-v3-group'))}
   function group(s,title){return groups(s).find(function(d){return key(d.querySelector(':scope > summary')?.textContent)===key(title)})||null}
   function ensureGroup(s,title){var d=group(s,title);if(d)return d;d=document.createElement('details');d.className='sq-refine-v3-group';d.innerHTML='<summary></summary><div class="sq-refine-v3-choices"></div>';d.querySelector('summary').textContent=title;s.appendChild(d);return d}
   function structuralChoice(label,handle){var row=document.createElement('label');row.className='sq-refine-v3-choice';var input=document.createElement('input');input.type='checkbox';input.dataset.kind='structural';input.dataset.target=target(handle);input.checked=current()===handle;var span=document.createElement('span');span.textContent=label;row.append(input,span);input.addEventListener('change',function(e){e.stopImmediatePropagation();location.assign(input.checked?input.dataset.target:target(root))},true);return row}
-  function ensureCategories(s){var d=ensureGroup(s,'Shop by Category'),host=d.querySelector(':scope > .sq-refine-v3-choices');host.replaceChildren();CATS.forEach(function(x){host.appendChild(structuralChoice(x[0],x[1]))});var active=!!host.querySelector('input:checked');d.dataset.active=active?'true':'false';if(active)d.open=true;if(d!==groups(s)[0])s.insertBefore(d,groups(s)[0]||null)}
+  function ensureCategories(s){var d=ensureGroup(s,'Shop by Category'),host=d.querySelector(':scope > .sq-refine-v3-choices');host.replaceChildren();CATS.forEach(function(x){host.appendChild(structuralChoice(x[0],x[1]))});var active=!!host.querySelector('input:checked');d.dataset.active=active?'true':'false';if(active)d.open=true}
+  function filterChoice(name,value,label){var row=document.createElement('label');row.className='sq-refine-v3-choice';var input=document.createElement('input');input.type='checkbox';input.dataset.kind='native';input.dataset.filterName=name;input.dataset.filterValue=value;input.value=value;input.checked=params.getAll(name).indexOf(value)>-1;var span=document.createElement('span');span.textContent=label;row.append(input,span);input.addEventListener('change',function(e){e.stopImmediatePropagation();location.assign(filterUrl(name,value,input.checked))},true);return row}
+  function ensureDataGroup(s,title,name,values){var d=ensureGroup(s,title),host=d.querySelector(':scope > .sq-refine-v3-choices');var vals=Array.from(new Set((values||[]).map(clean).filter(Boolean))).sort(function(a,b){return a.localeCompare(b)});host.replaceChildren();vals.forEach(function(v){host.appendChild(filterChoice(name,v,v))});if(host.querySelector('input:checked')){d.dataset.active='true';d.open=true}else d.dataset.active='false';return d}
   function nativeHeading(input){var d=input.closest('details'),h=clean(d&&d.querySelector(':scope > summary')?.textContent);if(!h){var fs=input.closest('fieldset');h=clean(fs&&fs.querySelector('legend')?.textContent)}var n=key(h);if(/availability/.test(n)||input.name==='filter.v.availability')return'Availability';if(/vendor|manufacturer|brand/.test(n)||input.name==='filter.p.vendor')return'Shop by Manufacturers';if(/product type|type/.test(n)||input.name==='filter.p.product_type')return'Shop by Type';return''}
   function nativeLabel(input){if(input.id){var l=document.querySelector('label[for="'+CSS.escape(input.id)+'"]');if(l)return clean(l.textContent)}return clean(input.closest('label')?.textContent)||clean(input.value)}
   function recoverNative(s){
-    var map=new Map();
-    main.querySelectorAll('input[name^="filter."]').forEach(function(src){if(s.contains(src))return;var title=nativeHeading(src);if(!title)return;var label=nativeLabel(src),value=clean(src.value);if(!label||!value)return;var name=src.name,k=key(title);if(!map.has(k))map.set(k,{title:title,items:[]});var a=map.get(k).items;if(!a.some(function(x){return x.name===name&&x.value===value}))a.push({name:name,value:value,label:label})});
-    map.forEach(function(g){var d=ensureGroup(s,g.title),host=d.querySelector(':scope > .sq-refine-v3-choices');if(host.children.length)return;g.items.forEach(function(x){var row=document.createElement('label');row.className='sq-refine-v3-choice';var input=document.createElement('input');input.type='checkbox';input.dataset.kind='native';input.dataset.filterName=x.name;input.dataset.filterValue=x.value;input.value=x.value;input.checked=params.getAll(x.name).indexOf(x.value)>-1;var span=document.createElement('span');span.textContent=x.label;row.append(input,span);input.addEventListener('change',function(e){e.stopImmediatePropagation();location.assign(filterUrl(x.name,x.value,input.checked))},true);host.appendChild(row)});if(host.querySelector('input:checked')){d.dataset.active='true';d.open=true}})
+    var map=new Map();main.querySelectorAll('input[name^="filter."]').forEach(function(src){if(s.contains(src))return;var title=nativeHeading(src);if(!title)return;var label=nativeLabel(src),value=clean(src.value);if(!label||!value)return;var name=src.name,k=key(title);if(!map.has(k))map.set(k,{title:title,items:[]});var a=map.get(k).items;if(!a.some(function(x){return x.name===name&&x.value===value}))a.push({name:name,value:value,label:label})});
+    map.forEach(function(g){if(g.title==='Shop by Type'||g.title==='Shop by Manufacturers')return;var d=ensureGroup(s,g.title),host=d.querySelector(':scope > .sq-refine-v3-choices');host.replaceChildren();g.items.forEach(function(x){host.appendChild(filterChoice(x.name,x.value,x.label))});if(host.querySelector('input:checked')){d.dataset.active='true';d.open=true}else d.dataset.active='false'})
   }
-  function repair(){var s=sidebar();ensureCategories(s);recoverNative(s);reveal(s);s.dataset.sqButton01Fixed='true';main.dataset.sqAccessoriesRefineRepair='true';return s.querySelectorAll('input[type="checkbox"]').length>0}
+  function orderGroups(s){var title=s.querySelector(':scope > .sq-refine-v3-sidebar__title');['Shop by Category','Shop by Type','Shop by Manufacturers','Availability'].forEach(function(t){var d=group(s,t);if(d)s.appendChild(d)});if(title)s.insertBefore(title,s.firstChild)}
+  function repair(){var s=sidebar();ensureCategories(s);ensureDataGroup(s,'Shop by Type','filter.p.product_type',TYPES);ensureDataGroup(s,'Shop by Manufacturers','filter.p.vendor',VENDORS);recoverNative(s);orderGroups(s);s.querySelectorAll('input[type="checkbox"]').forEach(function(i){if(!i.dataset.target&&!i.dataset.filterName&&i.name&&i.name.indexOf('filter.')===0){i.dataset.filterName=i.name;i.dataset.filterValue=i.value||''}});reveal(s);s.dataset.sqButton01Fixed='true';main.dataset.sqAccessoriesRefineRepair='true';return s.querySelectorAll('input[type="checkbox"]').length>0}
   [0,100,250,500,1000,2000,4000,8000].forEach(function(ms){setTimeout(repair,ms)});
 })();
 </script>
