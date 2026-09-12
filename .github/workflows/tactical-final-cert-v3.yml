@@ -1,0 +1,82 @@
+name: Tactical Gear exhaustive Chromium certification v3
+on:
+  push:
+    paths:
+      - '.github/workflows/tactical-final-cert-v3.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Exhaustive browser certification
+        run: |
+          cat > certify-v3.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const BASE='https://www.statesideqm.com/collections/tactical-gear?preview_theme_id=158561894555';
+          const report={url:BASE,commit:process.env.GITHUB_SHA,checks:[],failures:[],states:[]};
+          fs.mkdirSync('out-v3',{recursive:true});
+          function check(name,pass,detail){const row={name,pass:!!pass,detail};report.checks.push(row);console.log(JSON.stringify(row));if(!pass)report.failures.push(name);}
+          function clean(v){return String(v??'').replace(/\s+/g,' ').trim().toLowerCase();}
+          function normalize(v){return clean(v).replace(/^\(\d+\)\s*/,'').replace(/^\d{2,5}\s*[-:]\s*/,'').replace(/^(?:\.\d+|\d+)\s+caliber\s*\([^)]*\)\s*&\s*/,'').replace(/\s*\+\s*\$\s*[\d.,]+\s*$/,'').replace(/\s+\d+\s*(?:[- ]?pack)(?:\s+safe bundle)?$/,'').replace(/\bgrey\b/g,'gray').replace(/\bmulti[ -]?cam\b/g,'multicam');}
+          function variantMatches(p,v,q){
+            const selected=q.getAll('sq_tactical_color').map(normalize);
+            const indices=(p.options||[]).map((n,i)=>/colou?r|pattern|camo/i.test(n)?i:-1).filter(i=>i>=0);
+            const tags=(p.tags||[]).map(t=>t.match(/^(?:SQ\s+)?(?:colou?r\s*\/\s*pattern|colou?r|pattern|camouflage)\s*:\s*(.+)$/i)?.[1]).filter(Boolean);
+            const colors=(indices.length?indices.map(i=>v.options[i]):tags).map(normalize);
+            const availability=q.getAll('filter.v.availability').flatMap(x=>x.split(','));
+            const low=q.get('filter.v.price.gte'),high=q.get('filter.v.price.lte');
+            return (!selected.length||selected.some(c=>colors.includes(c)))&&(!availability.length||availability.includes(v.available?'1':'0'))&&(low===null||low===''||v.price>=Number(low)*100)&&(high===null||high===''||v.price<=Number(high)*100);
+          }
+          function expected(products,url){const q=new URL(url).searchParams,vs=q.getAll('filter.p.vendor').map(clean),ts=q.getAll('filter.p.product_type').map(clean);return products.filter(p=>!/options[_ ]hidden[_ ]product/i.test(p.type)&&(!vs.length||vs.includes(clean(p.vendor)))&&(!ts.length||ts.includes(clean(p.type)))&&p.variants.some(v=>variantMatches(p,v,q)));}
+          async function ready(p,filtered=false){
+            await p.waitForFunction(()=>document.querySelector('#MainContent')?.dataset.sqTacticalColorVersion==='2',null,{timeout:90000});
+            await p.waitForFunction(filtered=>document.querySelector('#MainContent')?.dataset.sqTacticalColorError||(document.querySelector('[data-sq-tactical-colors]')?.dataset.sqTacticalColorReady==='true'&&(!filtered||document.querySelector('[data-sq-tactical-color-results]')?.dataset.sqTacticalColorReady==='true')),filtered,{timeout:150000});
+            const error=await p.locator('#MainContent').getAttribute('data-sq-tactical-color-error');if(error)throw new Error(error);
+          }
+          async function rawClick(locator){await locator.evaluate(el=>el.click());}
+          async function nav(p,action){const before=p.url();await Promise.all([p.waitForURL(u=>u.toString()!==before,{waitUntil:'domcontentloaded',timeout:90000}),action()]);await ready(p,new URL(p.url()).searchParams.has('sq_tactical_color'));}
+          async function openDetails(input){const d=input.locator('xpath=ancestor::details[1]');if(!await d.evaluate(e=>e.open))await d.locator(':scope > summary').evaluate(el=>el.click());}
+          async function state(p){return p.evaluate(()=>{const vis=e=>!!e&&e.getBoundingClientRect().width>1&&e.getBoundingClientRect().height>1&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden';const cards=[...document.querySelectorAll('.sq-tactical-color-grid>li')],surface=document.querySelector('[data-sq-tactical-color-results]');return {url:location.href,theme:window.Shopify?.theme?.id,main:{...document.querySelector('#MainContent')?.dataset},total:Number(surface?.dataset.sqTacticalColorTotal||0),handles:cards.map(e=>e.dataset.productHandle),variants:cards.map(e=>new URL(e.querySelector('a').href).searchParams.get('variant')),customVisible:vis(surface),nativeVisible:[...document.querySelectorAll('#MainContent .product-grid')].filter(vis).length,columns:cards.length?new Set(cards.slice(0,6).map(e=>Math.round(e.getBoundingClientRect().left))).size:0,overflow:document.documentElement.scrollWidth>innerWidth+3,broken:[...document.querySelectorAll('.sq-tactical-color-grid img')].filter(i=>i.complete&&!i.naturalWidth).map(i=>i.src),selected:[...document.querySelectorAll('input[name="sq_tactical_color"]:checked')].map(e=>e.value)};});}
+          async function verify(p,name,products,columns){const s=await state(p),q=new URL(p.url()).searchParams,all=expected(products,p.url()),size=Number(q.get('sq_per_page')||50),pages=Math.max(1,Math.ceil(all.length/size)),pg=Math.min(pages,Math.max(1,Number(q.get('sq_view_page')||1))),batch=all.slice((pg-1)*size,pg*size);report.states.push({name,...s});check(name+' correct preview theme',s.theme===158561894555,s.theme);check(name+' exact count',s.total===all.length,{actual:s.total,expected:all.length});check(name+' exact page',JSON.stringify(s.handles)===JSON.stringify(batch.map(x=>x.handle)),{actual:s.handles.length,expected:batch.length});check(name+' matching variant links',s.handles.every((h,i)=>{const product=products.find(x=>x.handle===h),variant=product?.variants.find(v=>String(v.id)===s.variants[i]);return variant&&variantMatches(product,variant,q);}));check(name+' single result grid',s.customVisible&&s.nativeVisible===0,s.nativeVisible);check(name+' no duplicate cards',new Set(s.handles).size===s.handles.length,s.handles.length);check(name+' responsive columns',!s.overflow&&(!s.handles.length||s.columns===Math.min(columns,s.handles.length)),{columns:s.columns,overflow:s.overflow});check(name+' no broken loaded images',s.broken.length===0,s.broken);return s;}
+          const browser=await chromium.launch({headless:true});
+          for(const [device,viewport,columns] of [['desktop',{width:1440,height:1000},3],['mobile',{width:390,height:844},2]]){
+            const context=await browser.newContext({viewport});const p=await context.newPage();const errors=[],pages=new Map(),pending=[];p.setDefaultTimeout(30000);p.on('pageerror',e=>errors.push(String(e)));p.on('response',r=>{if(r.ok()&&r.url().includes('view=sq-tactical-color-data'))pending.push(r.json().then(j=>{if(j.schema==='sq-tactical-colors-1')pages.set(j.page,j);}).catch(()=>{}));});
+            try{
+              const response=await p.goto(BASE,{waitUntil:'domcontentloaded',timeout:90000});await ready(p,false);check(device+' HTTP200',response?.status()===200,response?.status());check(device+' correct preview theme',await p.evaluate(()=>Shopify.theme.id===158561894555));const g=p.locator('[data-sq-tactical-colors]');check(device+' exactly one color group',await g.count()===1,await g.count());check(device+' correct color title',(await g.locator('summary').innerText()).trim()==='Shop by Color / Pattern');if(!await g.evaluate(e=>e.open))await rawClick(g.locator('summary'));await ready(p,false);await Promise.all(pending);const data=[...pages.values()].sort((a,b)=>a.page-b.page),products=data.flatMap(x=>x.products);check(device+' all catalog pages captured',products.length===data[0]?.total&&new Set(products.map(x=>x.id)).size===products.length,{products:products.length,pages:data.length});if(!products.length)throw new Error('Missing independent catalog data');
+              const opts=await g.locator('input[name="sq_tactical_color"]').evaluateAll(xs=>xs.map(x=>x.value));check(device+' Black present',opts.includes('Black'));check(device+' Multicam present',opts.includes('Multicam'));check(device+' rank-kit noise absent',!opts.some(x=>/^(?:Captain|Major|Colonel|Private|Sergeant|E\d |O\d |Only Ptt|Empty Bag|Full Set|\d+pc )/i.test(x)));check(device+' cache stored',await p.locator('#MainContent').getAttribute('data-sq-tactical-color-cache-stored')==='true');
+              const search=g.locator('input[type="search"]');await search.fill('black');check(device+' color search works',await g.locator('[data-sq-tactical-color-label]:visible').evaluateAll(xs=>xs.length>0&&xs.every(x=>x.textContent.toLowerCase().includes('black'))));await search.fill('');
+              const black=p.locator('input[name="sq_tactical_color"][value="Black"]');await nav(p,()=>rawClick(black));await verify(p,device+' Black',products,columns);check(device+' Black checked',await p.locator('input[name="sq_tactical_color"][value="Black"]').isChecked());check(device+' cache reused',await p.locator('#MainContent').getAttribute('data-sq-tactical-color-cache')==='hit');
+              const black2=p.locator('input[name="sq_tactical_color"][value="Black"]');await openDetails(black2);await nav(p,()=>rawClick(black2));check(device+' Black uncheck clears param',!new URL(p.url()).searchParams.has('sq_tactical_color'));
+              const g2=p.locator('[data-sq-tactical-colors]');if(!await g2.evaluate(e=>e.open))await rawClick(g2.locator('summary'));await ready(p,false);const multi=p.locator('input[name="sq_tactical_color"][value="Multicam"]');await nav(p,()=>rawClick(multi));await verify(p,device+' Multicam',products,columns);
+              if(device==='desktop'){
+                const black3=p.locator('input[name="sq_tactical_color"][value="Black"]');await openDetails(black3);await nav(p,()=>rawClick(black3));await verify(p,'desktop Black+Multicam',products,columns);
+                for(const size of [100,250,50]){const ctl=p.locator('input[name="sq_per_page_control"][value="'+size+'"]');await openDetails(ctl);await nav(p,()=>rawClick(ctl));await verify(p,'desktop '+size+' per page',products,columns);}
+                const next=p.locator('[data-sq-tactical-color-results] .sq-refine-v3-pager a').filter({hasText:'Next'}).first();check('desktop next page available',await next.count()>0);if(await next.count()){await nav(p,()=>rawClick(next));await verify(p,'desktop next page',products,columns);const prev=p.locator('[data-sq-tactical-color-results] .sq-refine-v3-pager a').filter({hasText:'Previous'}).first();await nav(p,()=>rawClick(prev));}
+                const avail=p.locator('.sq-refine-v3-sidebar input[data-filter-name="filter.v.availability"][data-filter-value="1"]').first();check('desktop availability exists',await avail.count()>0);if(await avail.count()){await openDetails(avail);await nav(p,()=>rawClick(avail));await verify(p,'desktop availability + colors',products,columns);check('desktop availability retains colors',new URL(p.url()).searchParams.getAll('sq_tactical_color').length===2);}
+                const maker=p.locator('.sq-refine-v3-sidebar input[data-sq-polish-param="filter.p.vendor"]').first();check('desktop manufacturer exists',await maker.count()>0);if(await maker.count()){const value=await maker.getAttribute('data-sq-polish-value');await openDetails(maker);await nav(p,()=>rawClick(maker));await verify(p,'desktop manufacturer + colors',products,columns);check('desktop manufacturer applied',new URL(p.url()).searchParams.get('filter.p.vendor')===value,value);}
+              }
+              const clear=p.locator('[data-sq-tactical-color-results] a').filter({hasText:'Clear color / pattern'}).first();check(device+' clear link exists',await clear.count()>0);await nav(p,()=>rawClick(clear));check(device+' clear removes custom colors',!new URL(p.url()).searchParams.has('sq_tactical_color'));check(device+' original product grid restored',await p.locator('.sq-refine-v3-results .product-grid').first().isVisible());check(device+' zero runtime errors',errors.length===0,errors);await p.screenshot({path:'out-v3/'+device+'-final.png',fullPage:true});
+            }catch(e){report.failures.push(device+': '+String(e));report.states.push({name:device+' failure',error:String(e),state:await state(p).catch(()=>null),errors});console.log('DEVICE ERROR',e.stack);await p.screenshot({path:'out-v3/'+device+'-failure.png',fullPage:true}).catch(()=>{});}
+            await context.close();
+          }
+          await browser.close();fs.writeFileSync('out-v3/report.json',JSON.stringify(report,null,2));console.log('FINAL',JSON.stringify({checks:report.checks.length,failures:report.failures}));if(report.failures.length)process.exitCode=1;
+          EOF
+          node certify-v3.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tactical-final-cert-v3
+          path: out-v3
+          retention-days: 14
