@@ -1,0 +1,174 @@
+{% liquid
+  assign sq_additions_raw = ''
+  assign sq_remove_href = ''
+  if request.page_type == 'collection'
+    case collection.handle
+      when 'tactical-gear'
+        assign sq_additions_raw = 'helmets-accessories|Helmets & Accessories'
+      when 'apparel'
+        assign sq_additions_raw = 'hats-headwear-other-hats-headwear|Casual & Specialty Hats'
+      when 'flags-patriotic-decor'
+        assign sq_additions_raw = ''
+      when 'outdoor-preparedness-gear'
+        assign sq_additions_raw = ''
+      when 'dive-scuba'
+        assign sq_additions_raw = 'search-rescue-surface-markers-buoys-dive-reels|Surface Markers, Buoys & Dive Reels'
+      when 'accessories-gifts-collectibles'
+        assign sq_additions_raw = 'sword-knife-display-cases|Sword & Knife Display Cases'
+    endcase
+  endif
+%}
+
+{% if sq_additions_raw != blank %}
+  {% assign sq_additions = sq_additions_raw | split: '||' %}
+  <div hidden data-sq-perfect-templates>
+    {% for sq_row in sq_additions %}
+      {% assign sq_parts = sq_row | split: '|' %}
+      {% assign sq_handle = sq_parts[0] | strip %}
+      {% assign sq_label = sq_parts[1] | strip %}
+      {% assign sq_collection = collections[sq_handle] %}
+      {% if sq_collection != blank %}
+        {% capture sq_fixed_image %}{% render 'sq-category-fixed-image-url', handle: sq_handle %}{% endcapture %}
+        {% assign sq_image_url = sq_fixed_image | strip %}
+        {% if sq_image_url == blank and sq_collection.image != blank %}
+          {% assign sq_image_url = sq_collection.image | image_url: width: 720 %}
+        {% endif %}
+        {% if sq_image_url == blank and sq_handle == 'sword-knife-display-cases' %}
+          {% assign sq_image_url = 'https://cdn.shopify.com/s/files/1/0774/4602/1275/files/ty6666_69573454-7cb2-45f0-b0a8-37dd8c44ebbb.jpg?v=1786297708' %}
+        {% endif %}
+        <template data-sq-perfect-add="{{ sq_collection.url }}">
+          <a class="sq-subcategory-card" href="{{ sq_collection.url }}" aria-label="Shop {{ sq_label | escape }}">
+            <span class="sq-subcategory-media">
+              {% if sq_image_url != blank %}<img src="{{ sq_image_url }}" alt="{{ sq_label | escape }}" width="720" height="500" loading="lazy">{% else %}<span class="sq-subcategory-placeholder" aria-hidden="true">SQ</span>{% endif %}
+            </span>
+            <span class="sq-subcategory-copy"><span class="sq-subcategory-name">{{ sq_label }}</span>{% if sq_collection.products_count > 0 %}<span class="sq-subcategory-count">{{ sq_collection.products_count }} items</span>{% endif %}<span class="sq-subcategory-arrow" aria-hidden="true">&rarr;</span></span>
+          </a>
+        </template>
+      {% endif %}
+    {% endfor %}
+  </div>
+{% endif %}
+
+<script>
+(function(){
+  function sqPerfectTree(){
+    var logo=document.querySelector('.vac-series-card[aria-label="Logo Merch"]');
+    if(logo) logo.setAttribute('href','/collections/stateside-quartermaster-logo-merch');
+    var publicSafety=document.querySelector('.vac-series-card[aria-label="Public Safety Series"]');
+    if(publicSafety) publicSafety.remove();
+    var militarySchools=document.querySelector('.vac-series-card[aria-label="Military Schools and Academies"]');
+    if(militarySchools) militarySchools.setAttribute('href','/collections/military-schools-academies');
+
+    var subHeading=document.querySelector('#sq-subcategory-title');
+    if(subHeading) subHeading.textContent='Shop by Category';
+
+    var kicker=document.querySelector('.sq-third-level__kicker');
+    if(kicker) kicker.textContent='Browse by product type';
+    var typeHeading=document.querySelector('.sq-third-level h2');
+    if(typeHeading && typeHeading.textContent.indexOf('Child Category')!==-1) typeHeading.textContent=typeHeading.textContent.replace('by Child Category','by Type');
+    var typeIntro=document.querySelector('.sq-third-level__intro');
+    if(typeIntro) typeIntro.textContent='Every option below comes from a product inside this exact category.';
+    var typeGroup=document.querySelector('.sq-third-level__group-head h3');
+    if(typeGroup) typeGroup.textContent='Shop by Type';
+
+    var grid=document.querySelector('.sq-subcategory-grid');
+    if(grid){
+      var removeHref={{ sq_remove_href | json }};
+      if(removeHref){var doomed=grid.querySelector('a[href="'+removeHref+'"]');if(doomed)doomed.remove();}
+
+      {% if collection.handle == 'outdoor-preparedness-gear' %}
+      var bush=grid.querySelector('a[href="/collections/wilderness-survival-bushcraft"] .sq-subcategory-name');
+      if(bush) bush.textContent='Wilderness Survival & Bushcraft Books';
+      {% endif %}
+
+      document.querySelectorAll('template[data-sq-perfect-add]').forEach(function(t){
+        var href=t.getAttribute('data-sq-perfect-add');
+        if(!grid.querySelector('a[href="'+href+'"]')) grid.appendChild(t.content.cloneNode(true));
+      });
+      Array.from(grid.children).sort(function(a,b){
+        var an=(a.querySelector('.sq-subcategory-name')||{}).textContent||'';
+        var bn=(b.querySelector('.sq-subcategory-name')||{}).textContent||'';
+        return an.localeCompare(bn,undefined,{numeric:true,sensitivity:'base'});
+      }).forEach(function(card){grid.appendChild(card);});
+
+      {% if collection.handle == 'tactical-gear' %}
+      var tacticalImages={
+        '/collections/packs-pouches-carry-gear-chest-rigs-load-carriage':'https://cdn.shopify.com/s/files/1/0774/4602/1275/collections/Reaper_Chest_Rig_MTC-1.webp?v=1788250898',
+        '/collections/tactical-belts-load-bearing-gear':'https://cdn.shopify.com/s/files/1/0774/4602/1275/collections/MAGNETIX-Battle-belt-multicam-inner-outer.jpg?v=1788250898',
+        '/collections/packs-pouches-carry-gear-hydration-water-carry':'https://cdn.shopify.com/s/files/1/0774/4602/1275/collections/2_83795b6e-6805-4390-9e8e-a0dfbb9ee9c7.jpg?v=1788250899',
+        '/collections/packs-pouches-carry-gear-first-aid-kits-ifak-carry':'https://cdn.shopify.com/s/files/1/0774/4602/1275/collections/1_dbfd8d3a-3040-4685-a6a5-131e54283c88.jpg?v=1788250899',
+        '/collections/packs-pouches-carry-gear-molle-pouches-organizers':'https://cdn.shopify.com/s/files/1/0774/4602/1275/collections/AgiliteAG35.56TripleMagPouchMolleMagPouch.jpg?v=1788250899',
+        '/collections/armor-plates-plate-carriers':'https://cdn.shopify.com/s/files/1/0774/4602/1275/collections/AgiliteK19PlateCarrier3.0AllColorsAvailable..jpg?v=1788250900',
+        '/collections/packs-pouches-carry-gear-range-duffle-gear-bags':'https://cdn.shopify.com/s/files/1/0774/4602/1275/collections/72-Hour-1000D-Cordura-Duffle-Bag-Mcamblack-Recycledfirefighter.jpg?v=1788250902',
+        '/collections/packs-pouches-carry-gear-sling-crossbody-bags':'https://cdn.shopify.com/s/files/1/0774/4602/1275/collections/EagleIndustriesActiveShooterResponseSlingBag.jpg?v=1788250903',
+        '/collections/tactical-gear-specialized-tactical-equipment':'https://cdn.shopify.com/s/files/1/0774/4602/1275/collections/tactical-specialized-comtac-vii.jpg?v=1788251000',
+        '/collections/packs-pouches-carry-gear-backpacks-rucksacks':'https://cdn.shopify.com/s/files/1/0774/4602/1275/collections/AgiliteAMAPIIIAssaultPack.jpg?v=1788250905',
+        '/collections/helmets-accessories':'https://cdn.shopify.com/s/files/1/0774/4602/1275/collections/MultiCam_-_Ops-Core_-_FAST_SF_GEN_II_-_HCC_Tactical.jpg?v=1788250906'
+      };
+      Object.keys(tacticalImages).forEach(function(href){
+        var card=grid.querySelector('a[href="'+href+'"]');
+        if(!card)return;
+        var media=card.querySelector('.sq-subcategory-media');
+        if(!media)return;
+        var img=media.querySelector('img');
+        if(!img){media.innerHTML='<img width="720" height="500" loading="lazy">';img=media.querySelector('img');}
+        img.src=tacticalImages[href];
+        img.removeAttribute('srcset');
+        img.removeAttribute('sizes');
+        var label=card.querySelector('.sq-subcategory-name');
+        img.alt=label?label.textContent.trim():'Tactical gear category';
+      });
+      {% endif %}
+    }
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',sqPerfectTree); else sqPerfectTree();
+})();
+</script>
+
+{% if request.page_type == 'collection' and collection.handle == 'military-schools-academies' %}
+<script data-sq-academy-soldout-preservation>
+(function(){
+  function preserveAcademyCategories(){
+    var root=document.querySelector('.sq-afg-branch-section[data-sq-afg-mode="military-schools-categories"]');
+    if(root)root.dataset.sqSoldOutCategoriesPreserved='true';
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',preserveAcademyCategories,{once:true});else preserveAcademyCategories();
+})();
+</script>
+{% endif %}
+
+{% if request.page_type == 'collection' and collection.handle == 'air-force-insignia-ranks-awards' %}
+<script>
+(function(){
+  var patchOnlyTypes=['Air Force Beret Flashes','Air Force OCP Command & Unit Patches','OCP Brassards','Air Force Command & Unit Patches','Air Force OCP Patch & Flag Bundles'];
+  function sqRemovePatchOnlyTypes(){
+    var root=document.querySelector('.sq-third-level[data-sq-collection-handle="air-force-insignia-ranks-awards"]');if(!root)return false;
+    var grid=root.querySelector('.sq-third-level__type-grid');if(!grid)return false;
+    grid.querySelectorAll('.sq-third-level__type[data-product-type]').forEach(function(card){var label=card.getAttribute('data-product-type')||'';if(patchOnlyTypes.indexOf(label)!==-1)card.remove();});
+    var total=root.querySelector('.sq-third-level__group-head span');var count=grid.querySelectorAll('.sq-third-level__type').length;if(total)total.textContent=count+(count===1?' choice':' choices');root.dataset.sqAirForceInsigniaDeduped='true';return true;
+  }
+  function sqWait(){var root=document.querySelector('.sq-third-level[data-sq-collection-handle="air-force-insignia-ranks-awards"]');if(root&&(root.dataset.sqCompleteTypes==='true'||sqWait.attempts>=200)){sqRemovePatchOnlyTypes();return;}if(sqWait.attempts>=200)return;sqWait.attempts+=1;window.setTimeout(sqWait,50);}sqWait.attempts=0;if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sqWait);else sqWait();
+})();
+</script>
+{% endif %}
+
+{% if request.page_type == 'collection' and collection.handle == 'u-s-air-force-gifts-collectibles' %}
+<script>
+(function(){
+  var displayOnlyTypes=['Military Award & Medal Displays','Memorial Keepsakes & Frames'];
+  function sqRemoveDisplayOnlyGiftTypes(){var root=document.querySelector('.sq-third-level[data-sq-collection-handle="u-s-air-force-gifts-collectibles"]');if(!root)return false;var grid=root.querySelector('.sq-third-level__type-grid');if(!grid)return false;grid.querySelectorAll('.sq-third-level__type[data-product-type]').forEach(function(card){var label=card.getAttribute('data-product-type')||'';if(displayOnlyTypes.indexOf(label)!==-1)card.remove();});var total=root.querySelector('.sq-third-level__group-head span');var count=grid.querySelectorAll('.sq-third-level__type').length;if(total)total.textContent=count+(count===1?' choice':' choices');root.dataset.sqAirForceGiftsDeduped='true';return true;}
+  function sqWaitGifts(){var root=document.querySelector('.sq-third-level[data-sq-collection-handle="u-s-air-force-gifts-collectibles"]');if(root&&(root.dataset.sqCompleteTypes==='true'||sqWaitGifts.attempts>=200)){sqRemoveDisplayOnlyGiftTypes();return;}if(sqWaitGifts.attempts>=200)return;sqWaitGifts.attempts+=1;window.setTimeout(sqWaitGifts,50);}sqWaitGifts.attempts=0;if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sqWaitGifts);else sqWaitGifts();
+})();
+</script>
+{% endif %}
+
+{% if request.page_type == 'collection' and collection.handle == 'u-s-air-force-flags-displays-memorials' %}<script src="{{ 'sq-air-force-type-fallback.js' | asset_url }}" defer></script>{% endif %}
+<style>
+body:has(.vac-guard-folders) .sq-third-level{display:none!important}
+body:has(.vac-guard-folders) collection-component{display:none!important}
+body.sq-air-force-type-results .sq-third-level{display:none!important}
+body.sq-air-force-type-results .sq-subcategory-section{display:none!important}
+body.sq-air-force-type-results collection-component{display:block!important}
+@media(min-width:1121px){.vac-series-card:nth-child(11){grid-column:3/span 2}}
+</style>
+{% schema %}{"name":"Perfect Button Tree","settings":[],"presets":[{"name":"Perfect Button Tree"}]}{% endschema %}
