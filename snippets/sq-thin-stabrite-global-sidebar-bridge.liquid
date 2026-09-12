@@ -1,0 +1,54 @@
+{% doc %}
+Bridges Thin Line and Sta-Brite custom category/type renderers into the global four-column collection layout.
+When Refine V3 owns a Thin Line child route, V3 is the single sidebar authority and this legacy bridge removes
+any duplicate global sidebar/layout it may have created. Legacy availability query parameters are removed from
+customer-facing links.
+{% enddoc %}
+{% if request.page_type == 'collection' %}
+<style data-sq-thin-stabrite-global-sidebar-bridge>
+#MainContent .sq-global-refine-main>.sq-ts-match-section{padding-left:0!important;padding-right:0!important;width:100%!important;max-width:none!important}
+#MainContent .sq-global-refine-main>.sq-ts-match-section .sq-ts-match-wrap{width:100%!important;max-width:none!important;margin:0!important}
+#MainContent .sq-global-refine-main>.sq-ts-match-section .sq-ts-match-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:16px!important}
+@media(max-width:900px){#MainContent .sq-global-refine-main>.sq-ts-match-section .sq-ts-match-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media(max-width:600px){#MainContent .sq-global-refine-main>.sq-ts-match-section .sq-ts-match-grid{grid-template-columns:1fr!important}}
+</style>
+<script data-sq-thin-stabrite-global-sidebar-bridge>
+(function(){
+  if(window.__sqThinStaGlobalSidebarBridge)return;window.__sqThinStaGlobalSidebarBridge=true;
+  var main=document.getElementById('MainContent');if(!main)return;var busy=false,timer=null;
+  function cleanLinks(root){(root||main).querySelectorAll('a[href*="filter.v.availability"]').forEach(function(a){try{var u=new URL(a.href,location.origin);u.searchParams.delete('filter.v.availability');a.href=u.pathname+(u.searchParams.toString()?'?'+u.searchParams.toString():'')+u.hash}catch(_){}})}
+  function v3OwnsThinLine(){
+    var html=document.documentElement;
+    var root=(html&&html.dataset&&html.dataset.sqRefineV3ChildRoot)||new URLSearchParams(location.search).get('sq_root')||'';
+    return root==='thin-line' || !!main.querySelector('.sq-refine-v3-sidebar');
+  }
+  function removeDuplicateGlobal(){
+    main.querySelectorAll('.sq-global-refine-layout').forEach(function(layout){
+      var side=layout.querySelector(':scope>.sq-global-refine-sidebar');
+      var body=layout.querySelector(':scope>.sq-global-refine-main');
+      if(body){while(body.firstChild)layout.parentNode.insertBefore(body.firstChild,layout)}
+      if(side)side.remove();
+      layout.remove();
+    });
+    main.querySelectorAll(':scope>.sq-global-refine-sidebar,.sq-global-refine-sidebar[data-sq-thin-sta-duplicate]').forEach(function(side){side.remove()});
+  }
+  function run(){if(busy)return;busy=true;try{
+    cleanLinks(main);
+    if(v3OwnsThinLine()){removeDuplicateGlobal();return;}
+    var target=main.querySelector('.sq-ts-match-section[data-sq-parent],.sq-ts-match-section[data-sq-type-browser]');if(!target)return;
+    var section=target.closest('.shopify-section');if(section)section.style.setProperty('display','block','important');
+    target.style.setProperty('display','block','important');
+    var layout=main.querySelector('.sq-global-refine-layout'),side,body;
+    if(!layout){layout=document.createElement('div');layout.className='sq-global-refine-layout';layout.dataset.sqThinStaBridge='true';side=document.createElement('aside');side.className='sq-global-refine-sidebar';side.dataset.sqThinStaDuplicate='true';side.setAttribute('aria-label','Refine products');side.dataset.mobileCollapsed=matchMedia('(max-width:900px)').matches?'true':'false';body=document.createElement('div');body.className='sq-global-refine-main';section&&section.parentNode?section.parentNode.insertBefore(layout,section):target.parentNode.insertBefore(layout,target);layout.appendChild(side);layout.appendChild(body)}else{side=layout.querySelector(':scope>.sq-global-refine-sidebar');body=layout.querySelector(':scope>.sq-global-refine-main')}
+    if(!side){side=document.createElement('aside');side.className='sq-global-refine-sidebar';side.dataset.sqThinStaDuplicate='true';side.setAttribute('aria-label','Refine products');layout.insertBefore(side,layout.firstChild)}
+    if(!body){body=document.createElement('div');body.className='sq-global-refine-main';layout.appendChild(body)}
+    if(target.parentNode!==body)body.appendChild(target);
+    cleanLinks(target);
+  }finally{busy=false}}
+  function q(){clearTimeout(timer);timer=setTimeout(run,30)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();
+  [80,250,600,1200,2200,4000,7000,11000].forEach(function(ms){setTimeout(run,ms)});
+  new MutationObserver(q).observe(main,{childList:true,subtree:true});
+})();
+</script>
+{% endif %}
