@@ -1,0 +1,79 @@
+name: Storefront Chromium refine semantic audit
+on:
+  push:
+    paths:
+      - '.github/workflows/storefront-refine-semantic-audit.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0 fast-xml-parser@4.5.0
+          npx playwright install --with-deps chromium
+      - name: Click every visible Refine checkbox and inspect product fit
+        env:
+          BASE: https://www.statesideqm.com
+          SHARD: ${{ matrix.shard }}
+          SHARDS: '8'
+        run: |
+          cat > refine-audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import { XMLParser } from 'fast-xml-parser';
+          import fs from 'fs';
+          import crypto from 'crypto';
+          const BASE=process.env.BASE, shard=Number(process.env.SHARD), shards=Number(process.env.SHARDS);
+          const OUT='out'; fs.mkdirSync(`${OUT}/videos`,{recursive:true}); fs.mkdirSync(`${OUT}/screens`,{recursive:true});
+          const parser=new XMLParser({ignoreAttributes:false});
+          const H=s=>parseInt(crypto.createHash('sha1').update(s).digest('hex').slice(0,8),16);
+          const safe=s=>crypto.createHash('sha1').update(s).digest('hex').slice(0,12);
+          const norm=raw=>{try{const u=new URL(raw,BASE); if(u.origin!==new URL(BASE).origin||!u.pathname.startsWith('/collections/'))return null; u.hash=''; return u.pathname+(u.search?u.search:'')}catch{return null}};
+          async function routes(){const r=await fetch(`${BASE}/sitemap.xml`); const x=parser.parse(await r.text()); let maps=x?.sitemapindex?.sitemap||[]; if(!Array.isArray(maps))maps=[maps]; const out=new Set(); for(const m of maps){if(!/sitemap_collections/i.test(m.loc||''))continue; const sx=parser.parse(await (await fetch(m.loc)).text()); let us=sx?.urlset?.url||[]; if(!Array.isArray(us))us=[us]; for(const z of us){const n=norm(z.loc); if(n)out.add(n)}} return [...out].filter(p=>H(p)%shards===shard).sort()}
+          function mismatch(label,titles){const l=label.toLowerCase(), ts=titles.map(x=>x.toLowerCase()); const bad=[]; const add=(re,why)=>ts.forEach((t,i)=>{if(re.test(t))bad.push({title:titles[i],why})});
+            if(/chest rig|chest rigs/.test(l)) add(/\bbelt\b|buckle|waist belt|duty belt|web belt/,'belt-like product under Chest Rigs');
+            if(/belt|belts/.test(l)) add(/chest rig|plate carrier|body armor|helmet/,'non-belt tactical carrier/armor under Belts');
+            if(/helmet/.test(l)) add(/\bboot|glove|belt|shirt|pants?|trouser|backpack|pack\b|chest rig/,'non-helmet product under Helmets');
+            if(/flashlight|lighting/.test(l)) add(/shirt|pants?|trouser|boot|belt|patch|insignia|book/,'non-lighting product under Flashlights/Lighting');
+            if(/first aid|medical|ifak/.test(l)) add(/shirt|pants?|trouser|boot|belt buckle|book|flag/,'obvious non-medical product under First Aid/Medical');
+            if(/footwear|boots?/.test(l)) add(/shirt|pants?|trouser|belt|patch|insignia|chest rig|plate carrier/,'non-footwear product under Footwear/Boots');
+            if(/gloves?/.test(l)) add(/shirt|pants?|trouser|boot|belt|patch|insignia|chest rig/,'non-glove product under Gloves');
+            if(/eyewear|glasses|goggles/.test(l)) add(/shirt|pants?|trouser|boot|belt|patch|insignia|chest rig/,'non-eyewear product under Eyewear');
+            if(/knives|knife|axes|multi-tools?/.test(l)) add(/shirt|pants?|trouser|boot|belt|patch|insignia|chest rig|plate carrier/,'obvious non-tool product under Knives/Axes/Multi-Tools');
+            if(/patch|patches/.test(l)&&!/morale/.test(l)) add(/shirt|pants?|trouser|boot|belt|book|flashlight/,'obvious non-patch product under Patches');
+            return bad.slice(0,50)}
+          const browser=await chromium.launch({headless:true}), rs=await routes(), results=[];
+          for(let ix=0;ix<rs.length;ix++){
+            const path=rs[ix], ctx=await browser.newContext({viewport:{width:1365,height:900},recordVideo:{dir:`${OUT}/videos`,size:{width:960,height:540}}}), page=await ctx.newPage();
+            page.setDefaultTimeout(12000); page.setDefaultNavigationTimeout(30000); const rec={path,checks:[],errors:[]}; page.on('pageerror',e=>rec.errors.push(e.message));
+            try{const res=await page.goto(new URL(path,BASE).toString(),{waitUntil:'domcontentloaded'}); rec.status=res?.status()??null; await page.waitForTimeout(750);
+              const controls=await page.locator('#MainContent input[type=checkbox]:visible').evaluateAll(xs=>xs.map((x,i)=>({i,id:x.id||'',name:x.name||'',value:x.value||'',label:(x.closest('label')?.innerText||document.querySelector(`label[for="${CSS.escape(x.id)}"]`)?.innerText||x.getAttribute('aria-label')||'').replace(/\s+/g,' ').trim()})).filter(x=>x.label));
+              for(let ci=0;ci<controls.length;ci++){
+                const c=controls[ci]; let outcome='PASS', err=null, titles=[], bad=[];
+                try{const inputs=page.locator('#MainContent input[type=checkbox]:visible'); const input=inputs.nth(ci); if(!await input.count()) {outcome='FAIL_CONTROL_DISAPPEARED'} else {await input.scrollIntoViewIfNeeded(); await input.check({timeout:8000}); await page.waitForTimeout(900); titles=await page.locator('#MainContent .product-card:visible, #MainContent .product-grid__item:visible, #MainContent [class*=product-card]:visible').evaluateAll(es=>[...new Set(es.map(e=>(e.innerText||'').replace(/\s+/g,' ').trim().split('\n')[0]).filter(Boolean))].slice(0,100)).catch(()=>[]); bad=mismatch(c.label,titles); const body=((await page.locator('#MainContent').innerText().catch(()=>''))||'').slice(0,10000); if(/something went wrong|internal server error|there was a problem/i.test((await page.title())+' '+body))outcome='FAIL_ERROR_PAGE'; if(bad.length)outcome='FAIL_SEMANTIC_CANDIDATES'; if(await input.isChecked().catch(()=>false))await input.uncheck({timeout:8000}).catch(()=>{}); await page.waitForTimeout(300)}}catch(e){outcome='FAIL_EXCEPTION';err=String(e); await page.goto(new URL(path,BASE).toString(),{waitUntil:'domcontentloaded'}).catch(()=>{}); await page.waitForTimeout(300)}
+                rec.checks.push({label:c.label,name:c.name,value:c.value,outcome,productCountSample:titles.length,semanticCandidates:bad,error:err});
+              }
+              rec.duplicateSidebars=await page.locator('#MainContent .sq-global-refine-sidebar:visible').count().catch(()=>0)>1; rec.h1=((await page.locator('h1').first().textContent().catch(()=>''))||'').trim();
+              await page.screenshot({path:`${OUT}/screens/${String(ix+1).padStart(4,'0')}-${safe(path)}.png`,fullPage:true}).catch(()=>{});
+            }catch(e){rec.errors.push(`fatal:${String(e)}`)}
+            const v=page.video(); await ctx.close(); if(v){try{const old=await v.path(); fs.renameSync(old,`${OUT}/videos/${String(ix+1).padStart(4,'0')}-${safe(path)}.webm`)}catch{}}
+            rec.failedChecks=rec.checks.filter(x=>x.outcome!=='PASS').length; rec.fail=rec.status!==200||rec.errors.length>0||rec.duplicateSidebars||rec.failedChecks>0; results.push(rec); fs.writeFileSync(`${OUT}/progress-${shard}.json`,JSON.stringify(results,null,2));
+          }
+          await browser.close(); const summary={shard,routes:results.length,controls:results.reduce((n,r)=>n+r.checks.length,0),failedRoutes:results.filter(r=>r.fail).length,failedControls:results.reduce((n,r)=>n+r.failedChecks,0),semanticCandidateCount:results.reduce((n,r)=>n+r.checks.reduce((m,c)=>m+c.semanticCandidates.length,0),0)}; fs.writeFileSync(`${OUT}/summary-${shard}.json`,JSON.stringify(summary,null,2)); fs.writeFileSync(`${OUT}/results-${shard}.json`,JSON.stringify(results,null,2)); console.log(JSON.stringify(summary,null,2)); if(summary.failedRoutes)process.exitCode=2;
+          EOF
+          node refine-audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: storefront-refine-semantic-${{ matrix.shard }}
+          path: out
+          retention-days: 7
