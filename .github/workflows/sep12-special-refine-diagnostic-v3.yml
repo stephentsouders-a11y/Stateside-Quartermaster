@@ -1,0 +1,87 @@
+name: Sep12 special Refine diagnostic v3
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-special-refine-diagnostic-v3.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Trace Sta-Brite owner and all Ohio controls
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > diagnose.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const BASE=process.env.BASE,THEME=process.env.THEME,OUT='out';
+          fs.mkdirSync(`${OUT}/screens`,{recursive:true});fs.mkdirSync(`${OUT}/video`,{recursive:true});
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const candidate=route=>{const u=new URL('/collections/'+route,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()};
+          async function center(page,loc){await loc.scrollIntoViewIfNeeded();const b=await loc.boundingBox();if(!b)throw new Error('no bounding box');await page.mouse.click(b.x+b.width/2,b.y+b.height/2)}
+          async function robustLoad(page,route){let last;for(let n=0;n<4;n++){try{const r=await page.goto(candidate(route),{waitUntil:'domcontentloaded',timeout:40000});const status=r?.status()||0;if(status===429||status>=500){last=new Error(`HTTP ${status}`);await sleep(1200*(n+1));continue}const main=page.locator('#MainContent');await main.waitFor({state:'attached',timeout:15000});const body=((await page.locator('body').innerText().catch(()=>''))||'').slice(0,10000);if(/something went wrong|internal server error|page not found|404 not found/i.test(body)){last=new Error('error page');await sleep(1200*(n+1));continue}return r}catch(e){last=e;await sleep(1200*(n+1))}}throw last||new Error('load failed')}
+          const browser=await chromium.launch({headless:true});
+          const result={staBrite:{timeline:[],console:[],pageErrors:[],removals:[]},ohio:{checks:[],console:[],pageErrors:[]}};
+
+          // Sta-Brite: install a mutation tracer before any storefront scripts execute.
+          {
+            const ctx=await browser.newContext({viewport:{width:1365,height:900},recordVideo:{dir:`${OUT}/video`,size:{width:960,height:633}}});
+            const page=await ctx.newPage();page.setDefaultTimeout(18000);
+            page.on('console',m=>result.staBrite.console.push(`${m.type()}: ${m.text()}`));
+            page.on('pageerror',e=>result.staBrite.pageErrors.push(String(e.message||e)));
+            await page.addInitScript(()=>{
+              window.__sqRemovalTrace=[];
+              function desc(n){if(!n||n.nodeType!==1)return null;return {tag:n.tagName,cls:n.className||'',id:n.id||'',special:n.matches?.('.sq-stabrite-refine__side')||false,global:n.matches?.('.sq-global-refine-sidebar')||false,html:(n.outerHTML||'').slice(0,600)}}
+              const mo=new MutationObserver(ms=>ms.forEach(m=>m.removedNodes.forEach(n=>{if(n.nodeType===1&&(n.matches?.('.sq-stabrite-refine__side,.sq-global-refine-sidebar,.sq-global-refine-layout')||n.querySelector?.('.sq-stabrite-refine__side,.sq-global-refine-sidebar'))){window.__sqRemovalTrace.push({at:performance.now(),removed:desc(n),parent:desc(m.target),stack:(new Error()).stack})}})));
+              document.addEventListener('DOMContentLoaded',()=>mo.observe(document.documentElement,{childList:true,subtree:true}),{once:true});
+            });
+            const r=await robustLoad(page,'sta-brite-insignia');result.staBrite.status=r.status();
+            const marks=[200,800,1500,3500,5000,8000];let prev=0;
+            for(const ms of marks){await sleep(ms-prev);prev=ms;result.staBrite.timeline.push(await page.evaluate((ms)=>{const q=s=>[...document.querySelectorAll(s)].map(el=>{const r=el.getBoundingClientRect(),cs=getComputedStyle(el);return {cls:el.className,parent:el.parentElement?.className||'',visible:cs.display!=='none'&&cs.visibility!=='hidden'&&r.width>2&&r.height>2,details:el.querySelectorAll('details').length,inputs:el.querySelectorAll('input').length}});return {ms,owner:document.documentElement.dataset.sqStaBriteRefineOwner||null,shell:!!document.querySelector('[data-sq-stabrite-refine-shell]'),special:q('.sq-stabrite-refine__side'),global:q('.sq-global-refine-sidebar'),layouts:q('.sq-global-refine-layout'),v3:q('.sq-refine-v3-sidebar'),scripts:{root:!!document.querySelector('script[data-sq-stabrite-refine-root-v2]'),owner:!!document.querySelector('script[data-sq-stabrite-special-refine-owner]'),bridge:!!document.querySelector('script[data-sq-thin-stabrite-global-sidebar-bridge]'),authority:!!document.querySelector('script[data-sq-single-refine-authority]')}}},ms));}
+            result.staBrite.removals=await page.evaluate(()=>window.__sqRemovalTrace||[]);
+            await page.screenshot({path:`${OUT}/screens/sta-brite-insignia.png`,fullPage:true}).catch(()=>{});
+            const v=page.video();await ctx.close();if(v){try{fs.renameSync(await v.path(),`${OUT}/video/sta-brite-insignia.webm`)}catch{}}
+          }
+
+          // Ohio: print every physical text and checkbox outcome by stable label/href.
+          {
+            const ctx=await browser.newContext({viewport:{width:1365,height:900},recordVideo:{dir:`${OUT}/video`,size:{width:960,height:633}}});
+            const page=await ctx.newPage();page.setDefaultTimeout(18000);
+            page.on('console',m=>result.ohio.console.push(`${m.type()}: ${m.text()}`));
+            page.on('pageerror',e=>result.ohio.pageErrors.push(String(e.message||e)));
+            await robustLoad(page,'state-guard-series-ohio');await sleep(3500);
+            const controls=await page.locator('#MainContent .sqsg-refine-choice input[type=checkbox]').evaluateAll(xs=>xs.map(x=>({label:x.getAttribute('aria-label')||x.parentElement?.querySelector('span')?.textContent||'',href:x.dataset.sqsgRefineHref||''})));
+            for(const def of controls){const c={label:def.label.replace(/\s+/g,' ').trim(),href:def.href,outcome:'PASS'};try{
+              await robustLoad(page,'state-guard-series-ohio');await sleep(2500);
+              let input=page.locator('#MainContent .sqsg-refine-choice input[type=checkbox]').filter({has:page.locator('xpath=..')});
+              input=page.locator(`#MainContent .sqsg-refine-choice input[data-sqsg-refine-href="${CSS.escape(def.href)}"]`).first();
+              if(!await input.count()) input=page.locator('#MainContent .sqsg-refine-choice input[type=checkbox]').filter({hasText:c.label}).first();
+              if(!await input.count()) throw new Error('control not found');
+              let row=input.locator('xpath=..'),text=row.locator('span').first();c.beforeUrl=page.url();c.beforeChecked=await input.isChecked();await center(page,text);await sleep(400);c.textUrl=page.url();c.textChecked=await input.isChecked().catch(()=>null);c.textNoOp=c.textUrl===c.beforeUrl&&c.textChecked===c.beforeChecked;if(!c.textNoOp)c.outcome='FAIL_TEXT_ACTIVATED';
+              await robustLoad(page,'state-guard-series-ohio');await sleep(2500);
+              input=page.locator(`#MainContent .sqsg-refine-choice input[data-sqsg-refine-href="${CSS.escape(def.href)}"]`).first();if(!await input.count())throw new Error('control missing before checkbox click');c.boxBeforeUrl=page.url();await center(page,input);await Promise.race([page.waitForURL(u=>u.toString()!==c.boxBeforeUrl,{timeout:8000}).catch(()=>{}),sleep(1200)]);c.boxAfterUrl=page.url();c.afterChecked=await input.isChecked().catch(()=>null);c.checkboxAction=c.boxAfterUrl!==c.boxBeforeUrl||c.afterChecked===true;if(!c.checkboxAction&&c.outcome==='PASS')c.outcome='FAIL_CHECKBOX_NO_ACTION';
+            }catch(e){c.outcome='FAIL_EXCEPTION';c.error=String(e)}result.ohio.checks.push(c);console.log(JSON.stringify(c));}
+            result.ohio.sidebarCount=await page.locator('#MainContent .sqsg-refine-sidebar:visible').count().catch(()=>0);result.ohio.failed=result.ohio.checks.filter(x=>x.outcome!=='PASS').length;
+            await robustLoad(page,'state-guard-series-ohio').catch(()=>{});await sleep(1500);await page.screenshot({path:`${OUT}/screens/state-guard-series-ohio.png`,fullPage:true}).catch(()=>{});
+            const v=page.video();await ctx.close();if(v){try{fs.renameSync(await v.path(),`${OUT}/video/state-guard-series-ohio.webm`)}catch{}}
+          }
+          await browser.close();fs.writeFileSync(`${OUT}/diagnostic.json`,JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
+          EOF
+          node diagnose.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: special-refine-diagnostic-v3
+          path: out
+          retention-days: 7
