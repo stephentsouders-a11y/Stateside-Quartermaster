@@ -1,0 +1,40 @@
+name: Sep12 Art Refine no-action diagnostic
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-art-refine-noaction-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Diagnose physical hit targets and metadata
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > diag.mjs <<'EOF'
+          import { chromium } from 'playwright'; import fs from 'fs';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms)), labels=['Ben Cantwell Tactical, Weapons & Morale Art','Don Troiani Historical Military Art','Historical Art Prints'];
+          const url=()=>{const u=new URL('/collections/art',process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);return u.toString()};
+          const b=await chromium.launch({headless:true}),p=await b.newPage({viewport:{width:1365,height:900}});p.setDefaultTimeout(12000);const out=[];
+          async function load(){for(let n=0;n<4;n++){const r=await p.goto(url(),{waitUntil:'domcontentloaded',timeout:35000}).catch(()=>null);if(r&&r.status()<500&&r.status()!==429){await p.locator('#MainContent').waitFor({state:'attached'});await p.waitForFunction(()=>document.getElementById('MainContent')?.dataset.sqRefineV3Ready==='true'||!!document.querySelector('#MainContent .sq-refine-v3-sidebar'),null,{timeout:12000}).catch(()=>{});await sleep(800);return}await sleep(900*(n+1))}throw new Error('load failed')}
+          function jsDump(label){const all=[...document.querySelectorAll('#MainContent .sq-refine-v3-choice input[type=checkbox]')],i=all.find(x=>((x.getAttribute('aria-label')||x.parentElement?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim())===label);if(!i)return null;const r=i.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return{connected:i.isConnected,checked:i.checked,name:i.name,value:i.value,dataset:{...i.dataset},outer:i.outerHTML,parent:i.parentElement?.outerHTML?.slice(0,1200),rect:{x:r.x,y:r.y,w:r.width,h:r.height},hit:{tag:hit?.tagName,cls:hit?.className,aria:hit?.getAttribute?.('aria-label'),same:hit===i,html:hit?.outerHTML?.slice(0,500)}}}
+          for(const label of labels){await load();const before=await p.evaluate(jsDump,label);const rec={label,before,urlBefore:p.url()};if(before){const loc=p.locator('#MainContent .sq-refine-v3-choice input[type=checkbox]').filter({has:p.locator('xpath=..')});const idx=await p.locator('#MainContent .sq-refine-v3-choice input[type=checkbox]').evaluateAll((xs,l)=>xs.findIndex(x=>((x.getAttribute('aria-label')||x.parentElement?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim())===l),label);if(idx>=0){let input=p.locator('#MainContent .sq-refine-v3-choice input[type=checkbox]').nth(idx);await input.scrollIntoViewIfNeeded().catch(()=>{});await sleep(100);const current=await p.evaluate(jsDump,label);rec.atClick=current;if(current?.rect){await p.mouse.click(current.rect.x+current.rect.w/2,current.rect.y+current.rect.h/2);await Promise.race([p.waitForURL(u=>u.toString()!==rec.urlBefore,{timeout:5000}).catch(()=>{}),sleep(1200)]);rec.urlAfter=p.url();rec.owner=await p.evaluate(()=>window.__sqRefineV3LastBoxOwner||null).catch(()=>null);rec.after=await p.evaluate(jsDump,label).catch(()=>null)}}out.push(rec);console.log(JSON.stringify(rec))}
+          await b.close();fs.writeFileSync('art-noaction.json',JSON.stringify(out,null,2));
+          EOF
+          node diag.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: art-refine-noaction-diagnostic
+          path: art-noaction.json
+          retention-days: 7
