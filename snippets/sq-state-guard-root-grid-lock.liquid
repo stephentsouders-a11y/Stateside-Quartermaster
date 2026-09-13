@@ -1,0 +1,23 @@
+{% if request.page_type == 'collection' and collection.handle == 'state-guard-series' %}
+<script data-sq-state-guard-root-grid-lock>
+(function(){
+  if(window.__sqStateGuardRootGridLock)return;window.__sqStateGuardRootGridLock=true;
+  var main=document.getElementById('MainContent');if(!main)return;
+  function apply(){
+    var grids=[].slice.call(main.querySelectorAll('.sg-entity-grid'));
+    grids.forEach(function(grid){
+      var s=getComputedStyle(grid),r=grid.getBoundingClientRect();
+      if(s.display==='none'||s.visibility==='hidden'||r.width<=2||r.height<=2)return;
+      var w=window.innerWidth||document.documentElement.clientWidth||0;
+      var cols=w<=430?'1fr':(w<=760?'repeat(2,minmax(0,1fr))':'repeat(4,minmax(0,1fr))');
+      grid.style.setProperty('grid-template-columns',cols,'important');
+      grid.dataset.sqStateGuardGridColumns=w<=430?'1':(w<=760?'2':'4');
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
+  window.addEventListener('resize',apply,{passive:true});
+  new MutationObserver(function(){requestAnimationFrame(apply)}).observe(main,{childList:true,subtree:true});
+  [50,150,350,700,1400,2600,5000].forEach(function(ms){setTimeout(apply,ms)});
+})();
+</script>
+{% endif %}
