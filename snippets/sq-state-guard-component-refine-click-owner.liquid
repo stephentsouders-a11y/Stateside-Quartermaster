@@ -1,0 +1,37 @@
+{% if request.page_type == 'collection' %}
+{% if collection.handle contains 'state-guard-series-' or collection.handle == 'new-jersey-state-guard-naval-militia' %}
+<script data-sq-state-guard-component-refine-click-owner>
+(function(){
+  if(window.__sqStateGuardComponentRefineClickOwner)return;
+  window.__sqStateGuardComponentRefineClickOwner=true;
+  var navigating=false;
+  function exactBox(ev){
+    var t=ev.target;
+    return t&&t.matches&&t.matches('#MainContent .sqsg-refine-sidebar .sqsg-refine-choice input[type="checkbox"][data-sqsg-refine-href]')?t:null;
+  }
+  document.addEventListener('pointerdown',function(ev){
+    var input=exactBox(ev);if(!input||navigating)return;
+    if(typeof ev.button==='number'&&ev.button!==0)return;
+    var href=input.dataset.sqsgRefineHref||'';if(!href)return;
+    ev.preventDefault();ev.stopImmediatePropagation();
+    input.checked=!input.checked;
+    navigating=true;
+    window.__sqStateGuardLastRefineClick={owner:'pointerdown',href:href,checked:input.checked};
+    location.assign(href);
+  },true);
+  document.addEventListener('mousedown',function(ev){
+    if(navigating&&exactBox(ev)){ev.preventDefault();ev.stopImmediatePropagation()}
+  },true);
+  document.addEventListener('click',function(ev){
+    var input=exactBox(ev);if(!input)return;
+    ev.preventDefault();ev.stopImmediatePropagation();
+    if(navigating)return;
+    var href=input.dataset.sqsgRefineHref||'';if(!href)return;
+    navigating=true;
+    window.__sqStateGuardLastRefineClick={owner:'click-fallback',href:href,checked:input.checked};
+    location.assign(href);
+  },true);
+})();
+</script>
+{% endif %}
+{% endif %}
