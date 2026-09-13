@@ -1,0 +1,49 @@
+name: Sep12 special Refine physical certificate v6
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-special-refine-physical-cert-v6.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify Ohio and Sta-Brite by exact visible labels
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > special-v6.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const BASE=process.env.BASE,THEME=process.env.THEME,OUT='out';fs.mkdirSync(`${OUT}/videos`,{recursive:true});fs.mkdirSync(`${OUT}/screens`,{recursive:true});
+          const cases=[
+            {route:'state-guard-series-ohio',owner:'#MainContent .sqsg-refine-sidebar:visible',selector:'#MainContent .sqsg-refine-choice input[type=checkbox]',expected:8},
+            {route:'sta-brite-insignia',owner:'#MainContent .sq-stabrite-refine__side[data-sq-stabrite-special-owner="true"]:visible',selector:'#MainContent .sq-stabrite-refine__choice input[type=checkbox]',expected:11}
+          ];
+          const url=r=>{const u=new URL('/collections/'+r,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()};
+          async function neutralize(page){await page.evaluate(()=>document.querySelectorAll('#PBarNextFrame,iframe[src*="shopifycloud/preview-bar"]').forEach(el=>{el.style.setProperty('display','none','important');el.style.setProperty('pointer-events','none','important')})).catch(()=>{})}
+          async function load(page,cfg){let last;for(let n=0;n<6;n++){try{const r=await page.goto(url(cfg.route),{waitUntil:'domcontentloaded',timeout:40000});if(!r||r.status()===429||r.status()>=500){last=new Error(`HTTP ${r?.status()||0}`);await sleep(1800*(n+1));continue}await page.locator('#MainContent').waitFor({state:'attached',timeout:15000});for(let w=0;w<40;w++){if(await page.locator(cfg.selector).count().catch(()=>0)===cfg.expected)break;await sleep(200)}await neutralize(page);return r}catch(e){last=e;await sleep(1800*(n+1))}}throw last||new Error('load failed')}
+          async function labelOf(page,cfg,i){return page.locator(cfg.selector).nth(i).evaluate(x=>(x.getAttribute('aria-label')||x.parentElement?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim())}
+          async function inputByLabel(page,cfg,label){let last;for(let n=0;n<30;n++){try{const idx=await page.locator(cfg.selector).evaluateAll((xs,l)=>xs.findIndex(x=>((x.getAttribute('aria-label')||x.parentElement?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim())===l),label);if(idx>=0){const x=page.locator(cfg.selector).nth(idx);if(await x.evaluate(el=>el.isConnected).catch(()=>false))return x}}catch(e){last=e}await sleep(100)}throw last||new Error(`exact label unavailable ${label}`)}
+          async function clickPart(page,cfg,label,part){let last;for(let n=0;n<20;n++){try{await neutralize(page);let input=await inputByLabel(page,cfg,label);let loc=part==='text'?input.locator('xpath=..').locator('span').first():input;await loc.scrollIntoViewIfNeeded();await neutralize(page);await sleep(80);input=await inputByLabel(page,cfg,label);loc=part==='text'?input.locator('xpath=..').locator('span').first():input;const b=await loc.boundingBox();if(!b)throw new Error('no bbox');const hit=await page.evaluate(({x,y})=>{const e=document.elementFromPoint(x,y);return {tag:e?.tagName,cls:String(e?.className||''),isInput:e?.matches?.('input[type=checkbox]')||false,isSpan:e?.tagName==='SPAN'}},{x:b.x+b.width/2,y:b.y+b.height/2});if(part==='box'&&!hit.isInput)throw new Error(`box hit target ${hit.tag}.${hit.cls}`);await page.mouse.click(b.x+b.width/2,b.y+b.height/2);return hit}catch(e){last=e;await sleep(120)}}throw last||new Error('click failed')}
+          const browser=await chromium.launch({headless:true}),results=[];
+          for(const cfg of cases){const ctx=await browser.newContext({viewport:{width:1365,height:900},recordVideo:{dir:`${OUT}/videos`,size:{width:960,height:633}}});const page=await ctx.newPage();page.setDefaultTimeout(12000);const rec={route:cfg.route,checks:[],failures:[]};try{const rr=await load(page,cfg);rec.status=rr.status();rec.ownerCount=await page.locator(cfg.owner).count();rec.v3=await page.locator('#MainContent .sq-refine-v3-sidebar:visible').count();rec.sg=await page.locator('#MainContent .sqsg-refine-sidebar:visible').count();rec.sta=await page.locator('#MainContent .sq-stabrite-refine__side:visible').count();rec.totalOwners=rec.v3+rec.sg+rec.sta;rec.controlCount=await page.locator(cfg.selector).count();if(rec.ownerCount!==1)rec.failures.push(`OWNER_${rec.ownerCount}`);if(rec.totalOwners!==1)rec.failures.push(`TOTAL_OWNER_${rec.totalOwners}`);if(rec.controlCount!==cfg.expected)rec.failures.push(`CONTROLS_${rec.controlCount}`);if(cfg.route==='sta-brite-insignia'){for(const n of ['50','100','250']){const c=await page.locator(`input[name="sq_stabrite_page_size"][value="${n}"]:visible`).count();rec['per'+n]=c;if(c!==1)rec.failures.push(`PER_${n}_${c}`)}}const labels=[];for(let i=0;i<rec.controlCount;i++)labels.push(await labelOf(page,cfg,i));for(const label of labels){const c={label,outcome:'PASS'};try{await load(page,cfg);let input=await inputByLabel(page,cfg,label);const before=page.url(),checked=await input.isChecked();await clickPart(page,cfg,label,'text');await sleep(300);input=await inputByLabel(page,cfg,label);c.textNoOp=page.url()===before&&(await input.isChecked())===checked;if(!c.textNoOp){c.outcome='FAIL_TEXT_ACTIVATED';rec.checks.push(c);continue}c.hit=await clickPart(page,cfg,label,'box');await Promise.race([page.waitForURL(u=>u.toString()!==before,{timeout:7000}).catch(()=>{}),sleep(1200)]);c.afterUrl=page.url();if(c.afterUrl===before){input=await inputByLabel(page,cfg,label).catch(()=>null);c.afterChecked=input?await input.isChecked().catch(()=>null):null}else c.afterChecked=null;c.checkboxAction=c.afterUrl!==before||c.afterChecked===true;if(!c.checkboxAction)c.outcome='FAIL_CHECKBOX_NO_ACTION'}catch(e){c.outcome='FAIL_EXCEPTION';c.error=String(e)}rec.checks.push(c)}rec.failedControls=rec.checks.filter(x=>x.outcome!=='PASS').length;if(rec.failedControls)rec.failures.push(`FAILED_CONTROLS_${rec.failedControls}`);await load(page,cfg).catch(()=>{});await page.screenshot({path:`${OUT}/screens/${cfg.route}.png`,fullPage:true}).catch(()=>{})}catch(e){rec.failures.push('FATAL');rec.error=String(e)}rec.pass=rec.failures.length===0;results.push(rec);console.log(JSON.stringify(rec));const v=page.video();await ctx.close();if(v){try{fs.renameSync(await v.path(),`${OUT}/videos/${cfg.route}.webm`)}catch{}}}
+          await browser.close();const summary={passed:results.filter(x=>x.pass).length,failed:results.filter(x=>!x.pass).length,results};fs.writeFileSync(`${OUT}/summary.json`,JSON.stringify(summary,null,2));console.log(JSON.stringify(summary,null,2));if(summary.failed)process.exitCode=2;
+          EOF
+          node special-v6.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: special-refine-physical-v6
+          path: out
+          retention-days: 7
