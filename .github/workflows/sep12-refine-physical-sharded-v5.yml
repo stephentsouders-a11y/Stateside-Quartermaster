@@ -1,0 +1,56 @@
+name: Sep12 Refine physical sharded v5
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-refine-physical-sharded-v5.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        route: [accessories-gifts-collectibles,airsoft-milsim,apparel,armed-forces-gear,art,body-armor-ballistic-protection,literature,child-safety-shop,dive-scuba,firearm-accessories,first-aid-medical-ifak,flags-patriotic-decor,flashlights-lighting,footwear-gloves-eyewear,k9-dog-gear,knives-axes-cutlery,morale-patches-tactical-id,outdoor-preparedness-gear,patriotic-american-heritage,safety-rescue-climbing,tactical-gear,thin-line,uniforms,watches,zippos-lighters-torches,stateside-quartermaster-logo-merch,army-national-guard-series,air-national-guard-series,products-built-for-the-line-u-s-army,products-built-for-the-line-u-s-navy,products-built-for-the-line-u-s-air-force,products-built-for-the-line-u-s-marine-corps,products-built-for-the-line-u-s-coast-guard,products-built-for-the-line-u-s-space-force,rotc-series,jrotc-series,military-schools-academies,law-enforcement-corrections,firefighting-ems-search-rescue]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Physically certify every generic Refine checkbox
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+          ROUTE: ${{ matrix.route }}
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const BASE=process.env.BASE,THEME=process.env.THEME,route=process.env.ROUTE,OUT='out';
+          fs.mkdirSync(`${OUT}/video`,{recursive:true});fs.mkdirSync(`${OUT}/screens`,{recursive:true});
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const candidate=raw=>{const u=new URL(raw,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()};
+          const base=candidate(`/collections/${route}`),sel='#MainContent .sq-refine-v3-choice input[type=checkbox]';
+          const browser=await chromium.launch({headless:true});const ctx=await browser.newContext({viewport:{width:1365,height:900},recordVideo:{dir:`${OUT}/video`,size:{width:960,height:633}}});const page=await ctx.newPage();page.setDefaultTimeout(12000);page.setDefaultNavigationTimeout(35000);
+          const rec={route,base,checks:[],pageErrors:[]};page.on('pageerror',e=>rec.pageErrors.push(String(e.message||e)));
+          async function load(){let last;for(let n=0;n<4;n++){try{const rr=await page.goto(base,{waitUntil:'domcontentloaded',timeout:35000});if(!rr||rr.status()===429||rr.status()>=500){last=new Error('HTTP '+(rr?.status()||0));await sleep(900*(n+1));continue}await page.locator('#MainContent').waitFor({state:'attached',timeout:15000});await page.waitForFunction(()=>{const m=document.getElementById('MainContent');return m&&(m.dataset.sqRefineV3Ready==='true'||!!m.dataset.sqRefineV3Error||!!m.querySelector('.sq-refine-v3-sidebar'))},null,{timeout:12000}).catch(()=>{});const err=await page.locator('#MainContent').getAttribute('data-sq-refine-v3-error').catch(()=>null);if(/429|too many requests|503|server/i.test(err||'')){last=new Error(err);await sleep(900*(n+1));continue}await page.locator('#MainContent details.sq-refine-v3-group').evaluateAll(ds=>ds.forEach(d=>d.open=true)).catch(()=>{});await sleep(250);return rr}catch(e){last=e;await sleep(900*(n+1))}}throw last||new Error('load failed')}
+          async function liveInput(i){for(let n=0;n<10;n++){const x=page.locator(sel).nth(i);if(await x.count()){const ok=await x.evaluate(el=>el.isConnected).catch(()=>false);if(ok)return x}await sleep(80)}throw new Error(`control ${i} unavailable`)}
+          async function liveCenter(i,part){let last;for(let n=0;n<12;n++){try{let input=await liveInput(i);let loc=part==='text'?input.locator('xpath=..').locator('span').first():input;await loc.scrollIntoViewIfNeeded();await sleep(30);input=await liveInput(i);loc=part==='text'?input.locator('xpath=..').locator('span').first():input;const b=await loc.boundingBox();if(!b||b.width<2||b.height<2)throw new Error('no bbox');await page.mouse.click(b.x+b.width/2,b.y+b.height/2);return}catch(e){last=e;await sleep(80)}}throw last||new Error('physical click failed')}
+          try{const rr=await load();rec.status=rr.status();rec.sidebarCount=await page.locator('#MainContent .sq-refine-v3-sidebar:visible').count();rec.horizontalFacets=await page.locator('#MainContent .facets-block-wrapper--horizontal:visible').count();rec.refineError=await page.locator('#MainContent').getAttribute('data-sq-refine-v3-error').catch(()=>null);rec.controlCount=await page.locator(sel).count();rec.initialLabels=await page.locator(sel).evaluateAll(xs=>xs.map(x=>({label:(x.getAttribute('aria-label')||x.parentElement?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim(),group:(x.closest('details')?.querySelector(':scope > summary')?.textContent||'').replace(/\s+/g,' ').trim()})));
+            for(let i=0;i<rec.controlCount;i++){const out={index:i,label:rec.initialLabels[i]?.label||'',group:rec.initialLabels[i]?.group||'',outcome:'PASS'};try{await load();let input=await liveInput(i);const beforeUrl=page.url(),beforeChecked=await input.isChecked();await liveCenter(i,'text');await sleep(350);input=await liveInput(i);const textUrl=page.url(),textChecked=await input.isChecked();out.textNoOp=textUrl===beforeUrl&&textChecked===beforeChecked;if(!out.textNoOp){out.outcome='FAIL_TEXT_ACTIVATED';rec.checks.push(out);continue}const start=page.url();await liveCenter(i,'box');await Promise.race([page.waitForURL(u=>u.toString()!==start,{timeout:7000}).catch(()=>{}),sleep(1000)]);out.checkboxUrl=page.url();let checked=null;if(out.checkboxUrl===start){checked=await (await liveInput(i)).isChecked().catch(()=>null)}out.checkboxChecked=checked;out.checkboxAction=out.checkboxUrl!==start||checked===true;if(!out.checkboxAction)out.outcome='FAIL_CHECKBOX_NO_ACTION';if(out.checkboxUrl!==start){const body=((await page.locator('body').innerText().catch(()=>''))||'').slice(0,12000);if(/something went wrong|internal server error|page not found|404 not found/i.test(body))out.outcome='FAIL_ERROR_PAGE'}}catch(e){out.outcome='FAIL_EXCEPTION';out.error=String(e)}rec.checks.push(out);fs.writeFileSync(`${OUT}/progress.json`,JSON.stringify(rec,null,2));}
+            await load().catch(()=>{});await page.screenshot({path:`${OUT}/screens/${route}.png`,fullPage:true}).catch(()=>{});
+          }catch(e){rec.fatal=String(e)}
+          rec.testedControls=rec.checks.length;rec.failedControls=rec.checks.filter(x=>x.outcome!=='PASS').length;rec.coverageComplete=rec.testedControls===rec.controlCount;rec.fail=rec.status!==200||!!rec.refineError||rec.sidebarCount!==1||rec.horizontalFacets>0||!rec.controlCount||!rec.coverageComplete||rec.failedControls>0||!!rec.fatal;fs.writeFileSync(`${OUT}/result.json`,JSON.stringify(rec,null,2));console.log(JSON.stringify({route,status:rec.status,controls:rec.controlCount,tested:rec.testedControls,coverage:rec.coverageComplete,failed:rec.failedControls,sidebar:rec.sidebarCount,horizontalFacets:rec.horizontalFacets,refineError:rec.refineError,fatal:rec.fatal,fail:rec.fail},null,2));const v=page.video();await ctx.close();if(v){try{fs.renameSync(await v.path(),`${OUT}/video/${route}.webm`)}catch{}}await browser.close();if(rec.fail)process.exitCode=2;
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine-physical-v5-${{ matrix.route }}
+          path: out
+          retention-days: 7
