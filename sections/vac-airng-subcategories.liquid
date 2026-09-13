@@ -1,0 +1,41 @@
+{% liquid
+  assign vac_guard_handles_raw = ''
+  assign vac_guard_kicker = ''
+  assign vac_guard_intro = ''
+  assign vac_guard_accent = '#0b3478'
+  if request.page_type == 'collection' and request.path == collection.url
+    case collection.handle
+      when 'stateside-quartermaster-logo-merch'
+        assign vac_guard_handles_raw = 'stateside-quartermaster-apparel|Apparel'
+        assign vac_guard_kicker = 'Stateside Quartermaster'
+        assign vac_guard_intro = 'Shop official Stateside Quartermaster logo merchandise by category, then narrow to the exact product type.'
+        assign vac_guard_accent = '#a91827'
+      when 'army-national-guard-series'
+        assign vac_guard_handles_raw = 'uniforms-army-agsu-green-service-uniforms|AGSU / Green Service Uniforms||armed-forces-gear-u-s-army-apparel|Army Apparel||u-s-army-art-prints|Army Art & Prints||armyng-asu-dress-uniforms|ASU / Dress Blue Uniforms||armed-forces-gear-u-s-army-books-reference|Army Books & Reference||armed-forces-gear-u-s-army-field-gear-equipment|Army Field Gear & Equipment||armed-forces-gear-u-s-army-flags-displays-memorials|Army Flags, Displays & Memorials||armed-forces-gear-u-s-army-gifts-collectibles|Army Gifts & Collectibles||army-insignia-ranks-awards|Army Insignia, Ranks & Awards||armed-forces-gear-u-s-army-patches-identification|Army Patches & Identification||armed-forces-gear-u-s-army-uniforms-accessories|Army Uniform Accessories||army-national-guard-apparel|National Guard Apparel||army-national-guard-books-reference|National Guard Books & Reference||army-national-guard-flags-displays|National Guard Flags & Displays||army-national-guard-insignia-patches|National Guard Insignia & Patches'
+        assign vac_guard_kicker = 'Army National Guard'
+        assign vac_guard_intro = 'All applicable U.S. Army merchandise is included here by design, along with Army National Guard-specific merchandise. Choose an Army or National Guard category, then narrow to the exact product type.'
+        assign vac_guard_accent = '#a91827'
+    endcase
+  endif
+%}
+{% if vac_guard_handles_raw != blank %}
+  {% assign vac_guard_rows = vac_guard_handles_raw | split: '||' %}
+  <section class="vac-guard-folders" style="--vac-guard-accent:{{ vac_guard_accent }}" aria-labelledby="vac-guard-folders-heading"><div class="vac-guard-folders__wrap"><p class="vac-guard-folders__kicker">{{ vac_guard_kicker }}</p>{% if collection.handle == 'army-national-guard-series' %}<h1 class="vac-guard-folders__page-title">{{ collection.title }}</h1>{% endif %}<h2 id="vac-guard-folders-heading">Shop by Category</h2><p class="vac-guard-folders__intro">{{ vac_guard_intro }}</p><div class="vac-guard-folders__grid">
+    {% for vac_guard_row in vac_guard_rows %}
+      {% assign vac_guard_parts = vac_guard_row | split: '|' %}{% assign collection_handle = vac_guard_parts[0] | strip %}{% assign folder_label = vac_guard_parts[1] | strip %}{% assign folder = collections[collection_handle] %}
+      {% if folder != blank and folder.products_count > 0 %}
+        {% assign folder_image = folder.image %}{% assign fixed_image = '' %}
+        {% case collection_handle %}
+          {% when 'army-insignia-ranks-awards' %}{% assign fixed_image='https://cdn.shopify.com/s/files/1/0774/4602/1275/files/774G1.jpg?v=1786239219' %}
+          {% when 'army-national-guard-apparel' %}{% assign fixed_image='https://cdn.shopify.com/s/files/1/0774/4602/1275/files/ninjapod_media_237081_435065_c6cf_FRONT.jpg?v=1786137942' %}
+          {% when 'army-national-guard-books-reference' %}{% assign fixed_image='https://cdn.shopify.com/s/files/1/0774/4602/1275/files/EaCx6XFpol9781790926930.webp?v=1787567915' %}
+          {% when 'army-national-guard-flags-displays' %}{% assign fixed_image='https://cdn.shopify.com/s/files/1/0774/4602/1275/files/army-national-guard-8645839.jpg?v=1786241713' %}
+          {% when 'army-national-guard-insignia-patches' %}{% assign fixed_image='https://cdn.shopify.com/s/files/1/0774/4602/1275/files/P-NGAL-OCP-_pair.jpg?v=1786237908' %}
+        {% endcase %}
+        <a class="vac-guard-folder" href="{{ folder.url }}" aria-label="Shop {{ folder_label | escape }}"><div class="vac-guard-folder__media">{% if fixed_image != blank %}<img src="{{ fixed_image }}" alt="{{ folder_label | escape }}" loading="lazy" width="900" height="675">{% elsif folder_image != blank %}<img src="{{ folder_image | image_url: width: 900 }}" alt="{{ folder_image.alt | default: folder_label | escape }}" loading="lazy" width="900" height="675">{% endif %}</div><div class="vac-guard-folder__body"><h3>{{ folder_label | escape }}</h3><span>{{ folder.products_count }} items &nbsp;&rarr;</span></div></a>
+      {% endif %}
+    {% endfor %}
+  </div></div></section>
+  <style>.vac-guard-folders{padding:8px 20px 48px;background:{{ settings.color_palette.background }};color:inherit}.vac-guard-folders__wrap{max-width:1280px;margin:0 auto}.vac-guard-folders__kicker{text-align:center;margin:0 0 8px;text-transform:uppercase;letter-spacing:.16em;font-size:12px;font-weight:850;color:var(--vac-guard-accent)}.vac-guard-folders__page-title{display:block!important;text-align:center;margin:0 0 18px;color:#071d2d;font-size:clamp(34px,4.6vw,60px);font-weight:850;line-height:1.04;letter-spacing:-.02em;visibility:visible!important;opacity:1!important}.vac-guard-folders h2{text-align:center;margin:0 0 10px;font-size:clamp(30px,4vw,46px);line-height:1.08}.vac-guard-folders__intro{text-align:center;max-width:920px;margin:0 auto 28px;opacity:.78;line-height:1.5}.vac-guard-folders__grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px}.vac-guard-folder{display:flex;flex-direction:column;overflow:hidden;border:1px solid color-mix(in srgb,var(--vac-guard-accent) 25%,transparent);border-radius:13px;background:#fff;color:#102536;text-decoration:none;box-shadow:0 7px 20px rgba(0,0,0,.08);transition:transform .18s ease,box-shadow .18s ease}.vac-guard-folder:hover,.vac-guard-folder:focus-visible{transform:translateY(-4px);box-shadow:0 13px 28px rgba(0,0,0,.14)}.vac-guard-folder:focus-visible{outline:3px solid #d5ab4b;outline-offset:3px}.vac-guard-folder__media{height:220px;overflow:hidden;background:#fff;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #d9dee1}.vac-guard-folder__media img{width:100%;height:100%;padding:10px;box-sizing:border-box;object-fit:contain;display:block;background:#fff}.vac-guard-folder__body{display:flex;min-height:94px;flex:1;flex-direction:column;padding:13px 14px 15px;background:#071d2d;color:#fff}.vac-guard-folder__body h3{margin:0 0 12px;font-size:15px;line-height:1.22;font-weight:800}.vac-guard-folder__body span{margin-top:auto;font-size:11px;font-weight:850;text-transform:uppercase;letter-spacing:.055em;color:#d5ab4b}@media(max-width:1100px){.vac-guard-folders__grid{grid-template-columns:repeat(4,minmax(0,1fr))}}@media(max-width:900px){.vac-guard-folders__grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:749px){.vac-guard-folders{padding:4px 14px 36px}.vac-guard-folders__page-title{font-size:clamp(30px,9vw,44px);margin-bottom:14px}.vac-guard-folders__grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.vac-guard-folder__media{height:128px}.vac-guard-folder__body{min-height:90px;padding:11px 11px 13px}.vac-guard-folder__body h3{font-size:14px}}</style>
+{% endif %}
+{% schema %}{"name":"Guard & logo categories","settings":[],"presets":[{"name":"Guard & logo categories"}]}{% endschema %}
