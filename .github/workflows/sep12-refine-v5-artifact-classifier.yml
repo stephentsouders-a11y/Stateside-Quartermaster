@@ -1,0 +1,56 @@
+name: Sep12 Refine v5 artifact classifier
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-refine-v5-artifact-classifier.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download completed baseline artifacts
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 34731201639
+          pattern: refine-physical-v5-*
+          path: baseline
+      - name: Classify result files
+        run: |
+          python3 - <<'PY'
+          import json,glob,os,collections
+          rows=[]
+          for f in glob.glob('baseline/**/result.json',recursive=True):
+              try:r=json.load(open(f))
+              except Exception:continue
+              kinds=collections.Counter()
+              examples=[]
+              for c in r.get('checks',[]):
+                  if c.get('outcome')=='PASS': continue
+                  s=' '.join(str(c.get(k,'')) for k in ('outcome','error','textError','boxError'))
+                  sl=s.lower()
+                  if '429' in sl:k='HTTP_429'
+                  elif 'pbar' in sl or 'preview' in sl:k='PREVIEW_CHROME'
+                  elif 'not attached' in sl or 'detached' in sl:k='DETACHED_DOM'
+                  elif c.get('outcome')=='FAIL_CHECKBOX_NO_ACTION':k='NO_ACTION'
+                  elif c.get('outcome')=='FAIL_TEXT_ACTIVATED':k='TEXT_ACTIVATED'
+                  elif 'error page' in sl:k='ERROR_PAGE'
+                  elif c.get('outcome')=='FAIL_EXCEPTION':k='OTHER_EXCEPTION'
+                  else:k=c.get('outcome','UNKNOWN')
+                  kinds[k]+=1
+                  if len(examples)<6:examples.append({'label':c.get('label'),'outcome':c.get('outcome'),'error':c.get('error')})
+              rows.append({'route':r.get('route'),'status':r.get('status'),'controls':r.get('controlCount'),'tested':r.get('testedControls'),'failed':r.get('failedControls'),'kinds':dict(kinds),'sidebar':r.get('sidebarCount'),'horizontalFacets':r.get('horizontalFacetCount'),'refineError':r.get('refineError'),'examples':examples})
+          rows.sort(key=lambda x:x['route'] or '')
+          summary={'artifact_results':len(rows),'routes':rows,'totals':dict(collections.Counter(k for r in rows for k,n in r['kinds'].items() for _ in range(n)))}
+          print(json.dumps(summary,indent=2))
+          json.dump(summary,open('classification.json','w'),indent=2)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: refine-v5-artifact-classification
+          path: classification.json
+          retention-days: 7
