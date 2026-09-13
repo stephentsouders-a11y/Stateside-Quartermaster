@@ -1,0 +1,60 @@
+name: Sep12 Refine v5 failure-only physical retry
+on:
+  workflow_run:
+    workflows: ['Sep12 Refine physical sharded v5']
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  retry-failures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Download baseline physical audit artifacts
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 34731201639
+          pattern: refine-physical-v5-*
+          path: baseline
+      - name: Retest only baseline failures at low request rate
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > retry.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          import path from 'path';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const files=[];const walk=d=>{for(const n of fs.readdirSync(d)){const p=path.join(d,n),s=fs.statSync(p);if(s.isDirectory())walk(p);else if(n==='result.json')files.push(p)}};walk('baseline');
+          const plans=[];
+          for(const f of files){try{const r=JSON.parse(fs.readFileSync(f,'utf8'));const failed=(r.checks||[]).filter(c=>c.outcome!=='PASS').map(c=>c.label).filter(Boolean);if(r.route&&failed.length)plans.push({route:r.route,labels:[...new Set(failed)],baselineControls:r.controlCount,baselineFailed:r.failedControls})}catch{}}
+          console.log('FAILURE_RETRY_PLAN '+JSON.stringify(plans.map(p=>({route:p.route,count:p.labels.length}))));
+          const browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:1365,height:900}});page.setDefaultTimeout(14000);page.setDefaultNavigationTimeout(40000);
+          const candidate=route=>{const u=new URL('/collections/'+route,process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);return u.toString()};
+          async function strip(){await page.evaluate(()=>{for(const s of ['#PBarNextFrameWrapper','#PBarNextFrame','iframe[src*="shopifycloud/preview-bar"]'])document.querySelectorAll(s).forEach(e=>{try{e.hidePopover?.()}catch{}e.style.setProperty('display','none','important');e.style.setProperty('pointer-events','none','important')})}).catch(()=>{})}
+          async function load(route){let last;for(let n=0;n<8;n++){try{const r=await page.goto(candidate(route),{waitUntil:'domcontentloaded',timeout:40000});if(!r||r.status()===429||r.status()>=500){last=new Error('HTTP '+(r?.status()||0));await sleep(2500*(n+1));continue}await page.locator('#MainContent').waitFor({state:'attached',timeout:15000});await page.waitForFunction(()=>{const m=document.getElementById('MainContent');return m&&(m.dataset.sqRefineV3Ready==='true'||!!m.querySelector('.sq-refine-v3-sidebar'))},null,{timeout:14000}).catch(()=>{});await page.locator('#MainContent details.sq-refine-v3-group').evaluateAll(ds=>ds.forEach(d=>d.open=true)).catch(()=>{});await strip();await sleep(500);return r}catch(e){last=e;await sleep(2500*(n+1))}}throw last||new Error('load failed')}
+          const sel='#MainContent .sq-refine-v3-choice input[type=checkbox]';
+          async function inputByLabel(label){for(let n=0;n<30;n++){const i=await page.locator(sel).evaluateAll((xs,l)=>xs.findIndex(x=>((x.getAttribute('aria-label')||x.parentElement?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim())===l),label).catch(()=>-1);if(i>=0){const x=page.locator(sel).nth(i);if(await x.evaluate(e=>e.isConnected).catch(()=>false))return x}await sleep(120)}throw new Error('label unavailable '+label)}
+          async function physical(label,part){let last;for(let n=0;n<16;n++){try{await strip();let input=await inputByLabel(label),loc=part==='text'?input.locator('xpath=..').locator('span').first():input;await loc.scrollIntoViewIfNeeded();await strip();await sleep(100);input=await inputByLabel(label);loc=part==='text'?input.locator('xpath=..').locator('span').first():input;const b=await loc.boundingBox();if(!b)throw new Error('no bbox');const hit=await page.evaluate(({x,y})=>{const e=document.elementFromPoint(x,y);return {tag:e?.tagName,cls:String(e?.className||'')}},{x:b.x+b.width/2,y:b.y+b.height/2});if(part==='box'&&hit.tag!=='INPUT')throw new Error('box hit '+hit.tag+'.'+hit.cls);await page.mouse.click(b.x+b.width/2,b.y+b.height/2);return hit}catch(e){last=e;await sleep(160)}}throw last}
+          const results=[];
+          for(const plan of plans){for(const label of plan.labels){const rec={route:plan.route,label,outcome:'PASS'};try{await load(plan.route);let input=await inputByLabel(label);const before=page.url(),beforeChecked=await input.isChecked();await physical(label,'text');await sleep(350);input=await inputByLabel(label);rec.textNoOp=page.url()===before&&(await input.isChecked())===beforeChecked;if(!rec.textNoOp){rec.outcome='FAIL_TEXT_ACTIVATED';results.push(rec);continue}rec.hit=await physical(label,'box');await Promise.race([page.waitForURL(u=>u.toString()!==before,{timeout:7000}).catch(()=>{}),sleep(1200)]);rec.afterUrl=page.url();if(rec.afterUrl===before){input=await inputByLabel(label).catch(()=>null);rec.afterChecked=input?await input.isChecked().catch(()=>null):null}else rec.afterChecked=null;rec.checkboxAction=rec.afterUrl!==before||rec.afterChecked===true;if(!rec.checkboxAction)rec.outcome='FAIL_CHECKBOX_NO_ACTION';if(rec.afterUrl!==before){const body=((await page.locator('body').innerText().catch(()=>''))||'').slice(0,12000);if(/something went wrong|internal server error|page not found|404 not found/i.test(body))rec.outcome='FAIL_ERROR_PAGE'}}catch(e){rec.outcome='FAIL_EXCEPTION';rec.error=String(e)}results.push(rec);console.log('RETRY_RESULT '+JSON.stringify(rec));await sleep(900)}}
+          await browser.close();const summary={artifactFiles:files.length,routes:plans.length,controls:results.length,passed:results.filter(r=>r.outcome==='PASS').length,failed:results.filter(r=>r.outcome!=='PASS').length,failures:results.filter(r=>r.outcome!=='PASS')};fs.writeFileSync('retry-summary.json',JSON.stringify(summary,null,2));console.log('RETRY_SUMMARY '+JSON.stringify(summary,null,2));if(summary.failed)process.exitCode=2;
+          EOF
+          node retry.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine-v5-failure-only-retry
+          path: retry-summary.json
+          retention-days: 7
