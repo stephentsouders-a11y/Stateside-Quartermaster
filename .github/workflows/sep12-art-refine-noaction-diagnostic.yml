@@ -31,35 +31,23 @@ jobs:
           const page=await browser.newPage({viewport:{width:1365,height:900}});
           page.setDefaultTimeout(12000);
           const out=[];
-          async function load(){let last;for(let n=0;n<5;n++){try{const r=await page.goto(url(),{waitUntil:'domcontentloaded',timeout:35000});if(!r||r.status()===429||r.status()>=500){last=new Error(`HTTP ${r?.status()||0}`);await sleep(1200*(n+1));continue}await page.locator('#MainContent').waitFor({state:'attached'});await page.waitForFunction(()=>document.getElementById('MainContent')?.dataset.sqRefineV3Ready==='true'||!!document.querySelector('#MainContent .sq-refine-v3-sidebar'),null,{timeout:12000}).catch(()=>{});await page.locator('#MainContent details.sq-refine-v3-group').evaluateAll(ds=>ds.forEach(d=>d.open=true)).catch(()=>{});await sleep(700);return r}catch(e){last=e;await sleep(1200*(n+1))}}throw last||new Error('load failed')}
+          async function neutralizePreview(){await page.evaluate(()=>{const bar=document.getElementById('PBarNextFrame');if(bar){bar.style.setProperty('display','none','important');bar.style.setProperty('pointer-events','none','important')}document.querySelectorAll('iframe[src*="shopifycloud/preview-bar"]').forEach(el=>{el.style.setProperty('display','none','important');el.style.setProperty('pointer-events','none','important')})}).catch(()=>{})}
+          async function load(){let last;for(let n=0;n<5;n++){try{const r=await page.goto(url(),{waitUntil:'domcontentloaded',timeout:35000});if(!r||r.status()===429||r.status()>=500){last=new Error(`HTTP ${r?.status()||0}`);await sleep(1800*(n+1));continue}await page.locator('#MainContent').waitFor({state:'attached'});await page.waitForFunction(()=>document.getElementById('MainContent')?.dataset.sqRefineV3Ready==='true'||!!document.querySelector('#MainContent .sq-refine-v3-sidebar'),null,{timeout:12000}).catch(()=>{});await page.locator('#MainContent details.sq-refine-v3-group').evaluateAll(ds=>ds.forEach(d=>d.open=true)).catch(()=>{});await neutralizePreview();await sleep(700);return r}catch(e){last=e;await sleep(1800*(n+1))}}throw last||new Error('load failed')}
           function dump(label){const all=[...document.querySelectorAll('#MainContent .sq-refine-v3-choice input[type=checkbox]')];const input=all.find(x=>((x.getAttribute('aria-label')||x.parentElement?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim())===label);if(!input)return null;const r=input.getBoundingClientRect();const hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return{connected:input.isConnected,checked:input.checked,name:input.name,value:input.value,dataset:{...input.dataset},outer:input.outerHTML,parent:input.parentElement?.outerHTML?.slice(0,1500),rect:{x:r.x,y:r.y,w:r.width,h:r.height},hit:{tag:hit?.tagName,cls:String(hit?.className||''),aria:hit?.getAttribute?.('aria-label'),same:hit===input,html:hit?.outerHTML?.slice(0,600)}}}
           for(const label of labels){
             const rec={label};
             try{
-              await load();
-              rec.urlBefore=page.url();
-              rec.before=await page.evaluate(dump,label);
+              await load();rec.urlBefore=page.url();rec.before=await page.evaluate(dump,label);
               if(!rec.before){rec.error='control not found';out.push(rec);console.log(JSON.stringify(rec));continue}
-              const input=page.locator('#MainContent .sq-refine-v3-choice input[type=checkbox]').filter({has:page.locator('xpath=..')});
               const idx=await page.locator('#MainContent .sq-refine-v3-choice input[type=checkbox]').evaluateAll((xs,l)=>xs.findIndex(x=>((x.getAttribute('aria-label')||x.parentElement?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim())===l),label);
               if(idx<0){rec.error='index not found';out.push(rec);console.log(JSON.stringify(rec));continue}
-              const loc=page.locator('#MainContent .sq-refine-v3-choice input[type=checkbox]').nth(idx);
-              await loc.scrollIntoViewIfNeeded();await sleep(100);
-              rec.atClick=await page.evaluate(dump,label);
-              if(rec.atClick?.rect){
-                await page.mouse.click(rec.atClick.rect.x+rec.atClick.rect.w/2,rec.atClick.rect.y+rec.atClick.rect.h/2);
-                await Promise.race([page.waitForURL(u=>u.toString()!==rec.urlBefore,{timeout:5000}).catch(()=>{}),sleep(1200)]);
-                rec.urlAfter=page.url();
-                rec.owner=await page.evaluate(()=>window.__sqRefineV3LastBoxOwner||null).catch(()=>null);
-                rec.after=await page.evaluate(dump,label).catch(()=>null);
-              }
+              const loc=page.locator('#MainContent .sq-refine-v3-choice input[type=checkbox]').nth(idx);await loc.scrollIntoViewIfNeeded();await neutralizePreview();await sleep(100);rec.atClick=await page.evaluate(dump,label);
+              if(rec.atClick?.rect){await page.mouse.click(rec.atClick.rect.x+rec.atClick.rect.w/2,rec.atClick.rect.y+rec.atClick.rect.h/2);await Promise.race([page.waitForURL(u=>u.toString()!==rec.urlBefore,{timeout:5000}).catch(()=>{}),sleep(1200)]);rec.urlAfter=page.url();rec.owner=await page.evaluate(()=>window.__sqRefineV3LastBoxOwner||null).catch(()=>null);rec.after=await page.evaluate(dump,label).catch(()=>null)}
             }catch(e){rec.error=String(e)}
             out.push(rec);console.log(JSON.stringify(rec));
           }
-          await browser.close();
-          fs.writeFileSync('art-noaction.json',JSON.stringify(out,null,2));
-          const failures=out.filter(x=>x.error||!x.atClick?.hit?.same||((x.urlAfter||x.urlBefore)===x.urlBefore && !x.after?.checked));
-          if(failures.length)process.exitCode=2;
+          await browser.close();fs.writeFileSync('art-noaction.json',JSON.stringify(out,null,2));
+          const failures=out.filter(x=>x.error||!x.atClick?.hit?.same||((x.urlAfter||x.urlBefore)===x.urlBefore && !x.after?.checked));if(failures.length)process.exitCode=2;
           EOF
           node diag.mjs
       - uses: actions/upload-artifact@v4
