@@ -4,6 +4,8 @@ on:
     workflows: ['Sep12 Refine physical sharded v5']
     types: [completed]
   workflow_dispatch:
+  push:
+    paths: ['.github/workflows/sep12-refine-v5-failure-retry.yml']
 permissions:
   contents: read
   actions: read
