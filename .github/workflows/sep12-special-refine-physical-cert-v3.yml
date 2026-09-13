@@ -1,0 +1,54 @@
+name: Sep12 special Refine physical certificate v3
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-special-refine-physical-cert-v3.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Physically certify special Refine controls and ownership
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > special-v3.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const BASE=process.env.BASE,THEME=process.env.THEME,OUT='out';
+          fs.mkdirSync(`${OUT}/screens`,{recursive:true});fs.mkdirSync(`${OUT}/videos`,{recursive:true});
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const url=route=>{const u=new URL('/collections/'+route,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()};
+          async function load(page,route){let last;for(let n=0;n<4;n++){try{const r=await page.goto(url(route),{waitUntil:'domcontentloaded',timeout:40000});if(!r||r.status()>=500||r.status()===429){last=new Error('HTTP '+(r?.status()||0));await sleep(900*(n+1));continue}await page.locator('#MainContent').waitFor({state:'attached',timeout:15000});await sleep(3000);return r}catch(e){last=e;await sleep(900*(n+1))}}throw last||new Error('load failed')}
+          async function center(page,loc){await loc.scrollIntoViewIfNeeded();const b=await loc.boundingBox();if(!b)throw new Error('no bounding box');await page.mouse.click(b.x+b.width/2,b.y+b.height/2)}
+          const cases=[
+            {route:'state-guard-series-ohio',owner:'#MainContent .sqsg-refine-sidebar:visible',selector:'#MainContent .sqsg-refine-choice input[type=checkbox]',expected:8},
+            {route:'sta-brite-insignia',owner:'#MainContent .sq-stabrite-refine__side[data-sq-stabrite-special-owner="true"]:visible',selector:'#MainContent .sq-stabrite-refine__choice input[type=checkbox]',expected:11}
+          ];
+          const browser=await chromium.launch({headless:true}),results=[];
+          for(const cfg of cases){const ctx=await browser.newContext({viewport:{width:1365,height:900},recordVideo:{dir:`${OUT}/videos`,size:{width:960,height:633}}});const page=await ctx.newPage();page.setDefaultTimeout(18000);const rec={route:cfg.route,checks:[],failures:[]};
+            try{const rr=await load(page,cfg.route);rec.status=rr.status();rec.ownerCount=await page.locator(cfg.owner).count();rec.genericGlobal=await page.locator('#MainContent .sq-global-refine-sidebar:visible').count();rec.v3=await page.locator('#MainContent .sq-refine-v3-sidebar:visible').count();rec.sg=await page.locator('#MainContent .sqsg-refine-sidebar:visible').count();rec.sta=await page.locator('#MainContent .sq-stabrite-refine__side:visible').count();rec.totalOwners=rec.v3+rec.sg+rec.sta;rec.controlCount=await page.locator(cfg.selector).count();if(rec.status!==200)rec.failures.push('HTTP_'+rec.status);if(rec.ownerCount!==1)rec.failures.push('OWNER_COUNT_'+rec.ownerCount);if(rec.totalOwners!==1)rec.failures.push('TOTAL_OWNER_COUNT_'+rec.totalOwners);if(rec.controlCount!==cfg.expected)rec.failures.push('CONTROL_COUNT_'+rec.controlCount+'_EXPECTED_'+cfg.expected);
+              if(cfg.route==='sta-brite-insignia'){rec.per50=await page.locator('input[name="sq_stabrite_page_size"][value="50"]:visible').count();rec.per100=await page.locator('input[name="sq_stabrite_page_size"][value="100"]:visible').count();rec.per250=await page.locator('input[name="sq_stabrite_page_size"][value="250"]:visible').count();if(rec.per50!==1||rec.per100!==1||rec.per250!==1)rec.failures.push(`PAGE_SIZES_${rec.per50}_${rec.per100}_${rec.per250}`);}
+              const labels=await page.locator(cfg.selector).evaluateAll(xs=>xs.map((x,i)=>({i,label:(x.getAttribute('aria-label')||x.parentElement?.querySelector('span')?.textContent||'').replace(/\s+/g,' ').trim()})));
+              for(const d of labels){const c={index:d.i,label:d.label,outcome:'PASS'};try{await load(page,cfg.route);let input=page.locator(cfg.selector).nth(d.i);let row=input.locator('xpath=..'),text=row.locator('span').first();const u0=page.url(),ch0=await input.isChecked();await center(page,text);await sleep(350);const u1=page.url(),ch1=await input.isChecked().catch(()=>null);if(u1!==u0||ch1!==ch0)c.outcome='FAIL_TEXT_ACTIVATED';await load(page,cfg.route);input=page.locator(cfg.selector).nth(d.i);const start=page.url();await center(page,input);await Promise.race([page.waitForURL(u=>u.toString()!==start,{timeout:7000}).catch(()=>{}),sleep(1000)]);c.afterUrl=page.url();c.afterChecked=await input.isChecked().catch(()=>null);if(c.afterUrl===start&&c.afterChecked!==true&&c.outcome==='PASS')c.outcome='FAIL_CHECKBOX_NO_ACTION'}catch(e){c.outcome='FAIL_EXCEPTION';c.error=String(e)}rec.checks.push(c)}
+              rec.failedControls=rec.checks.filter(x=>x.outcome!=='PASS').length;if(rec.failedControls)rec.failures.push('FAILED_CONTROLS_'+rec.failedControls);await load(page,cfg.route).catch(()=>{});await page.screenshot({path:`${OUT}/screens/${cfg.route}.png`,fullPage:true}).catch(()=>{});
+            }catch(e){rec.failures.push('FATAL');rec.error=String(e)}rec.pass=rec.failures.length===0;results.push(rec);console.log(JSON.stringify(rec));const v=page.video();await ctx.close();if(v){try{fs.renameSync(await v.path(),`${OUT}/videos/${cfg.route}.webm`)}catch{}}}
+          await browser.close();const summary={total:results.length,passed:results.filter(x=>x.pass).length,failed:results.filter(x=>!x.pass).length,results:results.map(x=>({route:x.route,ownerCount:x.ownerCount,totalOwners:x.totalOwners,controlCount:x.controlCount,per50:x.per50,per100:x.per100,per250:x.per250,failedControls:x.failedControls,failures:x.failures}))};fs.writeFileSync(`${OUT}/summary.json`,JSON.stringify(summary,null,2));console.log(JSON.stringify(summary,null,2));if(summary.failed)process.exitCode=2;
+          EOF
+          node special-v3.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: special-refine-physical-v3
+          path: out
+          retention-days: 7
