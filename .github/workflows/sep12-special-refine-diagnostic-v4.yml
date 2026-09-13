@@ -1,0 +1,48 @@
+name: Sep12 special Refine diagnostic v4
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-special-refine-diagnostic-v4.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Trace special Refine visibility and physical controls
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > d.mjs <<'EOF'
+          import { chromium } from 'playwright'; import fs from 'fs';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms)); const BASE=process.env.BASE,THEME=process.env.THEME;
+          const url=route=>{const u=new URL('/collections/'+route,BASE);u.searchParams.set('preview_theme_id',THEME);return u.toString()};
+          async function load(p,r){for(let n=0;n<4;n++){const x=await p.goto(url(r),{waitUntil:'domcontentloaded',timeout:40000}).catch(()=>null);if(x&&x.status()<500){await p.locator('#MainContent').waitFor({state:'attached',timeout:15000});return x}await sleep(1200*(n+1))}throw new Error('load failed')}
+          async function center(p,l){await l.scrollIntoViewIfNeeded();const b=await l.boundingBox();if(!b)throw new Error('no bbox');await p.mouse.click(b.x+b.width/2,b.y+b.height/2)}
+          const browser=await chromium.launch({headless:true}); const out={};
+          {
+            const p=await browser.newPage({viewport:{width:1365,height:900}});await load(p,'sta-brite-insignia');await sleep(3500);
+            out.sta=await p.evaluate(()=>{const el=document.querySelector('.sq-stabrite-refine__side');const chain=[];let n=el;while(n&&n!==document){const s=getComputedStyle(n),r=n.getBoundingClientRect();chain.push({tag:n.tagName,id:n.id||'',cls:n.className||'',display:s.display,visibility:s.visibility,opacity:s.opacity,width:r.width,height:r.height,hidden:n.hidden,ariaHidden:n.getAttribute?.('aria-hidden'),inline:n.getAttribute?.('style')||''});n=n.parentElement}const matching=[];if(el){for(const sh of [...document.styleSheets]){let rules;try{rules=sh.cssRules}catch{continue}for(const rule of [...rules||[]]){if(!rule.selectorText)continue;for(const target of [el,...el.parentElement?[el.parentElement]:[]]){try{if(target.matches(rule.selectorText)&&/display|visibility|opacity/.test(rule.style.cssText||''))matching.push({selector:rule.selectorText,css:rule.style.cssText,href:sh.href||'inline'})}catch{}}}}}return {owner:document.documentElement.dataset.sqStaBriteRefineOwner||null,chain,matching,sideHTML:el?.outerHTML.slice(0,1500)||null}});await p.close();
+          }
+          {
+            const p=await browser.newPage({viewport:{width:1365,height:900}});await load(p,'state-guard-series-ohio');await sleep(3500);const defs=await p.locator('#MainContent .sqsg-refine-choice input[type=checkbox]').evaluateAll(xs=>xs.map((x,i)=>({i,label:x.getAttribute('aria-label')||x.parentElement?.querySelector('span')?.textContent||'',href:x.dataset.sqsgRefineHref||''})));out.ohio=[];
+            for(const d of defs){const c={...d,outcome:'PASS'};try{await load(p,'state-guard-series-ohio');await sleep(1800);let input=p.locator('#MainContent .sqsg-refine-choice input[type=checkbox]').nth(d.i);if((await input.getAttribute('data-sqsg-refine-href'))!==d.href){const idx=await p.locator('#MainContent .sqsg-refine-choice input[type=checkbox]').evaluateAll((xs,href)=>xs.findIndex(x=>x.dataset.sqsgRefineHref===href),d.href);if(idx<0)throw new Error('control missing');input=p.locator('#MainContent .sqsg-refine-choice input[type=checkbox]').nth(idx)}const row=input.locator('xpath=..'),text=row.locator('span').first();const u0=p.url(),ch0=await input.isChecked();await center(p,text);await sleep(350);c.textNoOp=p.url()===u0&&(await input.isChecked().catch(()=>null))===ch0;if(!c.textNoOp)c.outcome='FAIL_TEXT_ACTIVATED';await load(p,'state-guard-series-ohio');await sleep(1800);let idx2=await p.locator('#MainContent .sqsg-refine-choice input[type=checkbox]').evaluateAll((xs,href)=>xs.findIndex(x=>x.dataset.sqsgRefineHref===href),d.href);if(idx2<0)throw new Error('control missing before box');input=p.locator('#MainContent .sqsg-refine-choice input[type=checkbox]').nth(idx2);const start=p.url();await center(p,input);await Promise.race([p.waitForURL(u=>u.toString()!==start,{timeout:7000}).catch(()=>{}),sleep(900)]);c.afterUrl=p.url();c.afterChecked=await input.isChecked().catch(()=>null);c.checkboxAction=c.afterUrl!==start||c.afterChecked===true;if(!c.checkboxAction&&c.outcome==='PASS')c.outcome='FAIL_CHECKBOX_NO_ACTION'}catch(e){c.outcome='FAIL_EXCEPTION';c.error=String(e)}out.ohio.push(c);console.log(JSON.stringify(c))}await p.close();
+          }
+          await browser.close();fs.writeFileSync('diagnostic-v4.json',JSON.stringify(out,null,2));console.log(JSON.stringify(out,null,2));
+          EOF
+          node d.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: special-refine-diagnostic-v4
+          path: diagnostic-v4.json
+          retention-days: 7
