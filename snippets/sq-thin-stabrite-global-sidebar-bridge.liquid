@@ -1,8 +1,8 @@
 {% doc %}
 Bridges Thin Line and Sta-Brite custom category/type renderers into the global four-column collection layout.
-When Refine V3 owns a Thin Line child route, V3 is the single sidebar authority and this legacy bridge removes
-any duplicate global sidebar/layout it may have created. Legacy availability query parameters are removed from
-customer-facing links.
+When Refine V3 owns a Thin Line child route, or the specialized Sta-Brite Refine owns its root, the owning Refine
+is the single sidebar authority and this legacy bridge removes only duplicate global sidebar/layout nodes it created.
+Legacy availability query parameters are removed from customer-facing links.
 {% enddoc %}
 {% if request.page_type == 'collection' %}
 <style data-sq-thin-stabrite-global-sidebar-bridge>
@@ -17,10 +17,11 @@ customer-facing links.
   if(window.__sqThinStaGlobalSidebarBridge)return;window.__sqThinStaGlobalSidebarBridge=true;
   var main=document.getElementById('MainContent');if(!main)return;var busy=false,timer=null;
   function cleanLinks(root){(root||main).querySelectorAll('a[href*="filter.v.availability"]').forEach(function(a){try{var u=new URL(a.href,location.origin);u.searchParams.delete('filter.v.availability');a.href=u.pathname+(u.searchParams.toString()?'?'+u.searchParams.toString():'')+u.hash}catch(_){}})}
-  function v3OwnsThinLine(){
+  function owningRefinePresent(){
     var html=document.documentElement;
     var root=(html&&html.dataset&&html.dataset.sqRefineV3ChildRoot)||new URLSearchParams(location.search).get('sq_root')||'';
-    return root==='thin-line' || !!main.querySelector('.sq-refine-v3-sidebar');
+    var staSpecial=html&&html.dataset&&html.dataset.sqStaBriteRefineOwner==='specialized';
+    return root==='thin-line' || staSpecial || !!main.querySelector('.sq-refine-v3-sidebar');
   }
   function removeDuplicateGlobal(){
     main.querySelectorAll('.sq-global-refine-layout').forEach(function(layout){
@@ -34,7 +35,7 @@ customer-facing links.
   }
   function run(){if(busy)return;busy=true;try{
     cleanLinks(main);
-    if(v3OwnsThinLine()){removeDuplicateGlobal();return;}
+    if(owningRefinePresent()){removeDuplicateGlobal();return;}
     var target=main.querySelector('.sq-ts-match-section[data-sq-parent],.sq-ts-match-section[data-sq-type-browser]');if(!target)return;
     var section=target.closest('.shopify-section');if(section)section.style.setProperty('display','block','important');
     target.style.setProperty('display','block','important');
