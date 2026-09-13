@@ -5,10 +5,33 @@ html[data-sq-stabrite-refine-owner='specialized'] #MainContent .sq-stabrite-refi
   visibility:visible!important;
   pointer-events:auto!important;
 }
+@media(max-width:900px){
+  html[data-sq-stabrite-refine-owner='specialized'] #MainContent .sq-stabrite-products{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:12px!important;
+  }
+}
 </style>
 <script data-sq-stabrite-special-refine-owner>
+(function(){
   window.__sqRefineV3 = true;
   document.documentElement.dataset.sqStaBriteRefineOwner = 'specialized';
+  function keepSpecializedVisible(){
+    var main=document.getElementById('MainContent');if(!main)return;
+    var side=main.querySelector('.sq-stabrite-refine__side');if(!side)return;
+    side.style.setProperty('display','block','important');
+    side.style.setProperty('visibility','visible','important');
+    side.style.setProperty('pointer-events','auto','important');
+  }
+  function start(){
+    var main=document.getElementById('MainContent');if(!main)return;
+    keepSpecializedVisible();
+    var queued=false;
+    new MutationObserver(function(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;keepSpecializedVisible()})}).observe(main,{childList:true,subtree:true});
+    [0,50,150,350,700,1400,2600,5000,8000].forEach(function(ms){setTimeout(keepSpecializedVisible,ms)});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+})();
 </script>
 {% endif %}
 {% render 'sq-sta-brite-refine-root-v2' %}
