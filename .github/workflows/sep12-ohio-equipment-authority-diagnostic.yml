@@ -1,0 +1,44 @@
+name: Sep12 Ohio Equipment authority diagnostic
+on:
+  push:
+    paths:
+      - '.github/workflows/sep12-ohio-equipment-authority-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Capture Ohio category cards and Refine controls
+        env:
+          BASE: https://www.statesideqm.com
+          THEME: '158561894555'
+        run: |
+          cat > d.mjs <<'EOF'
+          import {chromium} from 'playwright';import fs from 'fs';
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const b=await chromium.launch({headless:true}),p=await b.newPage({viewport:{width:1365,height:900}});
+          const u=new URL('/collections/state-guard-series-ohio',process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);
+          const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:40000});await p.locator('#MainContent').waitFor({state:'attached'});await sleep(5000);
+          const data=await p.evaluate(()=>({
+            status:document.readyState,
+            cards:[...document.querySelectorAll('[data-sqsg-view] .sqsg-grid .sqsg-card')].map((a,i)=>({i,text:(a.textContent||'').replace(/\s+/g,' ').trim(),strong:a.querySelector('strong')?.textContent?.trim(),href:a.getAttribute('href'),classes:a.className,dataset:{...a.dataset},html:a.outerHTML.slice(0,2200)})),
+            controls:[...document.querySelectorAll('#MainContent .sqsg-refine-choice input[type=checkbox]')].map((x,i)=>({i,label:x.getAttribute('aria-label'),href:x.dataset.sqsgRefineHref,html:x.parentElement?.outerHTML?.slice(0,900)})),
+            scripts:[...document.querySelectorAll('script[data-sq-state-guard-component-refine],script[data-sq-state-guard-special-refine-owner]')].map(x=>x.getAttributeNames().reduce((o,k)=>(o[k]=x.getAttribute(k),o),{}))
+          }));
+          console.log(JSON.stringify({http:r.status(),...data},null,2));fs.writeFileSync('ohio-equipment-authority.json',JSON.stringify({http:r.status(),...data},null,2));await b.close();
+          EOF
+          node d.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ohio-equipment-authority-diagnostic
+          path: ohio-equipment-authority.json
+          retention-days: 7
