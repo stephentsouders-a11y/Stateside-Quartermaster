@@ -11,7 +11,14 @@ Builds the final left Refine Products sidebar from the exact shopper-facing coll
 (function(){
   if(window.__sqGlobalRefineDirectDataV5)return;window.__sqGlobalRefineDirectDataV5=true;
   var main=document.getElementById('MainContent');if(!main)return;
-  if(location.pathname.replace(/\/$/,'')==='/collections/state-guard-series-ohio')return;
+  if(location.pathname.replace(/\/$/,'')==='/collections/state-guard-series-ohio'){
+    var ohioSide=main.querySelector('.sq-global-refine-sidebar'),innerDesc=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML');
+    if(ohioSide&&innerDesc&&innerDesc.get&&innerDesc.set&&!ohioSide.__sqOhioInnerHTMLGuard){
+      ohioSide.__sqOhioInnerHTMLGuard=true;
+      try{Object.defineProperty(ohioSide,'innerHTML',{configurable:true,get:function(){return innerDesc.get.call(this)},set:function(v){var next=String(v);if(this.dataset.sqOhioRefine==='true'&&next.indexOf('sq-ohio-refine-group')===-1)return;innerDesc.set.call(this,next)}})}catch(_){}
+    }
+    return;
+  }
   var shared={{ sq_shared_refine | json }},rendered=false,routeCache={},syncTimer=null;
   function c(v){return String(v==null?'':v).trim()}
   function n(v){return c(v).toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ')}
