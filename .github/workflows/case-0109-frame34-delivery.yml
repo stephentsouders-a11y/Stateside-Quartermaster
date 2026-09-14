@@ -1,0 +1,47 @@
+name: Case 0109 Frame34 Delivery
+on:
+  push:
+    branches: [case-0109-aerial-audit]
+    paths: ['.github/workflows/case-0109-frame34-delivery.yml']
+  workflow_dispatch:
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Open record and capture image service URLs
+        run: |
+          mkdir out work && cd work
+          npm init -y >/dev/null
+          npm install playwright >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          cat > run.mjs <<'NODE'
+          import { chromium } from 'playwright'; import fs from 'node:fs';
+          const browser=await chromium.launch({headless:true}); const page=await browser.newPage({viewport:{width:1800,height:1300}});
+          const req=[]; page.on('response',async r=>{const u=r.url(); if(/alma|exlibris|iiif|image|jpeg|jpg|tif|tiff|delivery|viewer|representation|manifest/i.test(u)){req.push({status:r.status(),contentType:r.headers()['content-type']||'',url:u});}});
+          await page.goto('https://maine.primo.exlibrisgroup.com/nde/collectionDiscovery?collectionId=81521275480008681&vid=01MAINE_INST:DigCol&lang=en',{waitUntil:'domcontentloaded',timeout:60000});
+          await page.waitForTimeout(7000);
+          const inp=page.locator('input[aria-label="Search inside the collection"]'); await inp.fill('01-34_AK'); await inp.press('Enter'); await page.waitForTimeout(8000);
+          const title=page.getByText('An Khe February 16 1966 01-34_AK',{exact:false}).first();
+          console.log('title count',await title.count());
+          await title.click(); await page.waitForTimeout(12000);
+          console.log('PAGE',page.url());
+          const imgs=await page.locator('img').evaluateAll(es=>es.map(e=>({src:e.src,currentSrc:e.currentSrc,naturalWidth:e.naturalWidth,naturalHeight:e.naturalHeight,alt:e.alt})));
+          const links=await page.locator('a').evaluateAll(es=>es.map(e=>({text:(e.innerText||'').trim(),href:e.href})).filter(x=>x.href));
+          fs.writeFileSync('../out/body.txt',(await page.locator('body').innerText()).slice(0,150000));
+          fs.writeFileSync('../out/images.json',JSON.stringify(imgs,null,2));
+          fs.writeFileSync('../out/links.json',JSON.stringify(links,null,2));
+          fs.writeFileSync('../out/requests.json',JSON.stringify(req,null,2));
+          await page.screenshot({path:'../out/record.png',fullPage:true});
+          console.log('IMAGES',JSON.stringify(imgs,null,2));
+          console.log('LINKS',JSON.stringify(links.filter(x=>/download|original|tif|tiff|jpg|jpeg|iiif|manifest/i.test(x.text+' '+x.href)),null,2));
+          console.log('REQUESTS',JSON.stringify(req.filter(x=>/iiif|jpg|jpeg|tif|tiff|representation|manifest|delivery/i.test(x.url)),null,2));
+          await browser.close();
+          NODE
+          node run.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: case-0109-frame34-delivery
+          path: out/**
+          retention-days: 30
