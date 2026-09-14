@@ -1,0 +1,58 @@
+name: Case 0109 Best Satellite
+
+on:
+  push:
+    branches: [case-0109-aerial-audit]
+    paths: ['.github/workflows/case-0109-best-satellite.yml']
+  workflow_dispatch:
+
+jobs:
+  identify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Query Keyhole swath tiles at target
+        shell: bash
+        run: |
+          mkdir work && cd work
+          npm init -y >/dev/null 2>&1
+          npm install @mapbox/vector-tile pbf @turf/boolean-point-in-polygon @turf/helpers >/dev/null 2>&1
+          cat > find.mjs <<'NODE'
+          import { VectorTile } from '@mapbox/vector-tile';
+          import Protobuf from 'pbf';
+          import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
+          import { point } from '@turf/helpers';
+          import fs from 'node:fs';
+          const z=8, x=205, y=117;
+          const target = point([108.5616,14.0854]);
+          const designators=['KH-7','KH-4B','KH-4A','KH-4','KH-6'];
+          const out=[];
+          for (const d of designators) {
+            const url=`https://djellr4yg949p.cloudfront.net/keyhole/v1/swaths/designators/${d}/${z}/${x}/${y}.pbf`;
+            const r=await fetch(url);
+            if (!r.ok) { out.push({designator:d,http:r.status,matches:[]}); continue; }
+            const buf=Buffer.from(await r.arrayBuffer());
+            const tile=new VectorTile(new Protobuf(buf));
+            const layer=tile.layers.swaths;
+            const matches=[];
+            if (layer) {
+              for(let i=0;i<layer.length;i++){
+                const f=layer.feature(i).toGeoJSON(x,y,z);
+                if ((f.geometry.type==='Polygon' || f.geometry.type==='MultiPolygon') && booleanPointInPolygon(target,f)) {
+                  matches.push({id:f.id,properties:f.properties});
+                }
+              }
+            }
+            out.push({designator:d,http:r.status,count:layer?.length||0,matches});
+          }
+          console.log(JSON.stringify(out,null,2));
+          fs.writeFileSync('result.json',JSON.stringify(out,null,2));
+          NODE
+          node find.mjs | tee result.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: case-0109-best-satellite-result
+          path: work/result.*
+          retention-days: 30
