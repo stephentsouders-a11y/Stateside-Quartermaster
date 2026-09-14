@@ -81,6 +81,15 @@
 
   syncInitialAvailability();
 
+  main.addEventListener('click',function(ev){
+    var row=ev.target&&ev.target.closest&&ev.target.closest('.sq-ohio-refine-choice');
+    if(!row)return;
+    var box=ev.target&&ev.target.closest&&ev.target.closest('input[type="checkbox"]');
+    if(box)return;
+    ev.preventDefault();
+    ev.stopPropagation();
+  },true);
+
   main.addEventListener('change',function(ev){
     var input=ev.target&&ev.target.closest&&ev.target.closest('input[data-sq-ohio-group="availability"]');
     if(!input)return;
