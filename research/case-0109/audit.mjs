@@ -22,7 +22,7 @@ const response = await page.goto(apiUrl, { waitUntil: 'domcontentloaded', timeou
 await page.waitForTimeout(1000);
 const rawText = await page.locator('body').innerText();
 fs.writeFileSync(path.join(out, 'primo-api-raw.txt'), rawText);
-await page.screenshot({ path: path.join(out, 'primo-api.png'), fullPage: true });
+await page.screenshot({ path: path.join(out, 'primo-api.png'), fullPage: false, timeout: 5000 }).catch(()=>{});
 
 let api;
 try { api = JSON.parse(rawText); }
@@ -94,7 +94,6 @@ for (const frame of frames) {
     rec.titles = findStrings(record, new RegExp(frame.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'))).slice(0,20);
     fs.writeFileSync(path.join(out, `${frame}-record.json`), JSON.stringify(record, null, 2));
 
-    // Open one archival image candidate if the API exposes one, otherwise open a catalog candidate.
     const candidate = rec.image_candidates[0] || rec.catalog_candidates[0];
     if (candidate) {
       try {
@@ -107,7 +106,7 @@ for (const frame of frames) {
         rec.review_body_excerpt = (await page.locator('body').innerText()).slice(0,10000);
         rec.review_images = await page.locator('img').evaluateAll(imgs => imgs.map(i => ({src:i.currentSrc||i.src,width:i.naturalWidth,height:i.naturalHeight,alt:i.alt})).filter(x=>x.src)).catch(()=>[]);
         rec.review_resources = await page.evaluate(() => performance.getEntriesByType('resource').map(r=>r.name).filter(u=>/iiif|jpg|jpeg|png|tif|tiff|image/i.test(u)).slice(-100)).catch(()=>[]);
-        await page.screenshot({ path: path.join(out, `${frame}-review.png`), fullPage: true }).catch(()=>{});
+        await page.screenshot({ path: path.join(out, `${frame}-review.png`), fullPage: false, timeout: 5000 }).catch(()=>{});
       } catch (e) {
         rec.review_error = String(e?.message || e);
       }
