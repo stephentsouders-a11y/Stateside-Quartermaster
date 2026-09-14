@@ -1,0 +1,65 @@
+name: Case 0109 UMaine API
+
+on:
+  push:
+    branches: [case-0109-aerial-audit]
+    paths: ['.github/workflows/case-0109-umaine-api.yml']
+  workflow_dispatch:
+
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query collection records and extract An Khe items
+        shell: bash
+        run: |
+          mkdir -p out
+          python3 - <<'PY'
+          import json, urllib.parse, urllib.request
+          base='https://maine.primo.exlibrisgroup.com/primaws/rest/pub/pnxs'
+          params={
+            'citationTrailFilterByAvailability':'true','limit':'50','newspapersActive':'true','newspapersSearch':'false',
+            'offset':'0','pcAvailability':'true','scope':'browse_search','searchInFulltextUserSelection':'false',
+            'disableCache':'false','skipDelivery':'Y','sort':'rank','tab':'DigCol','inst':'01MAINE_INST','rapido':'false',
+            'refEntryActive':'true','rtaLinks':'true','qInclude':'','qExclude':'','multiFacets':'',
+            'q':'cdparentid,exact,81521275480008681','isCDSearch':'true','featuredNewspapersIssnList':'',
+            'lang':'en','explain':'','otbRanking':'','isRelatedItems':'false','vid':'01MAINE_INST:DigCol'
+          }
+          all_docs=[]
+          for offset in range(0,500,50):
+            params['offset']=str(offset)
+            u=base+'?'+urllib.parse.urlencode(params)
+            try:
+              with urllib.request.urlopen(u, timeout=45) as r: data=json.load(r)
+            except Exception as e:
+              print('ERR',offset,e); break
+            docs=data.get('docs') or data.get('results') or []
+            if not docs: break
+            all_docs.extend(docs)
+            if len(docs)<50: break
+          open('out/raw.json','w').write(json.dumps(all_docs,indent=2))
+          hits=[]
+          def walk(o,path=''):
+            if isinstance(o,dict):
+              for k,v in o.items(): yield from walk(v,path+'/'+str(k))
+            elif isinstance(o,list):
+              for i,v in enumerate(o): yield from walk(v,path+'/'+str(i))
+            else: yield path,o
+          for d in all_docs:
+            flat=list(walk(d))
+            text='\n'.join(str(v) for _,v in flat if isinstance(v,(str,int,float)))
+            if 'An Khe February 16 1966' in text or '_AK' in text:
+              hits.append(d)
+          open('out/an_khe_hits.json','w').write(json.dumps(hits,indent=2))
+          print('docs',len(all_docs),'hits',len(hits))
+          for d in hits:
+            flat=list(walk(d))
+            vals=[(p,str(v)) for p,v in flat if isinstance(v,(str,int,float)) and ('01-' in str(v) or 'An Khe' in str(v) or '8681' in str(v) or 'recordid' in p.lower() or 'mms' in p.lower() or 'delivery' in p.lower())]
+            print('---')
+            for p,v in vals[:80]: print(p,'=',v[:500])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: case-0109-umaine-api
+          path: out/**
+          retention-days: 30
