@@ -56,6 +56,13 @@
   window.__sqOhioRefineRestorationHost=true;
   var main=document.getElementById('MainContent');if(!main)return;
 
+  /* An older owner copy can run before this host exists and set its one-shot
+     guard while only rendering the product panel. Release that stale guard
+     once, here, so the owner rendered directly below can initialize the sidebar. */
+  if(main.querySelector('[data-sq-ohio-refine-host]')&&!main.querySelector('.sq-ohio-refine-group')){
+    window.__sqOhioStableRefineV2=false;
+  }
+
   function syncInitialAvailability(){
     try{
       var u=new URL(location.href);
@@ -111,5 +118,4 @@
 </script>
 
 {% render 'sq-state-guard-special-refine-owner' %}
-{% comment %}Recorded Chromium certification trigger 2026-09-14{% endcomment %}
 {% endif %}
