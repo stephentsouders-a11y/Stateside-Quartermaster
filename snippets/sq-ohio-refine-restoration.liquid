@@ -55,6 +55,7 @@
   if(window.__sqOhioRefineRestorationHost)return;
   window.__sqOhioRefineRestorationHost=true;
   var main=document.getElementById('MainContent');if(!main)return;
+  var ownerAttempts=0,ownerBusy=false,lastOwnerStart=0,repairTimer=null;
 
   function syncInitialAvailability(){
     try{
@@ -67,9 +68,11 @@
   }
 
   function install(){
-    var side=main.querySelector('[data-sq-ohio-refine-host]');
+    var sides=[].slice.call(main.querySelectorAll('[data-sq-ohio-refine-host]'));
+    var side=sides[0];
     var wrap=main.querySelector('collection-component .collection-wrapper');
     if(!side||!wrap)return false;
+    sides.slice(1).forEach(function(x){x.remove()});
     wrap.classList.add('sq-global-refine-layout','sq-state-guard-refine-layout','sq-ohio-refine-layout');
     if(side.parentNode!==wrap)wrap.insertBefore(side,wrap.firstChild);
     side.removeAttribute('hidden');
@@ -79,16 +82,34 @@
     return true;
   }
 
-  function retryOwnerOnce(){
-    if(window.__sqOhioOwnerRetryLaunched)return;
-    if(main.querySelector('.sq-ohio-refine-group'))return;
+  function hasCompleteSidebar(){
+    var side=main.querySelector('[data-sq-ohio-refine-host]');
+    if(!side)return false;
+    var groups=[].slice.call(side.querySelectorAll('.sq-ohio-refine-group>summary')).map(function(x){return String(x.textContent||'').trim()});
+    var required=['Shop by Category','Shop by Subcategory','Shop by Type','Shop by Manufacturers','Shop by Color / Pattern','Availability'];
+    return required.every(function(x){return groups.indexOf(x)!==-1});
+  }
+
+  function runOwnerRepair(){
+    install();
+    if(hasCompleteSidebar()){ownerBusy=false;return true;}
+    var now=Date.now();
+    if(ownerBusy&&now-lastOwnerStart<4500)return false;
+    if(ownerAttempts>=5)return false;
     var scripts=document.querySelectorAll('script[data-sq-state-guard-special-refine-owner]');
     var owner=scripts.length?scripts[scripts.length-1]:null;
-    if(!owner||!String(owner.textContent||'').trim())return;
-    window.__sqOhioOwnerRetryLaunched=true;
+    if(!owner||!String(owner.textContent||'').trim())return false;
+    ownerAttempts+=1;ownerBusy=true;lastOwnerStart=now;
     window.__sqOhioStableRefineV2=false;
     try{new Function(owner.textContent)();}
-    catch(err){console.error('Ohio refine owner retry failed',err);}
+    catch(err){ownerBusy=false;console.error('Ohio refine owner repair failed',err);return false;}
+    setTimeout(function(){ownerBusy=false;if(!hasCompleteSidebar())scheduleRepair(250)},1800);
+    return false;
+  }
+
+  function scheduleRepair(delay){
+    clearTimeout(repairTimer);
+    repairTimer=setTimeout(runOwnerRepair,delay||120);
   }
 
   syncInitialAvailability();
@@ -113,15 +134,24 @@
     }catch(_){}
   },true);
 
-  function boot(){install();setTimeout(retryOwnerOnce,80)}
+  function boot(){install();scheduleRepair(350)}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
-  window.addEventListener('load',function(){install();setTimeout(retryOwnerOnce,80)},{once:true});
-  var timer=null;
-  new MutationObserver(function(){clearTimeout(timer);timer=setTimeout(install,30)}).observe(main,{childList:true,subtree:true});
-  [80,200,500,900,1500,2600,4200,6500,9000].forEach(function(ms){setTimeout(install,ms)});
+  window.addEventListener('load',function(){install();if(!hasCompleteSidebar())scheduleRepair(350)},{once:true});
+
+  var observerTimer=null;
+  new MutationObserver(function(){
+    clearTimeout(observerTimer);
+    observerTimer=setTimeout(function(){
+      install();
+      if(!hasCompleteSidebar())scheduleRepair(250);
+    },80);
+  }).observe(main,{childList:true,subtree:true});
+
+  [700,1800,3500,6000,9500,13500].forEach(function(ms){
+    setTimeout(function(){install();if(!hasCompleteSidebar())scheduleRepair(120)},ms);
+  });
 })();
 </script>
 
 {% render 'sq-state-guard-special-refine-owner' %}
-{% comment %}Recorded post-sync owner-retry audit trigger 2026-09-14{% endcomment %}
 {% endif %}
