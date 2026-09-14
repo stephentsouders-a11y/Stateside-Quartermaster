@@ -56,13 +56,6 @@
   window.__sqOhioRefineRestorationHost=true;
   var main=document.getElementById('MainContent');if(!main)return;
 
-  /* An older owner copy can run before this host exists and set its one-shot
-     guard while only rendering the product panel. Release that stale guard
-     once, here, so the owner rendered directly below can initialize the sidebar. */
-  if(main.querySelector('[data-sq-ohio-refine-host]')&&!main.querySelector('.sq-ohio-refine-group')){
-    window.__sqOhioStableRefineV2=false;
-  }
-
   function syncInitialAvailability(){
     try{
       var u=new URL(location.href);
@@ -84,6 +77,18 @@
     side.style.removeProperty('display');
     side.style.removeProperty('visibility');
     return true;
+  }
+
+  function retryOwnerOnce(){
+    if(window.__sqOhioOwnerRetryLaunched)return;
+    if(main.querySelector('.sq-ohio-refine-group'))return;
+    var scripts=document.querySelectorAll('script[data-sq-state-guard-special-refine-owner]');
+    var owner=scripts.length?scripts[scripts.length-1]:null;
+    if(!owner||!String(owner.textContent||'').trim())return;
+    window.__sqOhioOwnerRetryLaunched=true;
+    window.__sqOhioStableRefineV2=false;
+    try{new Function(owner.textContent)();}
+    catch(err){console.error('Ohio refine owner retry failed',err);}
   }
 
   syncInitialAvailability();
@@ -108,9 +113,9 @@
     }catch(_){}
   },true);
 
-  function boot(){install()}
+  function boot(){install();setTimeout(retryOwnerOnce,80)}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
-  window.addEventListener('load',boot,{once:true});
+  window.addEventListener('load',function(){install();setTimeout(retryOwnerOnce,80)},{once:true});
   var timer=null;
   new MutationObserver(function(){clearTimeout(timer);timer=setTimeout(install,30)}).observe(main,{childList:true,subtree:true});
   [80,200,500,900,1500,2600,4200,6500,9000].forEach(function(ms){setTimeout(install,ms)});
@@ -118,5 +123,4 @@
 </script>
 
 {% render 'sq-state-guard-special-refine-owner' %}
-{% comment %}Post-sync Chromium rerun trigger 2026-09-14{% endcomment %}
 {% endif %}
