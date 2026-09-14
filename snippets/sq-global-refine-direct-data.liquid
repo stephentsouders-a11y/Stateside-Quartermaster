@@ -11,6 +11,7 @@ Builds the final left Refine Products sidebar from the exact shopper-facing coll
 (function(){
   if(window.__sqGlobalRefineDirectDataV5)return;window.__sqGlobalRefineDirectDataV5=true;
   var main=document.getElementById('MainContent');if(!main)return;
+  if(location.pathname.replace(/\/$/,'')==='/collections/state-guard-series-ohio')return;
   var shared={{ sq_shared_refine | json }},rendered=false,routeCache={},syncTimer=null;
   function c(v){return String(v==null?'':v).trim()}
   function n(v){return c(v).toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ')}
