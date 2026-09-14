@@ -1,0 +1,22 @@
+name: Case 0109 Fetch Frame34 Direct
+on:
+  push:
+    branches: [case-0109-aerial-audit]
+    paths: ['.github/workflows/case-0109-fetch-frame34-direct.yml']
+  workflow_dispatch:
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download full-resolution 01-34_AK
+        run: |
+          mkdir -p out
+          URL='https://na-img02.ext.exlibrisgroup.com/iiif/2/eyJyZWdpb24iOiJ1cy1lYXN0LTEiLCJidWNrZXQiOiJuYS1zdDAxLmV4dC5leGxpYnJpc2dyb3VwLmNvbSIsImtleSI6IjAxTUFJTkVfSU5TVC9zdG9yYWdlL2FsbWEvRUYvNDgvNTAvQ0QvNTAvOUQvQzgvQjUvN0YvQjMvRDIvN0IvNjcvNjEvRjQvODEvQW5fS2hlX0ZlYnJ1YXJ5XzE2XzE5NjZfX18wMV8zNF9BSy5qcGciLCJyZXBfaWQiOiIxMjUyNTE0NzI0MDAwODY4MSIsImluc3RhbmNlIjoibmEwNSIsImluc3RpdHV0aW9uIjoiMDFNQUlORV9JTlNUIiwid2lkdGgiOiIzNTAwIiwiaGVpZ2h0IjoiMzUwMCIsIndtS2V5IjpudWxsLCJ3bVdpZHRoIjpudWxsLCJ3bUhlaWdodCI6bnVsbCwid21Qb3NpdGlvbiI6bnVsbCwid21SZXBlYXQiOmZhbHNlLCJuYTkxIjpudWxsfQ%3D%3D/full/full/0/default.jpg'
+          curl -fL "$URL" -o out/01-34_AK_3500x3500.jpg
+          file out/01-34_AK_3500x3500.jpg
+          ls -lh out/01-34_AK_3500x3500.jpg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: case-0109-frame34-fullres
+          path: out/**
+          retention-days: 30
