@@ -1,0 +1,58 @@
+name: Case 0109 Parallel Strip 17-25
+on:
+  push:
+    branches: [case-0109-aerial-audit]
+    paths: ['.github/workflows/case-0109-parallel-strip17-25.yml']
+  workflow_dispatch:
+jobs:
+  frame:
+    strategy:
+      fail-fast: false
+      matrix:
+        frame: ['01-17_AK','01-18_AK','01-19_AK','01-20_AK','01-21_AK','01-22_AK','01-23_AK','01-24_AK','01-25_AK']
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Locate and download ${{ matrix.frame }}
+        env:
+          FRAME: ${{ matrix.frame }}
+        run: |
+          mkdir out work && cd work
+          npm init -y >/dev/null
+          npm install playwright >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          cat > run.mjs <<'NODE'
+          import { chromium } from 'playwright'; import fs from 'node:fs';
+          const frame=process.env.FRAME;
+          const root='https://maine.primo.exlibrisgroup.com/nde/collectionDiscovery?collectionId=81521275480008681&vid=01MAINE_INST:DigCol&lang=en';
+          const browser=await chromium.launch({headless:true}); const ctx=await browser.newContext({viewport:{width:1400,height:1000}}); const page=await ctx.newPage();
+          let infoUrl=null, recordid=null, mms=null;
+          page.on('response',async r=>{
+            const u=r.url();
+            if(!infoUrl&&u.includes('/iiif/2/')&&u.includes('/info.json')) infoUrl=u.split('?')[0];
+            if(u.includes('/primaws/rest/pub/collectionItems')&&u.includes(encodeURIComponent(frame))){
+              try{const d=await r.json(); const doc=d?.docs?.[0]; recordid=doc?.pnx?.control?.recordid?.[0]||null; mms=doc?.pnx?.display?.mms?.[0]||null;}catch{}
+            }
+          });
+          await page.goto(root,{waitUntil:'domcontentloaded',timeout:60000}); await page.waitForTimeout(4500);
+          const inp=page.locator('input[aria-label="Search inside the collection"]'); await inp.fill(frame); await inp.press('Enter');
+          for(let i=0;i<15 && !recordid;i++) await page.waitForTimeout(500);
+          if(!recordid) throw new Error('no record id '+frame);
+          const fullDisplay=`https://maine.primo.exlibrisgroup.com/nde/fulldisplay?collectionId=81521275480008681&vid=01MAINE_INST:DigCol&lang=en&query=${encodeURIComponent(frame)}&docid=${recordid}&adaptor=Local%20Search%20Engine&context=L&isFrbr=false&isHighlightedRecord=false&state=`;
+          await page.goto(fullDisplay,{waitUntil:'domcontentloaded',timeout:60000});
+          for(let i=0;i<25 && !infoUrl;i++) await page.waitForTimeout(1000);
+          if(!infoUrl) throw new Error('no IIIF '+frame+' '+recordid);
+          const base=infoUrl.replace(/\/info\.json$/,''); const full=base+'/full/full/0/default.jpg';
+          const r=await ctx.request.get(full,{timeout:120000}); if(!r.ok()) throw new Error('download '+r.status()); const buf=await r.body();
+          fs.writeFileSync('../out/'+frame+'.jpg',buf); fs.writeFileSync('../out/meta.json',JSON.stringify({frame,recordid,mms,infoUrl,full,bytes:buf.length},null,2));
+          console.log(frame,'DOWNLOADED',buf.length,recordid,mms); await browser.close();
+          NODE
+          node run.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strip-${{ matrix.frame }}
+          path: out/**
+          if-no-files-found: error
+          retention-days: 30
