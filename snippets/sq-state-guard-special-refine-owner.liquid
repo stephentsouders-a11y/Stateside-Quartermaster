@@ -1,5 +1,12 @@
 {% if request.page_type == 'collection' %}
 {% if collection.handle contains 'state-guard-series-' or collection.handle == 'new-jersey-state-guard-naval-militia' %}
+{% if collection.handle == 'state-guard-series-ohio' %}
+<script data-sq-state-guard-special-refine-owner data-ohio-global-refine-owner>
+(function(){
+  document.documentElement.dataset.sqStateGuardRefineOwner='global-ohio';
+})();
+</script>
+{% else %}
 <style data-sq-state-guard-special-refine-owner>
 #MainContent .sq-global-refine-sidebar{display:none!important;visibility:hidden!important;pointer-events:none!important}
 </style>
@@ -49,5 +56,6 @@
   [50,150,350,700,1400,2600,5000,8000].forEach(function(ms){setTimeout(unwrapLegacyGlobal,ms)});
 })();
 </script>
+{% endif %}
 {% endif %}
 {% endif %}
