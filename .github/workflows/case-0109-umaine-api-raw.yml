@@ -1,0 +1,28 @@
+name: Case 0109 UMaine API Raw
+on:
+  push:
+    branches: [case-0109-aerial-audit]
+    paths: ['.github/workflows/case-0109-umaine-api-raw.yml']
+  workflow_dispatch:
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Capture response
+        shell: bash
+        run: |
+          mkdir -p out
+          URL='https://maine.primo.exlibrisgroup.com/primaws/rest/pub/pnxs?citationTrailFilterByAvailability=true&limit=50&newspapersActive=true&newspapersSearch=false&offset=0&pcAvailability=true&scope=browse_search&searchInFulltextUserSelection=false&disableCache=false&skipDelivery=Y&sort=rank&tab=DigCol&inst=01MAINE_INST&rapido=false&refEntryActive=true&rtaLinks=true&qInclude=&qExclude=&multiFacets=&q=cdparentid%2Cexact%2C81521275480008681&isCDSearch=true&featuredNewspapersIssnList=&lang=en&explain=&otbRanking=&isRelatedItems=false&vid=01MAINE_INST:DigCol'
+          curl -fsSL "$URL" -o out/response.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('out/response.json'))
+          print(type(d).__name__)
+          if isinstance(d,dict): print('TOP KEYS', list(d.keys()))
+          print(json.dumps(d,indent=2)[:40000])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: case-0109-umaine-api-raw
+          path: out/**
+          retention-days: 30
