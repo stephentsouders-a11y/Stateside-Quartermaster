@@ -1,0 +1,28 @@
+name: Case 0109 Fetch Verified Imagery
+
+on:
+  push:
+    branches:
+      - case-0109-aerial-audit
+    paths:
+      - '.github/workflows/case-0109-fetch-verified-imagery.yml'
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch verified USGS CORONA browse images
+        run: |
+          mkdir -p imagery
+          curl -fL 'https://ims.cr.usgs.gov/browse/DIT/1031-1/022D/F/DS1031-1022DF093.jpg' -o imagery/DS1031-1022DF093_1966-04-09_forward.jpg
+          curl -fL 'https://ims.cr.usgs.gov/browse/DIT/1031-1/022D/A/DS1031-1022DA095.jpg' -o imagery/DS1031-1022DA095_1966-04-09_aft.jpg
+          file imagery/*
+          sha256sum imagery/* > imagery/SHA256SUMS.txt
+      - name: Upload verified imagery
+        uses: actions/upload-artifact@v4
+        with:
+          name: case-0109-verified-imagery
+          path: imagery/**
+          if-no-files-found: error
+          retention-days: 30
