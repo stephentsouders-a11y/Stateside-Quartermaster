@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "audit": "node audit.mjs"
+    "audit": "node audit.mjs && node download-previews.mjs"
   },
   "devDependencies": {
     "playwright": "^1.55.0"
