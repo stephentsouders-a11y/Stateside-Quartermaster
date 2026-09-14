@@ -77,10 +77,10 @@
   function install(){
     if(state.destroyed)return false;
     var m=main();if(!m)return false;
-    var sides=[].slice.call(m.querySelectorAll('[data-sq-ohio-refine-host]'));
+    var sides=[].slice.call(document.querySelectorAll('[data-sq-ohio-refine-host]'));
     var wrap=m.querySelector('collection-component .collection-wrapper');
     if(!wrap)return false;
-    var side=sides[0];
+    var side=sides.filter(function(x){return m.contains(x)})[0]||sides[0];
     if(!side){
       side=document.createElement('aside');
       side.className='sq-global-refine-sidebar';
@@ -88,7 +88,7 @@
       side.setAttribute('aria-label','Refine Products');
       side.innerHTML='<h2 class="sq-global-refine-sidebar__title">Refine Products</h2><p class="sq-ohio-refine-loading">Loading refinements…</p>';
     }
-    sides.slice(1).forEach(function(x){x.remove()});
+    sides.filter(function(x){return x!==side}).forEach(function(x){x.remove()});
     wrap.classList.add('sq-global-refine-layout','sq-state-guard-refine-layout','sq-ohio-refine-layout');
     if(side.parentNode!==wrap)wrap.insertBefore(side,wrap.firstChild);
     side.removeAttribute('hidden');side.removeAttribute('aria-hidden');
@@ -180,5 +180,4 @@
 </script>
 
 {% render 'sq-state-guard-special-refine-owner' %}
-{% comment %}Morph-survival Chromium certification trigger 2026-09-14{% endcomment %}
 {% endif %}
