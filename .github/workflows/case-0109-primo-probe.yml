@@ -1,0 +1,50 @@
+name: Case 0109 Primo Probe
+
+on:
+  push:
+    branches: [case-0109-aerial-audit]
+    paths: ['.github/workflows/case-0109-primo-probe.yml']
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Probe migrated UMaine collection with Chromium
+        run: |
+          mkdir probe && cd probe
+          npm init -y >/dev/null
+          npm install playwright >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          cat > probe.mjs <<'NODE'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const url='https://maine.primo.exlibrisgroup.com/nde/collectionDiscovery?collectionId=81521275480008681&vid=01MAINE_INST:DigCol&lang=en';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1600,height:1200}});
+          const traffic=[];
+          page.on('response', r=>{const u=r.url(); if(/primaws|iiif|delivery|collection|pnx|search|exlibrisgroup/i.test(u)) traffic.push({status:r.status(),url:u});});
+          await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+          await page.waitForTimeout(12000);
+          const body=(await page.locator('body').innerText()).slice(0,100000);
+          const inputs=await page.locator('input').evaluateAll(es=>es.map(e=>({type:e.type,placeholder:e.placeholder,aria:e.getAttribute('aria-label'),name:e.name,id:e.id,value:e.value})));
+          const buttons=await page.locator('button').evaluateAll(es=>es.map(e=>({text:(e.innerText||'').trim(),aria:e.getAttribute('aria-label'),title:e.title})).filter(x=>x.text||x.aria||x.title));
+          const links=await page.locator('a').evaluateAll(es=>es.map(e=>({text:(e.innerText||'').trim(),href:e.href})).filter(x=>x.href));
+          fs.writeFileSync('body.txt',body);
+          fs.writeFileSync('inputs.json',JSON.stringify(inputs,null,2));
+          fs.writeFileSync('buttons.json',JSON.stringify(buttons,null,2));
+          fs.writeFileSync('links.json',JSON.stringify(links,null,2));
+          fs.writeFileSync('traffic.json',JSON.stringify(traffic,null,2));
+          await page.screenshot({path:'collection.png',fullPage:true});
+          console.log(JSON.stringify({inputs,buttons:buttons.slice(0,100),traffic:traffic.slice(-100)},null,2));
+          await browser.close();
+          NODE
+          node probe.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: case-0109-primo-probe
+          path: probe/**
+          retention-days: 30
