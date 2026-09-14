@@ -1,0 +1,75 @@
+name: Case 0109 Fetch Aerial Sequence
+on:
+  push:
+    branches: [case-0109-aerial-audit]
+    paths: ['.github/workflows/case-0109-fetch-aerial-sequence.yml']
+  workflow_dispatch:
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Fetch full-resolution Sewall An Khe frames
+        run: |
+          mkdir out work && cd work
+          npm init -y >/dev/null
+          npm install playwright >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          cat > run.mjs <<'NODE'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const frames=['01-34_AK','01-35_AK','01-36_AK','01-37_AK','01-38_AK','01-39_AK','01-40_AK','01-41_AK','01-45_AK','01-46_AK','01-47_AK','01-48_AK','01-49_AK','01-50_AK','01-51_AK','01-52_AK','01-53_AK'];
+          const root='https://maine.primo.exlibrisgroup.com/nde/collectionDiscovery?collectionId=81521275480008681&vid=01MAINE_INST:DigCol&lang=en';
+          const browser=await chromium.launch({headless:true});
+          const ctx=await browser.newContext({viewport:{width:1600,height:1200}});
+          const results=[];
+          for(const frame of frames){
+            const page=await ctx.newPage();
+            let infoUrl=null;
+            page.on('response', r=>{
+              const u=r.url();
+              if(!infoUrl && u.includes('na-img02.ext.exlibrisgroup.com/iiif/2/') && u.endsWith('/info.json')) infoUrl=u;
+            });
+            const rec={frame,status:'STARTED'};
+            try{
+              await page.goto(root,{waitUntil:'domcontentloaded',timeout:60000});
+              await page.waitForTimeout(5000);
+              const inp=page.locator('input[aria-label="Search inside the collection"]');
+              await inp.fill(frame); await inp.press('Enter'); await page.waitForTimeout(6500);
+              const title=page.getByText(frame,{exact:false}).first();
+              if(await title.count()===0){rec.status='NOT_FOUND'; results.push(rec); await page.close(); continue;}
+              await title.click(); await page.waitForTimeout(9000);
+              rec.record_url=page.url();
+              rec.body=(await page.locator('body').innerText()).slice(0,20000);
+              if(!infoUrl){rec.status='NO_IIIF'; results.push(rec); await page.close(); continue;}
+              rec.info_url=infoUrl;
+              const base=infoUrl.replace(/\/info\.json$/,'');
+              rec.full_url=base+'/full/full/0/default.jpg';
+              const r=await ctx.request.get(rec.full_url,{timeout:120000});
+              rec.http=r.status();
+              if(r.ok()){
+                const buf=await r.body();
+                fs.writeFileSync('../out/'+frame+'.jpg',buf);
+                rec.bytes=buf.length;
+                rec.status='DOWNLOADED';
+              }else rec.status='DOWNLOAD_FAILED';
+              await page.screenshot({path:'../out/'+frame+'-record.png',fullPage:true});
+            }catch(e){rec.status='ERROR'; rec.error=String(e?.stack||e);}
+            results.push(rec);
+            fs.writeFileSync('../out/index.json',JSON.stringify(results,null,2));
+            console.log(frame,rec.status,rec.bytes||'',rec.full_url||'');
+            await page.close();
+          }
+          fs.writeFileSync('../out/index.json',JSON.stringify(results,null,2));
+          await browser.close();
+          NODE
+          node run.mjs
+          file ../out/*.jpg || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: case-0109-an-khe-fullres
+          path: out/**
+          if-no-files-found: error
+          retention-days: 30
