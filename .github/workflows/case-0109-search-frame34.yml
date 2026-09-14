@@ -1,0 +1,44 @@
+name: Case 0109 Search Frame 34
+on:
+  push:
+    branches: [case-0109-aerial-audit]
+    paths: ['.github/workflows/case-0109-search-frame34.yml']
+  workflow_dispatch:
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Search frame in collection UI
+        run: |
+          mkdir out work && cd work
+          npm init -y >/dev/null
+          npm install playwright >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          cat > run.mjs <<'NODE'
+          import { chromium } from 'playwright'; import fs from 'node:fs';
+          const browser=await chromium.launch({headless:true}); const page=await browser.newPage({viewport:{width:1600,height:1200}});
+          const traffic=[];
+          page.on('response',async r=>{const u=r.url(); if(/primaws|delivery|iiif|alma\.exlibrisgroup/i.test(u)){let body=''; try{if(r.status()===200 && /primaws\/rest\/pub\/pnxs|delivery/i.test(u)) body=(await r.text()).slice(0,1000000);}catch{} traffic.push({status:r.status(),url:u,body});}});
+          await page.goto('https://maine.primo.exlibrisgroup.com/nde/collectionDiscovery?collectionId=81521275480008681&vid=01MAINE_INST:DigCol&lang=en',{waitUntil:'domcontentloaded',timeout:60000});
+          await page.waitForTimeout(8000);
+          const inp=page.locator('input[aria-label="Search inside the collection"]');
+          await inp.fill('01-34_AK');
+          await inp.press('Enter');
+          await page.waitForTimeout(12000);
+          fs.writeFileSync('../out/body.txt',(await page.locator('body').innerText()).slice(0,100000));
+          fs.writeFileSync('../out/traffic.json',JSON.stringify(traffic,null,2));
+          fs.writeFileSync('../out/links.json',JSON.stringify(await page.locator('a').evaluateAll(es=>es.map(e=>({text:(e.innerText||'').trim(),href:e.href})).filter(x=>x.href)),null,2));
+          await page.screenshot({path:'../out/search.png',fullPage:true});
+          console.log((await page.locator('body').innerText()).slice(0,10000));
+          console.log('URL',page.url());
+          console.log('TRAFFIC'); for(const x of traffic.filter(x=>x.body.includes('01-34')||x.url.includes('pnxs'))) console.log(x.status,x.url,'\n',x.body.slice(0,10000));
+          await browser.close();
+          NODE
+          node run.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: case-0109-frame34-search
+          path: out/**
+          retention-days: 30
