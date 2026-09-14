@@ -4,6 +4,29 @@
 <script data-sq-state-guard-special-refine-owner data-ohio-global-refine-owner>
 (function(){
   document.documentElement.dataset.sqStateGuardRefineOwner='global-ohio';
+  if(window.__sqOhioRefineUniverseHydrated)return;window.__sqOhioRefineUniverseHydrated=true;
+  async function hydrate(){
+    var out=[],seen={};
+    for(var page=1;page<=8;page++){
+      try{
+        var r=await fetch('/collections/state-guard-series-ohio/products.json?limit=250&page='+page,{credentials:'same-origin'});
+        if(!r.ok)break;
+        var j=await r.json(),a=j&&Array.isArray(j.products)?j.products:[];
+        a.forEach(function(p){
+          var pt=String(p&&p.product_type||'').toLowerCase().replace(/[_-]+/g,' ');
+          if(!p||!p.handle||seen[p.handle]||pt==='options hidden product')return;
+          seen[p.handle]=1;out.push(p);
+        });
+        if(a.length<250)break;
+      }catch(_){break}
+    }
+    if(!out.length)return;
+    var prior=window.__sqDirectFacetUniverse||{};
+    window.__sqDirectFacetUniverse={products:out,maker:prior.maker||[],color:prior.color||[]};
+    window.dispatchEvent(new CustomEvent('sq:refine-universe-ready',{detail:window.__sqDirectFacetUniverse}));
+    window.dispatchEvent(new CustomEvent('sq:refine-results-ready',{detail:{products:out}}));
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',hydrate,{once:true});else hydrate();
 })();
 </script>
 {% else %}
