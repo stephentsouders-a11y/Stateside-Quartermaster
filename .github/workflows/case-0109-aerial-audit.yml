@@ -1,0 +1,36 @@
+name: Case 0109 Aerial Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - case-0109-aerial-audit
+    paths:
+      - 'research/case-0109/**'
+      - '.github/workflows/case-0109-aerial-audit.yml'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: research/case-0109
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: research/case-0109/package-lock.json
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - name: Run Chromium archival audit with video
+        run: npm run audit
+      - name: Upload screenshots, video, and reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: case-0109-aerial-audit
+          path: research/case-0109/artifacts/**
+          if-no-files-found: error
+          retention-days: 30
