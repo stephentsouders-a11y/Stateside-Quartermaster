@@ -111,7 +111,8 @@ jobs:
             const merch=page.locator('[data-sq-state-guard-merch-feature]');
             add('State Guard Themed Merchandise feature exists',await merch.count()===1,{count:await merch.count()});
             const merchHref=await merch.locator('a').first().getAttribute('href').catch(()=>null);
-            add('Merchandise feature links to correct collection',merchHref==='/collections/state-guard-naval-militia-themed-merchandise',{href:merchHref});
+            const merchPath=merchHref?new URL(merchHref,base).pathname:null;
+            add('Merchandise feature links to correct collection',merchPath==='/collections/state-guard-naval-militia-themed-merchandise',{href:merchHref,normalizedHref:merchPath});
 
             const cards=page.locator('[data-sq-state-guard-root] .sg-entity');
             const count=await cards.count();
@@ -169,17 +170,22 @@ jobs:
 
             // Recorded click-path verification: click every approved card and verify destination.
             await page.setViewportSize({width:1440,height:1100});
+            let recordedClicks=0;
             for(let i=0;i<expected.length;i++){
               await page.goto(rootUrl.toString(),{waitUntil:'domcontentloaded',timeout:60000});
+              await page.locator('[data-sq-state-guard-root] .sg-entity').first().waitFor({state:'visible',timeout:30000});
               await page.waitForTimeout(900);
               const card=page.locator('[data-sq-state-guard-root] .sg-entity').nth(i);
-              await card.scrollIntoViewIfNeeded();
+              await card.scrollIntoViewIfNeeded({timeout:30000});
               await page.waitForTimeout(150);
               await card.click({timeout:10000});
               await page.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});
               const actual=new URL(page.url()).pathname;
-              add(`Recorded click ${i+1} reaches correct destination`,actual===expected[i][1],{label:expected[i][0],expected:expected[i][1],actual,url:page.url()});
+              const pass=actual===expected[i][1];
+              if(pass)recordedClicks++;
+              add(`Recorded click ${i+1} reaches correct destination`,pass,{label:expected[i][0],expected:expected[i][1],actual,url:page.url()});
             }
+            add('All 25 recorded clicks reach approved destinations',recordedClicks===25,{recordedClicks});
 
             // Delayed overwrite check.
             await page.goto(rootUrl.toString(),{waitUntil:'domcontentloaded',timeout:60000});
