@@ -1,0 +1,227 @@
+name: Ohio Refine Products recorded Chromium audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ohio-refine-playwright-recorded-audit.yml'
+      - 'snippets/sq-ohio-refine-restoration.liquid'
+      - 'snippets/sq-state-guard-special-refine-owner.liquid'
+      - 'sections/sq-state-guard-uniform-card-fix.liquid'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chromium-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      BASE_URL: https://www.statesideqm.com
+      PREVIEW_THEME_ID: '158754177179'
+      OHIO_PATH: /collections/state-guard-series-ohio?filter.v.availability=1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+
+      - name: Run recorded Ohio audit
+        run: |
+          mkdir -p audit/videos audit/screenshots audit/traces
+          cat > ohio-audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          import path from 'path';
+
+          const base = process.env.BASE_URL;
+          const theme = process.env.PREVIEW_THEME_ID;
+          const ohioPath = process.env.OHIO_PATH;
+          const preview = new URL(ohioPath, base);
+          preview.searchParams.set('preview_theme_id', theme);
+          const live = new URL(ohioPath, base);
+          const outDir = path.resolve('audit');
+          const results = {
+            generatedAt: new Date().toISOString(),
+            previewUrl: preview.toString(),
+            liveUrl: live.toString(),
+            checks: [],
+            consoleErrors: [],
+            pageErrors: [],
+            networkFailures: [],
+            metadata: {}
+          };
+          const add = (name, pass, details={}) => results.checks.push({name, pass:!!pass, ...details});
+
+          const browser = await chromium.launch({headless:true});
+          const context = await browser.newContext({
+            viewport:{width:1440,height:1100},
+            recordVideo:{dir:path.join(outDir,'videos'), size:{width:1440,height:1100}}
+          });
+          await context.tracing.start({screenshots:true,snapshots:true,sources:true});
+          const page = await context.newPage();
+          page.on('console', msg => { if(msg.type()==='error') results.consoleErrors.push(msg.text()); });
+          page.on('pageerror', err => results.pageErrors.push(String(err)));
+          page.on('requestfailed', req => results.networkFailures.push({url:req.url(),error:req.failure()?.errorText||'failed'}));
+
+          try {
+            const response = await page.goto(preview.toString(), {waitUntil:'domcontentloaded',timeout:60000});
+            add('Preview HTTP 200', response?.status()===200, {status:response?.status()??null});
+            await page.waitForTimeout(10000);
+            await page.screenshot({path:path.join(outDir,'screenshots','01-preview-loaded.png'),fullPage:true});
+
+            const side = page.locator('[data-sq-ohio-refine-host]');
+            add('Exactly one Ohio Refine Products sidebar', await side.count()===1, {count:await side.count()});
+            add('Sidebar title is Refine Products', (await side.locator('h2').first().textContent().catch(()=>''))?.trim()==='Refine Products');
+
+            const groups = await side.locator('.sq-ohio-refine-group > summary').allTextContents().catch(()=>[]);
+            const expected = ['Shop by Category','Shop by Subcategory','Shop by Type','Shop by Manufacturers','Shop by Color / Pattern','Availability'];
+            add('All six required refine groups exist', expected.every(x=>groups.includes(x)), {groups});
+
+            const loading = await side.getByText('Loading refinements…',{exact:true}).count().catch(()=>0);
+            add('Loading placeholder cleared', loading===0, {loadingCount:loading});
+
+            const nativeVisible = await page.locator('.facets-block-wrapper--horizontal, .facets-toggle, theme-drawer#filters-drawer').evaluateAll(els=>els.filter(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>1&&r.height>1}).length).catch(()=>0);
+            add('No duplicate native filter UI visible', nativeVisible===0, {visibleNativeFilterCount:nativeVisible});
+
+            const oldBuilder = await page.locator('[data-sqsg] .sg-card-grid, [data-sqsg] .sg-sub-grid, .sg-dept-grid').evaluateAll(els=>els.filter(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2}).length).catch(()=>0);
+            add('No old State Guard button-tree visible on Ohio', oldBuilder===0, {visibleOldBuilderCount:oldBuilder});
+
+            const availabilityBox = side.locator('input[data-sq-ohio-group="availability"][value="In stock"]');
+            add('Availability checkbox exists', await availabilityBox.count()===1);
+            add('filter.v.availability=1 maps to checked In stock', await availabilityBox.isChecked().catch(()=>false), {url:page.url()});
+            add('Ohio custom availability param synchronized', new URL(page.url()).searchParams.getAll('sq_oh_availability').some(v=>v.toLowerCase()==='in stock'), {url:page.url()});
+
+            const productsPanel = page.locator('[data-sq-ohio-taxonomy-products]');
+            add('Ohio filtered products panel exists', await productsPanel.count()===1, {count:await productsPanel.count()});
+            const productCountText = (await productsPanel.locator('.sq-ohio-products__head p').textContent().catch(()=>''))?.trim()||'';
+            add('Filtered product count rendered', /^\d+ products$/.test(productCountText), {productCountText});
+            const productCards = await productsPanel.locator('.sq-ohio-product').count().catch(()=>0);
+            add('At least one filtered product card rendered', productCards>0, {productCards});
+
+            // Verify label text itself cannot toggle a checkbox.
+            const firstChoice = side.locator('.sq-ohio-refine-choice').filter({has:page.locator('input:not([data-sq-ohio-group="availability"])')}).first();
+            const firstInput = firstChoice.locator('input').first();
+            const firstText = firstChoice.locator('span').first();
+            if(await firstInput.count() && await firstText.count()) {
+              const before = await firstInput.isChecked();
+              await firstText.click({force:true});
+              await page.waitForTimeout(350);
+              const after = await firstInput.isChecked();
+              add('Clicking filter text does not toggle checkbox', before===after, {before,after,label:(await firstText.textContent())?.trim()});
+
+              await firstInput.click();
+              await page.waitForTimeout(800);
+              const afterBox = await firstInput.isChecked();
+              add('Clicking checkbox itself toggles filter', afterBox!==before, {before,afterBox,url:page.url()});
+              await page.screenshot({path:path.join(outDir,'screenshots','02-checkbox-filter-applied.png'),fullPage:true});
+            } else {
+              add('Checkbox-only interaction target available', false, {reason:'No non-availability filter choice found'});
+            }
+
+            // Responsive layout audit.
+            for (const vp of [{w:1440,h:1100},{w:900,h:1000},{w:760,h:1000},{w:430,h:900},{w:390,h:900}]) {
+              await page.setViewportSize({width:vp.w,height:vp.h});
+              await page.waitForTimeout(400);
+              const metric = await page.evaluate(()=>{
+                const wrap=document.querySelector('#MainContent .sq-ohio-refine-layout');
+                const side=document.querySelector('[data-sq-ohio-refine-host]');
+                const panel=document.querySelector('[data-sq-ohio-taxonomy-products]');
+                return {
+                  scrollWidth:document.documentElement.scrollWidth,
+                  clientWidth:document.documentElement.clientWidth,
+                  wrapDisplay:wrap?getComputedStyle(wrap).display:null,
+                  sideVisible:!!side&&getComputedStyle(side).display!=='none'&&side.getBoundingClientRect().width>1,
+                  panelVisible:!!panel&&getComputedStyle(panel).display!=='none'&&panel.getBoundingClientRect().width>1
+                };
+              });
+              add(`Responsive ${vp.w}px has no horizontal overflow`, metric.scrollWidth<=metric.clientWidth+1, metric);
+              add(`Responsive ${vp.w}px keeps sidebar and products visible`, metric.sideVisible&&metric.panelVisible, metric);
+              await page.screenshot({path:path.join(outDir,'screenshots',`viewport-${vp.w}.png`),fullPage:true});
+            }
+
+            // Reload after interaction and delayed scripts to catch late overwrites.
+            await page.setViewportSize({width:1440,height:1100});
+            await page.goto(preview.toString(), {waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForTimeout(12000);
+            const delayedSideCount = await page.locator('[data-sq-ohio-refine-host]').count();
+            const delayedTitle = (await page.locator('[data-sq-ohio-refine-host] h2').first().textContent().catch(()=>''))?.trim();
+            const delayedGroups = await page.locator('[data-sq-ohio-refine-host] .sq-ohio-refine-group').count().catch(()=>0);
+            add('Sidebar survives 12-second delayed-render window', delayedSideCount===1&&delayedTitle==='Refine Products'&&delayedGroups===6, {delayedSideCount,delayedTitle,delayedGroups});
+            await page.screenshot({path:path.join(outDir,'screenshots','03-delayed-render.png'),fullPage:true});
+
+            // Syntax audit of State Guard inline scripts.
+            const invalidInline = await page.locator('script:not([src])').evaluateAll(ss=>ss.map((s,i)=>({i,mark:[...s.attributes].filter(a=>a.name.startsWith('data-sq')||a.name.startsWith('data-ohio')).map(a=>a.name).join(' '),text:s.textContent||'',type:s.type||''})).filter(s=>s.text.trim()&&(!s.type||s.type==='text/javascript'||s.type==='application/javascript')).map(s=>{try{new Function(s.text);return null}catch(e){return {i:s.i,mark:s.mark,error:String(e)}}}).filter(Boolean));
+            const ohioInvalid = invalidInline.filter(x=>/ohio|state-guard-special-refine-owner|refine-restoration/i.test(x.mark));
+            add('Ohio restoration/refine inline scripts parse cleanly', ohioInvalid.length===0, {ohioInvalid});
+            results.metadata.allInvalidInlineScripts = invalidInline;
+
+            // Live comparison receipt only: do not require live to contain preview fix.
+            const livePage = await context.newPage();
+            const liveResponse = await livePage.goto(live.toString(),{waitUntil:'domcontentloaded',timeout:60000}).catch(()=>null);
+            await livePage.waitForTimeout(3000);
+            results.metadata.liveStatus = liveResponse?.status()??null;
+            results.metadata.liveSidebarCount = await livePage.locator('[data-sq-ohio-refine-host]').count().catch(()=>0);
+            await livePage.screenshot({path:path.join(outDir,'screenshots','04-live-comparison.png'),fullPage:true}).catch(()=>{});
+            await livePage.close();
+
+          } catch (err) {
+            results.fatal = String(err?.stack||err);
+            add('Audit completed without fatal exception', false, {error:results.fatal});
+          }
+
+          await context.tracing.stop({path:path.join(outDir,'traces','ohio-refine-trace.zip')});
+          const video = page.video();
+          await page.close();
+          if(video){ try { results.metadata.videoPath = await video.path(); } catch{} }
+          await context.close();
+          await browser.close();
+
+          results.summary = {
+            passed: results.checks.filter(x=>x.pass).length,
+            failed: results.checks.filter(x=>!x.pass).length,
+            total: results.checks.length
+          };
+          fs.writeFileSync(path.join(outDir,'results.json'),JSON.stringify(results,null,2));
+          const md = [
+            '# Ohio Refine Products Chromium Playwright Audit',
+            '',
+            `Generated: ${results.generatedAt}`,
+            `Preview: ${results.previewUrl}`,
+            `Live comparison: ${results.liveUrl}`,
+            '',
+            `## Result: ${results.summary.failed===0?'PASS':'FAIL'}`,
+            `Passed: ${results.summary.passed} / ${results.summary.total}`,
+            `Failed: ${results.summary.failed}`,
+            '',
+            '## Checks',
+            ...results.checks.map(x=>`- ${x.pass?'PASS':'FAIL'} — ${x.name}${x.details?` — ${JSON.stringify(x.details)}`:''}`),
+            '',
+            '## Runtime errors',
+            `Console errors: ${results.consoleErrors.length}`,
+            `Page errors: ${results.pageErrors.length}`,
+            `Network failures: ${results.networkFailures.length}`,
+            '',
+            'See results.json, screenshots/, videos/, and traces/ for full receipts.'
+          ].join('\n');
+          fs.writeFileSync(path.join(outDir,'AUDIT.md'),md);
+          console.log(md);
+          if(results.summary.failed>0) process.exitCode=2;
+          EOF
+          node ohio-audit.mjs
+
+      - name: Upload audit receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ohio-refine-recorded-audit-${{ github.run_id }}
+          path: audit
+          retention-days: 14
