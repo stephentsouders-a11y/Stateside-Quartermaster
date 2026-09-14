@@ -1,0 +1,105 @@
+{% if request.page_type == 'collection' and collection.handle == 'state-guard-series-ohio' %}
+<style data-sq-ohio-refine-restoration>
+#MainContent .sq-ohio-refine-layout{
+  display:grid!important;
+  grid-template-columns:minmax(250px,300px) minmax(0,1fr)!important;
+  gap:24px!important;
+  align-items:start!important;
+}
+#MainContent .sq-ohio-refine-layout>.sq-global-refine-sidebar{
+  grid-column:1!important;
+  grid-row:1 / span 50!important;
+  min-width:0!important;
+  width:auto!important;
+  display:block!important;
+  visibility:visible!important;
+}
+#MainContent .sq-ohio-refine-layout .facets-block-wrapper--horizontal,
+#MainContent .sq-ohio-refine-layout .facets-toggle,
+#MainContent .sq-ohio-refine-layout theme-drawer#filters-drawer{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+#MainContent .sq-ohio-refine-layout> :not(.sq-global-refine-sidebar):not(.facets-block-wrapper--horizontal):not(.facets-toggle):not(theme-drawer#filters-drawer){
+  grid-column:2!important;
+  min-width:0!important;
+}
+#MainContent .sq-ohio-refine-layout>[data-sq-ohio-taxonomy-products]{
+  grid-column:2!important;
+  width:100%!important;
+  min-width:0!important;
+  padding:0!important;
+}
+@media(max-width:900px){
+  #MainContent .sq-ohio-refine-layout{grid-template-columns:1fr!important;gap:16px!important}
+  #MainContent .sq-ohio-refine-layout>.sq-global-refine-sidebar{
+    grid-column:1!important;
+    grid-row:auto!important;
+    position:static!important;
+    max-height:none!important;
+    overflow:visible!important;
+  }
+  #MainContent .sq-ohio-refine-layout> :not(.sq-global-refine-sidebar):not(.facets-block-wrapper--horizontal):not(.facets-toggle):not(theme-drawer#filters-drawer),
+  #MainContent .sq-ohio-refine-layout>[data-sq-ohio-taxonomy-products]{grid-column:1!important}
+}
+</style>
+
+<aside class="sq-global-refine-sidebar" data-sq-ohio-refine-host aria-label="Refine Products">
+  <h2 class="sq-global-refine-sidebar__title">Refine Products</h2>
+  <p class="sq-ohio-refine-loading">Loading refinements…</p>
+</aside>
+
+<script data-sq-ohio-refine-restoration-host>
+(function(){
+  if(window.__sqOhioRefineRestorationHost)return;
+  window.__sqOhioRefineRestorationHost=true;
+  var main=document.getElementById('MainContent');if(!main)return;
+
+  function syncInitialAvailability(){
+    try{
+      var u=new URL(location.href);
+      if(u.searchParams.get('filter.v.availability')==='1'&&!u.searchParams.has('sq_oh_availability')){
+        u.searchParams.append('sq_oh_availability','In stock');
+        history.replaceState(history.state,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash);
+      }
+    }catch(_){}
+  }
+
+  function install(){
+    var side=main.querySelector('[data-sq-ohio-refine-host]');
+    var wrap=main.querySelector('collection-component .collection-wrapper');
+    if(!side||!wrap)return false;
+    wrap.classList.add('sq-global-refine-layout','sq-state-guard-refine-layout','sq-ohio-refine-layout');
+    if(side.parentNode!==wrap)wrap.insertBefore(side,wrap.firstChild);
+    side.removeAttribute('hidden');
+    side.removeAttribute('aria-hidden');
+    side.style.removeProperty('display');
+    side.style.removeProperty('visibility');
+    return true;
+  }
+
+  syncInitialAvailability();
+
+  main.addEventListener('change',function(ev){
+    var input=ev.target&&ev.target.closest&&ev.target.closest('input[data-sq-ohio-group="availability"]');
+    if(!input)return;
+    try{
+      var u=new URL(location.href),value=String(input.value||'').trim().toLowerCase();
+      if(input.checked&&value==='in stock')u.searchParams.set('filter.v.availability','1');
+      else u.searchParams.delete('filter.v.availability');
+      history.replaceState(history.state,'',u.pathname+(u.search?'?'+u.searchParams.toString():'')+u.hash);
+    }catch(_){}
+  },true);
+
+  function boot(){install()}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+  window.addEventListener('load',boot,{once:true});
+  var timer=null;
+  new MutationObserver(function(){clearTimeout(timer);timer=setTimeout(install,30)}).observe(main,{childList:true,subtree:true});
+  [80,200,500,900,1500,2600,4200,6500,9000].forEach(function(ms){setTimeout(install,ms)});
+})();
+</script>
+
+{% render 'sq-state-guard-special-refine-owner' %}
+{% endif %}
