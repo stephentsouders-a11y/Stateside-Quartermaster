@@ -21,8 +21,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: research/case-0109/package-lock.json
       - run: npm install
       - run: npx playwright install --with-deps chromium
       - name: Run Chromium archival audit with video
