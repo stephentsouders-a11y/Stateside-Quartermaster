@@ -1,0 +1,236 @@
+name: State Guard root recorded Chromium audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/state-guard-root-playwright-recorded-audit.yml'
+      - 'sections/state-guard-entities.liquid'
+      - 'snippets/sq-state-guard-root-grid-lock.liquid'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chromium-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      BASE_URL: https://www.statesideqm.com
+      PREVIEW_THEME_ID: '158754177179'
+      ROOT_PATH: /collections/state-guard-series
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+
+      - name: Run recorded State Guard root audit
+        run: |
+          mkdir -p audit/videos audit/screenshots audit/traces
+          cat > state-guard-root-audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          import path from 'path';
+
+          const base = process.env.BASE_URL;
+          const theme = process.env.PREVIEW_THEME_ID;
+          const rootPath = process.env.ROOT_PATH;
+          const rootUrl = new URL(rootPath, base);
+          rootUrl.searchParams.set('preview_theme_id', theme);
+          const outDir = path.resolve('audit');
+
+          const expected = [
+            ['Alabama State Guard & Alabama Service Corps','/collections/state-guard-series-alabama'],
+            ['Alaska State Defense Force & Alaska Naval Militia','/collections/state-guard-series-alaska'],
+            ['California State Guard & Cal Guard Maritime','/collections/state-guard-series-california'],
+            ['Connecticut State Militia Units','/collections/state-guard-series-connecticut'],
+            ['Florida State Guard','/collections/state-guard-series-florida'],
+            ['Georgia State Defense Force','/collections/state-guard-series-georgia'],
+            ['Indiana Guard Reserve','/collections/state-guard-series-indiana'],
+            ['Louisiana State Guard & Louisiana Naval Militia','/collections/state-guard-series-louisiana'],
+            ['Maryland Defense Force','/collections/state-guard-series-maryland'],
+            ['Massachusetts State Defense Force, Massachusetts Naval Militia & National Lancers','/collections/state-guard-series-massachusetts'],
+            ['Michigan Volunteer Defense Force','/collections/state-guard-series-michigan'],
+            ['Mississippi State Guard','/collections/state-guard-series-mississippi'],
+            ['New Mexico State Defense Force','/collections/state-guard-series-new-mexico'],
+            ['New Jersey State Guard & Naval Militia','/collections/new-jersey-state-guard-naval-militia'],
+            ['New York Guard & New York Naval Militia','/collections/state-guard-series-new-york'],
+            ['Ohio Military Reserve, Ohio Naval Militia & Ohio Cyber Reserve','/collections/state-guard-series-ohio'],
+            ['Oregon Civil Defense Force','/collections/state-guard-series-oregon'],
+            ['Puerto Rico State Guard','/collections/state-guard-series-puerto-rico'],
+            ['Rhode Island Independent Military Organizations','/collections/state-guard-series-rhode-island'],
+            ['South Carolina State Guard & South Carolina Naval Militia','/collections/state-guard-series-south-carolina'],
+            ['Tennessee State Guard','/collections/state-guard-series-tennessee'],
+            ['Texas State Guard','/collections/state-guard-series-texas'],
+            ['Vermont State Guard','/collections/state-guard-series-vermont'],
+            ['Virginia Defense Force','/collections/state-guard-series-virginia'],
+            ['Washington State Guard','/collections/state-guard-series-washington']
+          ];
+
+          const results = {
+            generatedAt:new Date().toISOString(),
+            previewUrl:rootUrl.toString(),
+            checks:[],
+            cards:[],
+            consoleErrors:[],
+            pageErrors:[],
+            networkFailures:[],
+            metadata:{}
+          };
+          const add=(name,pass,details={})=>results.checks.push({name,pass:!!pass,...details});
+
+          const browser = await chromium.launch({headless:true});
+          const context = await browser.newContext({
+            viewport:{width:1440,height:1100},
+            recordVideo:{dir:path.join(outDir,'videos'),size:{width:1440,height:1100}}
+          });
+          await context.tracing.start({screenshots:true,snapshots:true,sources:true});
+          const page = await context.newPage();
+          page.on('console',m=>{if(m.type()==='error')results.consoleErrors.push(m.text())});
+          page.on('pageerror',e=>results.pageErrors.push(String(e)));
+          page.on('requestfailed',r=>results.networkFailures.push({url:r.url(),error:r.failure()?.errorText||'failed'}));
+
+          try {
+            const response=await page.goto(rootUrl.toString(),{waitUntil:'domcontentloaded',timeout:60000});
+            add('Preview HTTP 200',response?.status()===200,{status:response?.status()??null});
+            await page.waitForTimeout(8000);
+            await page.screenshot({path:path.join(outDir,'screenshots','01-desktop-full.png'),fullPage:true});
+
+            const root=page.locator('[data-sq-state-guard-root]');
+            add('Exactly one State Guard root exists',await root.count()===1,{count:await root.count()});
+
+            const merch=page.locator('[data-sq-state-guard-merch-feature]');
+            add('State Guard Themed Merchandise feature exists',await merch.count()===1,{count:await merch.count()});
+            const merchHref=await merch.locator('a').first().getAttribute('href').catch(()=>null);
+            add('Merchandise feature links to correct collection',merchHref==='/collections/state-guard-naval-militia-themed-merchandise',{href:merchHref});
+
+            const cards=page.locator('[data-sq-state-guard-root] .sg-entity');
+            const count=await cards.count();
+            add('Exactly 25 state/territory cards render',count===25,{count});
+
+            const visibleRefine=await page.locator('.sq-global-refine-sidebar,.sq-refine-v3-sidebar,.sq-refine-taxonomy,.facets-block-wrapper,.facets-container,.facets-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer').evaluateAll(els=>els.filter(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>1&&r.height>1}).length).catch(()=>0);
+            add('No Refine Products/filter sidebar visible on root',visibleRefine===0,{visibleRefine});
+
+            const merchBeforeGrid=await page.evaluate(()=>{
+              const m=document.querySelector('[data-sq-state-guard-merch-feature]');
+              const g=document.querySelector('[data-sq-state-guard-root] .sg-entity-grid');
+              return !!m&&!!g&&!!(m.compareDocumentPosition(g)&Node.DOCUMENT_POSITION_FOLLOWING);
+            });
+            add('Merchandise feature appears above state grid',merchBeforeGrid);
+
+            const seenLabels=[]; const seenHrefs=[];
+            for(let i=0;i<count;i++){
+              const card=cards.nth(i);
+              const label=((await card.locator('.sg-entity__name').textContent().catch(()=>''))||'').trim();
+              const href=await card.getAttribute('href');
+              const img=card.locator('img.sg-entity__seal');
+              const image=await img.evaluate(el=>({src:el.currentSrc||el.src,naturalWidth:el.naturalWidth,naturalHeight:el.naturalHeight,complete:el.complete})).catch(()=>({src:null,naturalWidth:0,naturalHeight:0,complete:false}));
+              const exp=expected[i];
+              const normalizedHref=href?new URL(href,base).pathname:null;
+              const rec={index:i+1,label,href,normalizedHref,image,expectedLabel:exp?.[0],expectedPath:exp?.[1]};
+              results.cards.push(rec); seenLabels.push(label); seenHrefs.push(normalizedHref);
+              add(`Card ${i+1} label is correct`,label===exp?.[0],rec);
+              add(`Card ${i+1} href is correct`,normalizedHref===exp?.[1],rec);
+              add(`Card ${i+1} seal image renders`,image.complete&&image.naturalWidth>0&&image.naturalHeight>0,rec);
+            }
+            add('No duplicate card labels',new Set(seenLabels).size===25,{unique:new Set(seenLabels).size});
+            add('No duplicate card destinations',new Set(seenHrefs).size===25,{unique:new Set(seenHrefs).size});
+
+            const viewports=[
+              {w:1440,h:1100,cols:4,name:'desktop'},
+              {w:1000,h:1000,cols:4,name:'desktop-1000'},
+              {w:900,h:1000,cols:3,name:'tablet-900'},
+              {w:760,h:1000,cols:2,name:'tablet-760'},
+              {w:430,h:900,cols:1,name:'mobile-430'},
+              {w:390,h:900,cols:1,name:'mobile-390'}
+            ];
+            for(const vp of viewports){
+              await page.setViewportSize({width:vp.w,height:vp.h});
+              await page.waitForTimeout(500);
+              const metric=await page.evaluate(()=>{
+                const grid=document.querySelector('[data-sq-state-guard-root] .sg-entity-grid');
+                const style=grid?getComputedStyle(grid):null;
+                const cols=style?style.gridTemplateColumns.split(' ').filter(Boolean).length:0;
+                return {cols,gridTemplateColumns:style?.gridTemplateColumns||null,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth};
+              });
+              add(`${vp.name} uses ${vp.cols} State Guard columns`,metric.cols===vp.cols,metric);
+              add(`${vp.name} has no horizontal overflow`,metric.scrollWidth<=metric.clientWidth+1,metric);
+              await page.screenshot({path:path.join(outDir,'screenshots',`viewport-${vp.w}.png`),fullPage:true});
+            }
+
+            // Recorded click-path verification: click every approved card and verify destination.
+            await page.setViewportSize({width:1440,height:1100});
+            for(let i=0;i<expected.length;i++){
+              await page.goto(rootUrl.toString(),{waitUntil:'domcontentloaded',timeout:60000});
+              await page.waitForTimeout(900);
+              const card=page.locator('[data-sq-state-guard-root] .sg-entity').nth(i);
+              await card.scrollIntoViewIfNeeded();
+              await page.waitForTimeout(150);
+              await card.click({timeout:10000});
+              await page.waitForLoadState('domcontentloaded',{timeout:30000}).catch(()=>{});
+              const actual=new URL(page.url()).pathname;
+              add(`Recorded click ${i+1} reaches correct destination`,actual===expected[i][1],{label:expected[i][0],expected:expected[i][1],actual,url:page.url()});
+            }
+
+            // Delayed overwrite check.
+            await page.goto(rootUrl.toString(),{waitUntil:'domcontentloaded',timeout:60000});
+            await page.setViewportSize({width:1440,height:1100});
+            await page.waitForTimeout(12000);
+            const delayed=await page.evaluate(()=>{
+              const grid=document.querySelector('[data-sq-state-guard-root] .sg-entity-grid');
+              const cards=[...document.querySelectorAll('[data-sq-state-guard-root] .sg-entity')];
+              const visibleRefine=[...document.querySelectorAll('.sq-global-refine-sidebar,.sq-refine-v3-sidebar,.sq-refine-taxonomy,.facets-block-wrapper,.facets-container,.facets-wrapper,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>1&&r.height>1}).length;
+              return {cards:cards.length,cols:grid?getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length:0,visibleRefine};
+            });
+            add('12-second delayed render remains 25 cards / 4 columns / no refine',delayed.cards===25&&delayed.cols===4&&delayed.visibleRefine===0,delayed);
+            await page.screenshot({path:path.join(outDir,'screenshots','99-delayed-final.png'),fullPage:true});
+
+          } catch(err){
+            results.fatal=String(err?.stack||err);
+            add('Audit completed without fatal exception',false,{error:results.fatal});
+          }
+
+          await context.tracing.stop({path:path.join(outDir,'traces','state-guard-root-trace.zip')});
+          const video=page.video();
+          await page.close();
+          if(video){try{results.metadata.videoPath=await video.path()}catch{}}
+          await context.close();
+          await browser.close();
+
+          results.summary={passed:results.checks.filter(x=>x.pass).length,failed:results.checks.filter(x=>!x.pass).length,total:results.checks.length};
+          fs.writeFileSync(path.join(outDir,'results.json'),JSON.stringify(results,null,2));
+          const md=[
+            '# State Guard Root Chromium Playwright Recorded Audit','',
+            `Generated: ${results.generatedAt}`,
+            `Preview: ${results.previewUrl}`,'',
+            `## Result: ${results.summary.failed===0?'PASS':'FAIL'}`,
+            `Passed: ${results.summary.passed} / ${results.summary.total}`,
+            `Failed: ${results.summary.failed}`,'',
+            '## Checks',...results.checks.map(x=>`- ${x.pass?'PASS':'FAIL'} — ${x.name}${Object.keys(x).length>2?` — ${JSON.stringify(Object.fromEntries(Object.entries(x).filter(([k])=>!['name','pass'].includes(k))))}`:''}`),'',
+            `Console errors: ${results.consoleErrors.length}`,
+            `Page errors: ${results.pageErrors.length}`,
+            `Network failures: ${results.networkFailures.length}`,'',
+            'See results.json, screenshots/, videos/, and traces/ for the complete receipts.'
+          ].join('\n');
+          fs.writeFileSync(path.join(outDir,'AUDIT.md'),md);
+          console.log(md);
+          if(results.summary.failed>0) process.exitCode=2;
+          EOF
+          node state-guard-root-audit.mjs
+
+      - name: Upload recorded audit receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-guard-root-recorded-audit-${{ github.run_id }}
+          path: audit
+          retention-days: 14
