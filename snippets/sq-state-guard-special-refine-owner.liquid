@@ -1,145 +1,174 @@
-{% if request.page_type == 'collection' %}
-{% if collection.handle contains 'state-guard-series-' or collection.handle == 'new-jersey-state-guard-naval-militia' %}
-{% if collection.handle == 'state-guard-series-ohio' %}
+{% if request.page_type == 'collection' and collection.handle == 'state-guard-series-ohio' %}
 <style data-sq-ohio-full-refine-owner>
-#MainContent.sq-ohio-taxonomy-active collection-component,#MainContent.sq-ohio-taxonomy-active .product-grid,#MainContent.sq-ohio-taxonomy-active #product-grid,#MainContent.sq-ohio-taxonomy-active ul.product-grid[data-testid="product-grid"]{display:none!important}
-#MainContent .sq-global-refine-sidebar[data-sq-ohio-refine="true"]{min-width:0;border:1px solid #dfe4e7;border-radius:10px;background:#fff;padding:14px;color:#071d2d}
+#MainContent.sq-ohio-taxonomy-active collection-component .product-grid,
+#MainContent.sq-ohio-taxonomy-active collection-component #product-grid,
+#MainContent.sq-ohio-taxonomy-active collection-component ul.product-grid[data-testid="product-grid"]{display:none!important}
+#MainContent .sq-global-refine-sidebar[data-sq-ohio-refine="true"]{min-width:0;border:1px solid #dfe4e7;border-radius:10px;background:#fff;padding:14px;color:#071d2d;box-sizing:border-box}
 #MainContent .sq-global-refine-sidebar[data-sq-ohio-refine="true"] .sq-global-refine-sidebar__title{margin:0 0 8px;font-size:1.15rem;font-weight:900}
 #MainContent .sq-ohio-refine-group{border-top:1px solid #dfe4e7;padding:0;margin:0}
 #MainContent .sq-ohio-refine-group>summary{position:relative;cursor:pointer;list-style:none;padding:13px 34px 13px 2px;font-weight:900;line-height:1.25}
 #MainContent .sq-ohio-refine-group>summary::-webkit-details-marker{display:none}
-#MainContent .sq-ohio-refine-group>summary::marker{content:''}
-#MainContent .sq-ohio-refine-group>summary::after{content:'+';position:absolute;right:4px;top:50%;transform:translateY(-50%);width:24px;height:24px;display:grid;place-items:center;font-size:21px;font-weight:900;line-height:1}
-#MainContent .sq-ohio-refine-group[open]>summary::after{content:'\2212'}
+#MainContent .sq-ohio-refine-group>summary::after{content:'+';position:absolute;right:4px;top:50%;transform:translateY(-50%);width:24px;height:24px;display:grid;place-items:center;font-size:21px;font-weight:900}
+#MainContent .sq-ohio-refine-group[open]>summary::after{content:'−'}
 #MainContent .sq-ohio-refine-list{display:grid;gap:6px;padding:0 0 12px}
 #MainContent .sq-ohio-refine-choice{display:flex!important;align-items:center!important;gap:9px!important;min-height:38px!important;padding:7px 8px!important;border:1px solid #e0e5e8!important;border-radius:7px!important;background:#f8f9f8!important;color:#071d2d!important;font-size:12px!important;font-weight:800!important;line-height:1.2!important;cursor:default!important}
-#MainContent .sq-ohio-refine-choice:hover{border-color:#a91827!important;background:#fff!important}
 #MainContent .sq-ohio-refine-choice input{appearance:none!important;-webkit-appearance:none!important;width:18px!important;height:18px!important;min-width:18px!important;margin:0!important;border:2px solid #7b8790!important;border-radius:3px!important;background:#fff!important;display:grid!important;place-items:center!important;cursor:pointer!important}
 #MainContent .sq-ohio-refine-choice input:checked{border-color:#a91827!important;background:#a91827!important}
-#MainContent .sq-ohio-refine-choice input:checked::after{content:'\2713'!important;color:#fff!important;font-size:13px!important;font-weight:900!important;line-height:1!important}
-#MainContent .sq-ohio-refine-choice input:focus-visible,#MainContent .sq-ohio-refine-group>summary:focus-visible{outline:3px solid #d5ab4b!important;outline-offset:2px!important}
+#MainContent .sq-ohio-refine-choice input:checked::after{content:'✓'!important;color:#fff!important;font-size:13px!important;font-weight:900!important;line-height:1!important}
 #MainContent .sq-ohio-refine-choice>span{min-width:0!important;flex:1 1 auto!important;cursor:default!important;pointer-events:none!important}
 #MainContent .sq-ohio-refine-choice>small{flex:0 0 auto!important;color:#66737b!important;font-size:10px!important;font-weight:800!important;cursor:default!important;pointer-events:none!important}
 #MainContent .sq-ohio-refine-choice[data-active="true"]{border-color:#a91827!important;box-shadow:inset 3px 0 0 #a91827!important;background:#fff!important}
-#MainContent [data-sq-ohio-taxonomy-products]{display:block;width:100%;min-width:0;padding:0 20px 48px;background:#f4f5f3;color:#071d2d;box-sizing:border-box}
-#MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-products__wrap{max-width:1280px;margin:0 auto}
+#MainContent [data-sq-ohio-taxonomy-products]{display:block!important;width:100%!important;min-width:0!important;padding:0 0 48px!important;color:#071d2d;box-sizing:border-box}
 #MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-products__head{margin:0 0 18px}
-#MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-products__head h2{margin:0 0 6px;font-size:clamp(28px,4vw,44px)}
+#MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-products__head h2{margin:0 0 6px;font-size:clamp(26px,3vw,38px)}
 #MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-products__grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
 #MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-product{display:flex;flex-direction:column;overflow:hidden;border:1px solid #d4dadd;border-radius:12px;background:#fff;color:#071d2d;text-decoration:none}
 #MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-product__media{display:grid;place-items:center;aspect-ratio:1/1;background:#fff;overflow:hidden}
 #MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-product__media img{width:100%;height:100%;object-fit:contain;padding:10px;box-sizing:border-box}
 #MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-product__copy{padding:12px 14px 16px}
 #MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-product__vendor{display:block;margin-top:5px;font-size:.82rem;opacity:.7}
+#MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-empty{padding:28px;border:1px solid #d4dadd;border-radius:10px;background:#fff;font-weight:800}
 @media(min-width:901px){#MainContent .sq-global-refine-sidebar[data-sq-ohio-refine="true"]{position:sticky;top:18px;max-height:calc(100vh - 36px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable;padding-bottom:28px}}
+@media(max-width:1180px){#MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-products__grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:900px){#MainContent .sq-global-refine-sidebar[data-sq-ohio-refine="true"]{position:static;max-height:none;overflow:visible;margin-bottom:16px}#MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-products__grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:520px){#MainContent [data-sq-ohio-taxonomy-products]{padding-inline:12px}#MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-products__grid{grid-template-columns:1fr}}
+@media(max-width:520px){#MainContent [data-sq-ohio-taxonomy-products] .sq-ohio-products__grid{grid-template-columns:1fr}}
 </style>
 <script data-sq-state-guard-special-refine-owner data-ohio-full-refine-owner>
 (function(){
-  document.documentElement.dataset.sqStateGuardRefineOwner='global-ohio-full';
-  if(window.__sqOhioFullRefineV1)return;window.__sqOhioFullRefineV1=true;
-  var main=document.getElementById('MainContent');if(!main)return;
-  var products=[],hydrated=false,building=false;
-  var CATEGORY_ORDER=['Uniforms','Insignia','Headwear','Patches','Footwear','Apparel','Equipment & Field Gear','Insignia & Identification','Tactical Gear & Body Armor'];
+  if(window.__sqOhioStableRefineV2)return;
+  window.__sqOhioStableRefineV2=true;
+  var main=document.getElementById('MainContent');
+  if(!main)return;
+  document.documentElement.dataset.sqStateGuardRefineOwner='global-ohio-stable-v2';
+
   var PARAMS={category:'sq_oh_category',subcategory:'sq_oh_subcategory',type:'sq_oh_type',maker:'sq_oh_maker',color:'sq_oh_color_pattern',availability:'sq_oh_availability'};
-  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim()}
-  function norm(v){return clean(v).toLowerCase().replace(/[\u2019']/g,'').replace(/&/g,' and ').replace(/[_-]+/g,' ').replace(/[^a-z0-9]+/g,' ').trim()}
-  function esc(v){return clean(v).replace(/[&<>"']/g,function(k){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[k]})}
-  function tags(p){return Array.isArray(p&&p.tags)?p.tags:[]}
-  function text(p){return norm([p&&p.title,p&&p.product_type,tags(p).join(' ')].join(' '))}
-  function hidden(p){var t=norm(p&&p.product_type);return !p||!p.handle||t==='options hidden product'}
-  function inStock(p){var vs=Array.isArray(p&&p.variants)?p.variants:[];return !vs.length||vs.some(function(v){return v&&v.available===true})}
-  function image(p){var x=p&&(p.featured_image||p.image||(p.images&&p.images[0]));if(typeof x==='string')return x;return clean(x&&(x.src||x.url))}
-  function productHref(p){var u=new URL('/products/'+encodeURIComponent(clean(p.handle)),location.origin),pv=new URL(location.href).searchParams.get('preview_theme_id');if(pv)u.searchParams.set('preview_theme_id',pv);return u.pathname+(u.search?'?'+u.searchParams.toString():'')}
-  function primaryCategory(p){var s=text(p);if(/\b(flag|patch|patches|tab|tabs|scroll|scrolls)\b/.test(s))return'Patches';if(/\b(rank|insignia|nametape|name tape|nameplate|name plate|badge|dog tag|shoulder board|identification|pin back|unit crest|branch insignia|cap device|ribbon|medal|award|decoration)\b/.test(s))return'Insignia';if(/\b(patrol cap|service cap|garrison cap|cover|beret|beanie|boonie|headwear|watch cap|hat|balaclava|neck gaiter|gaiter)\b/.test(s))return'Headwear';if(/\b(boot|boots|sock|socks|belt|blouser|blousing|glove|gloves|dress shoe|uniform shoe)\b/.test(s))return'Footwear';if(/\b(pt|physical training|combat uniform|field uniform|uniform coat|uniform pants|uniform trouser|service uniform|dress uniform|asu|agsu|ocp|acu|ihwcu|undershirt|outerwear|parka|fleece jacket|windbreaker|scrub top|scrub pants|scrubs)\b/.test(s)||s.indexOf('sq verified uniforms')!==-1)return'Uniforms';if(/\b(t-shirt|t shirt|tee|polo|hoodie|sweatshirt|apparel|merchandise)\b/.test(s))return'Apparel';return'Equipment & Field Gear'}
-  function tactical(p){var s=text(p);return /\b(body armor|body armour|ballistic|plate carrier|armor carrier|armour carrier|chest rig|load carriage|molle|tactical vest|tactical belt|battle belt|helmet|armor plate|armour plate|plate bag|pouch|pack|hydration|field gear|tactical gear|ifak|tourniquet|flashlight|weapon light)\b/.test(s)}
-  function insigniaIdentification(p){var s=text(p);return /\b(rank|insignia|nametape|name tape|nameplate|name plate|badge|dog tag|identification|pin back|unit crest|branch insignia|cap device|ribbon|medal|award|decoration|shoulder board|shoulder mark)\b/.test(s)}
-  function matchesCategory(p,label){if(label==='Insignia & Identification')return insigniaIdentification(p);if(label==='Tactical Gear & Body Armor')return tactical(p);return primaryCategory(p)===label}
-  function subcategoryFor(p,category){var s=text(p),c=category||primaryCategory(p);if(c==='Uniforms'){if(/\b(pt|physical training)\b/.test(s))return'PT Uniform';if(/\b(ocp|acu|ihwcu|combat uniform|field uniform)\b/.test(s))return'OCP / Field Uniform';if(/\b(asu|agsu|service uniform|dress uniform|dress shirt|service shirt)\b/.test(s))return'Service / Dress Uniform';if(/\b(scrub top|scrub pants|scrubs)\b/.test(s))return'Medical / Utility Uniforms';if(/\b(cold weather|fleece|parka|outerwear|windbreaker|all weather|jacket)\b/.test(s))return'Cold Weather & Outerwear';if(/undershirt|under shirt/.test(s))return'Undershirts';return'Uniform Components'}
-    if(c==='Insignia'||c==='Insignia & Identification'){if(/\brank\b|chevron|grade insignia/.test(s))return'Rank';if(/name ?tape/.test(s))return'Name Tapes';if(/name ?plate|name badge/.test(s))return'Name Plates';if(/dog tag|identification/.test(s))return'Identification & Dog Tags';if(/ribbon|medal|award|decoration/.test(s))return'Ribbons & Awards';if(/badge|device|pin back|cap device/.test(s))return'Badges & Devices';return'Unit / Branch Insignia'}
-    if(c==='Headwear'){if(/patrol cap/.test(s))return'Patrol Caps';if(/service cap|garrison cap|beret/.test(s))return'Service / Dress Headwear';if(/beanie|watch cap|cold weather|balaclava|gaiter/.test(s))return'Cold Weather Headwear';if(/boonie/.test(s))return'Boonie Hats';return'Other Headwear'}
-    if(c==='Patches'){if(/\bflag\b/.test(s))return'State & U.S. Flags';if(/tab|scroll/.test(s))return'Tabs & Scrolls';if(/patch|unit|shoulder/.test(s))return'Unit & Shoulder Patches';return'Other Patches'}
-    if(c==='Footwear'){if(/boot/.test(s))return'Boots';if(/dress shoe|uniform shoe/.test(s))return'Dress Shoes';if(/sock/.test(s))return'Socks';if(/belt|blouser|blousing/.test(s))return'Belts & Blousing';if(/glove/.test(s))return'Gloves';return'Uniform Accessories'}
-    if(c==='Apparel'){if(/polo/.test(s))return'Polos';if(/hoodie|sweatshirt/.test(s))return'Hoodies & Sweatshirts';if(/t-shirt|t shirt|tee|shirt/.test(s))return'T-Shirts & Casual Shirts';return'Other Merchandise'}
-    if(c==='Tactical Gear & Body Armor'){if(/body armor|body armour|armor plate|armour plate|ballistic plate/.test(s))return'Body Armor';if(/plate carrier|armor carrier|armour carrier|tactical vest/.test(s))return'Plate Carriers & Vests';if(/chest rig|load carriage/.test(s))return'Chest Rigs & Load Carriage';if(/helmet/.test(s))return'Helmets';if(/battle belt|tactical belt|duty belt/.test(s))return'Tactical Belts & Platforms';if(/pack|pouch|molle/.test(s))return'Tactical Packs & Pouches';if(/medical|ifak|tourniquet/.test(s))return'Medical & IFAK';if(/flashlight|weapon light|lighting/.test(s))return'Tactical Lighting';return'Other Tactical Gear'}
-    if(/medical|ifak|tourniquet/.test(s))return'Medical & IFAK';if(/pack|pouch/.test(s))return'Packs & Pouches';if(/watch|wristwatch|g-shock|g shock/.test(s))return'Watches & Timepieces';if(/flashlight|lighting|lantern|headlamp/.test(s))return'Flashlights & Lighting';if(/field|tactical|carrier|canteen|hydration|molle/.test(s))return'Field & Tactical Gear';return'Other Equipment'}
-  function allSubcategories(p,cats){var out=[];if(cats&&cats.length){cats.forEach(function(c){if(matchesCategory(p,c)){var x=subcategoryFor(p,c);if(x&&!out.some(function(y){return norm(y)===norm(x)}))out.push(x)}})}else{var x=subcategoryFor(p,primaryCategory(p));if(x)out.push(x);if(insigniaIdentification(p)){var y=subcategoryFor(p,'Insignia & Identification');if(y&&!out.some(function(z){return norm(z)===norm(y)}))out.push(y)}if(tactical(p)){var q=subcategoryFor(p,'Tactical Gear & Body Armor');if(q&&!out.some(function(z){return norm(z)===norm(q)}))out.push(q)}}return out}
-  function appearanceValues(p){var out=[],seen={};function add(v){v=clean(v);var k=norm(v);if(!v||!k||seen[k]||k==='default title'||/^(xs|s|m|l|xl|xxl|2xl|3xl|4xl|5xl|6xl|small|medium|large|one size|standard)$/.test(k))return;var ok=/(black|white|grey|gray|charcoal|red|blue|navy|green|olive|foliage|coyote|tan|khaki|brown|sand|gold|silver|orange|yellow|pink|purple|maroon|burgundy|teal|aqua|multicam|ocp|scorpion|woodland|m81|marpat|nwu|flecktarn|tropentarn|strichtarn|mtp|ucp|acu|cce|kryptek|a tacs|tiger stripe|lizard|camo|camouflage|pattern|beige)/.test(k);if(!ok)return;seen[k]=1;out.push(v)}tags(p).forEach(function(t){var raw=clean(t),m=raw.match(/^(?:sq\s+)?(?:color\s*\/\s*pattern|color|colour|pattern|camo|camouflage)\s*:\s*(.+)$/i);if(m)add(m[1]);else add(raw)});var opts=Array.isArray(p&&p.options)?p.options:[],vs=Array.isArray(p&&p.variants)?p.variants:[];opts.forEach(function(o,i){var name=clean(typeof o==='string'?o:(o&&o.name)||'');if(!/color|colour|pattern|camo|camouflage/i.test(name))return;vs.forEach(function(v){add(v&&v['option'+(i+1)])})});return out}
-  function listParam(name){var q=new URLSearchParams(location.search),out=[];q.getAll(name).forEach(function(v){v=clean(v);if(v&&!out.some(function(x){return norm(x)===norm(v)}))out.push(v)});return out}
-  function state(){return{category:listParam(PARAMS.category),subcategory:listParam(PARAMS.subcategory),type:listParam(PARAMS.type),maker:listParam(PARAMS.maker),color:listParam(PARAMS.color),availability:listParam(PARAMS.availability)}}
-  function anyState(st){return Object.keys(st).some(function(k){return st[k]&&st[k].length})}
-  function anyNorm(list,value){var nv=norm(value);return (list||[]).some(function(x){return norm(x)===nv})}
-  function matches(p,st,skip){if(hidden(p))return false;if(skip!=='category'&&st.category.length&&!st.category.some(function(c){return matchesCategory(p,c)}))return false;if(skip!=='subcategory'&&st.subcategory.length&&!allSubcategories(p,st.category).some(function(x){return anyNorm(st.subcategory,x)}))return false;if(skip!=='type'&&st.type.length&&!anyNorm(st.type,clean(p.product_type)||'Other'))return false;if(skip!=='maker'&&st.maker.length&&!anyNorm(st.maker,clean(p.vendor)||'Unknown'))return false;if(skip!=='color'&&st.color.length&&!appearanceValues(p).some(function(x){return anyNorm(st.color,x)}))return false;if(skip!=='availability'&&st.availability.length){var a=inStock(p)?'In stock':'Out of stock';if(!anyNorm(st.availability,a))return false}return true}
-  function countWhere(fn){var n=0;products.forEach(function(p){if(fn(p))n++});return n}
-  function sortedMap(map){return Object.keys(map).map(function(k){return map[k]}).sort(function(a,b){return a.label.localeCompare(b.label,undefined,{numeric:true,sensitivity:'base'})})}
-  function rowsFor(group,st){var rows=[],map={};if(group==='category'){CATEGORY_ORDER.forEach(function(label){rows.push({label:label,count:countWhere(function(p){return matchesCategory(p,label)&&matches(p,st,'category')})})});return rows}
-    products.forEach(function(p){if(!matches(p,st,group))return;var vals=[];if(group==='subcategory')vals=allSubcategories(p,st.category);else if(group==='type')vals=[clean(p.product_type)||'Other'];else if(group==='maker')vals=[clean(p.vendor)||'Unknown'];else if(group==='color')vals=appearanceValues(p);else if(group==='availability')vals=[inStock(p)?'In stock':'Out of stock'];vals.forEach(function(v){v=clean(v);var k=norm(v);if(!k)return;if(!map[k])map[k]={label:v,count:0};map[k].count++})});rows=sortedMap(map);if(group==='availability'){var order=['In stock','Out of stock'];rows.sort(function(a,b){return order.indexOf(a.label)-order.indexOf(b.label)})}return rows}
-  function choice(group,row,st){var active=anyNorm(st[group],row.label);return '<div class="sq-ohio-refine-choice" data-active="'+(active?'true':'false')+'"><input type="checkbox" data-sq-ohio-group="'+esc(group)+'" value="'+esc(row.label)+'" aria-label="'+esc(row.label)+'"'+(active?' checked':'')+'><span>'+esc(row.label)+'</span><small>'+row.count+' '+(row.count===1?'item':'items')+'</small></div>'}
-  function groupHtml(title,group,rows,st,open){if(!rows.length)return'';return '<details class="sq-ohio-refine-group"'+(open?' open':'')+'><summary>'+esc(title)+'</summary><div class="sq-ohio-refine-list">'+rows.map(function(r){return choice(group,r,st)}).join('')+'</div></details>'}
-  function sidebar(){var sides=[].slice.call(main.querySelectorAll('.sq-global-refine-sidebar'));if(!sides.length)return null;sides.sort(function(a,b){var av=getComputedStyle(a),bv=getComputedStyle(b),as=(av.display!=='none'&&av.visibility!=='hidden')?1:0,bs=(bv.display!=='none'&&bv.visibility!=='hidden')?1:0;return bs-as});var keep=sides[0];sides.slice(1).forEach(function(s){s.remove()});return keep}
-  function writeParam(group,value,on){var key=PARAMS[group],u=new URL(location.href),vals=[];u.searchParams.getAll(key).forEach(function(v){v=clean(v);if(v&&!vals.some(function(x){return norm(x)===norm(v)}))vals.push(v)});if(on&&!vals.some(function(x){return norm(x)===norm(value)}))vals.push(value);if(!on)vals=vals.filter(function(x){return norm(x)!==norm(value)});u.searchParams.delete(key);vals.forEach(function(v){u.searchParams.append(key,v)});u.searchParams.delete('page');history.pushState({sqOhioRefine:true},'',u.pathname+(u.search?'?'+u.searchParams.toString():''));renderAll()}
-  function bindSidebar(side){if(side.dataset.sqOhioBound==='true')return;side.dataset.sqOhioBound='true';side.addEventListener('change',function(ev){var input=ev.target&&ev.target.closest&&ev.target.closest('input[data-sq-ohio-group]');if(!input||!side.contains(input))return;ev.stopPropagation();writeParam(input.dataset.sqOhioGroup,input.value,input.checked)})}
-  function renderSidebar(){if(!hydrated||building)return false;var side=sidebar();if(!side)return false;building=true;try{var st=state();side.dataset.sqOhioRefine='true';side.removeAttribute('hidden');side.removeAttribute('aria-hidden');side.style.removeProperty('display');side.style.removeProperty('visibility');bindSidebar(side);var html='<h2 class="sq-global-refine-sidebar__title" tabindex="0">Refine Products</h2>';html+=groupHtml('Shop by Category','category',rowsFor('category',st),st,true);html+=groupHtml('Shop by Subcategory','subcategory',rowsFor('subcategory',st),st,false);html+=groupHtml('Shop by Type','type',rowsFor('type',st),st,false);html+=groupHtml('Shop by Manufacturers','maker',rowsFor('maker',st),st,false);html+=groupHtml('Shop by Color / Pattern','color',rowsFor('color',st),st,false);html+=groupHtml('Availability','availability',rowsFor('availability',st),st,false);side.innerHTML=html;return true}finally{building=false}}
-  function removeProducts(){var old=main.querySelector('[data-sq-ohio-taxonomy-products]');if(old)old.remove();main.classList.remove('sq-ohio-taxonomy-active')}
-  function summaryLabel(st){var a=[];if(st.category.length)a.push(st.category.join(', '));if(st.subcategory.length)a.push(st.subcategory.join(', '));if(st.type.length)a.push(st.type.join(', '));if(st.maker.length)a.push(st.maker.join(', '));if(st.color.length)a.push(st.color.join(', '));if(st.availability.length)a.push(st.availability.join(', '));return a.length?a.join(' / '):'Ohio State Guard Products'}
-  function renderProducts(){if(!hydrated)return;var st=state();if(!anyState(st)){removeProducts();return}var out=products.filter(function(p){return matches(p,st,'')});removeProducts();var s=document.createElement('section');s.dataset.sqOhioTaxonomyProducts='true';s.className='sq-ohio-products';var h='<div class="sq-ohio-products__wrap"><div class="sq-ohio-products__head"><h2>'+esc(summaryLabel(st))+'</h2><p>'+out.length+' '+(out.length===1?'product':'products')+'</p></div>';if(out.length){h+='<div class="sq-ohio-products__grid">';out.forEach(function(p){var src=image(p);h+='<a class="sq-ohio-product" href="'+esc(productHref(p))+'"><span class="sq-ohio-product__media">'+(src?'<img src="'+esc(src)+'" alt="'+esc(p.title)+'" loading="lazy" decoding="async">':'')+'</span><span class="sq-ohio-product__copy"><strong>'+esc(p.title)+'</strong>'+(p.vendor?'<span class="sq-ohio-product__vendor">'+esc(p.vendor)+'</span>':'')+'</span></a>'});h+='</div>'}else h+='<p>No products match the selected refinements.</p>';h+='</div>';s.innerHTML=h;var side=sidebar(),layout=side&&side.closest('.sq-global-refine-layout,.sq-state-guard-refine-layout');if(layout)layout.insertBefore(s,side.nextSibling);else main.appendChild(s);main.classList.add('sq-ohio-taxonomy-active')}
-  function renderAll(){renderSidebar();renderProducts()}
-  async function hydrate(){var out=[],seen={};for(var page=1;page<=8;page++){try{var r=await fetch('/collections/state-guard-series-ohio/products.json?limit=250&page='+page,{credentials:'same-origin'});if(!r.ok)break;var j=await r.json(),a=j&&Array.isArray(j.products)?j.products:[];a.forEach(function(p){if(hidden(p)||seen[p.handle])return;seen[p.handle]=1;out.push(p)});if(a.length<250)break}catch(_){break}}products=out;hydrated=true;var prior=window.__sqDirectFacetUniverse||{};window.__sqDirectFacetUniverse={products:out,maker:prior.maker||[],color:prior.color||[]};window.dispatchEvent(new CustomEvent('sq:refine-universe-ready',{detail:window.__sqDirectFacetUniverse}));renderAll();[100,300,700,1400,2600,5000].forEach(function(ms){setTimeout(renderAll,ms)})}
-  window.addEventListener('popstate',function(){setTimeout(renderAll,0)});
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',hydrate,{once:true});else hydrate();
-})();
-</script>
-{% else %}
-<style data-sq-state-guard-special-refine-owner>
-#MainContent .sq-global-refine-sidebar{display:none!important;visibility:hidden!important;pointer-events:none!important}
-</style>
-<script data-sq-state-guard-special-refine-owner>
-(function(){
-  if(window.__sqStateGuardSpecialRefineOwner)return;window.__sqStateGuardSpecialRefineOwner=true;
-  var main=document.getElementById('MainContent');if(!main)return;
-  var innerDesc=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML');
-  function stabilizeSpecializedSide(){
-    var side=main.querySelector('.sqsg-refine-sidebar');
-    if(!side||side.dataset.sqsgStableOwner==='true'||!innerDesc||!innerDesc.get||!innerDesc.set)return;
-    side.dataset.sqsgStableOwner='true';
-    side.__sqsgLastMarkup=innerDesc.get.call(side);
-    try{
-      Object.defineProperty(side,'innerHTML',{
-        configurable:true,
-        get:function(){return innerDesc.get.call(this)},
-        set:function(v){var next=String(v);if(this.__sqsgLastMarkup===next)return;innerDesc.set.call(this,next);this.__sqsgLastMarkup=next;}
-      });
-    }catch(_){return}
-    side.addEventListener('change',function(ev){
-      var input=ev.target&&ev.target.closest&&ev.target.closest('input[data-sqsg-refine-href]');
-      if(!input||!side.contains(input))return;
-      ev.stopImmediatePropagation();
-      ev.stopPropagation();
-      var href=input.dataset.sqsgRefineHref;
-      if(href)location.assign(href);
-    },true);
+  var CATEGORY_ORDER=['Uniforms','Insignia','Headwear','Patches','Footwear','Apparel','Equipment & Field Gear','Insignia & Identification','Tactical Gear & Body Armor'];
+  var products=[];
+
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim();}
+  function norm(v){return clean(v).toLowerCase().replace(/[’']/g,'').replace(/&/g,' and ').replace(/[_-]+/g,' ').replace(/[^a-z0-9]+/g,' ').trim();}
+  function tags(p){return Array.isArray(p&&p.tags)?p.tags:[];}
+  function text(p){return norm([p&&p.title,p&&p.product_type,p&&p.vendor,tags(p).join(' ')].join(' '));}
+  function hidden(p){return !p||!p.handle||norm(p.product_type)==='options hidden product';}
+  function inStock(p){var vs=Array.isArray(p&&p.variants)?p.variants:[];return !vs.length||vs.some(function(v){return v&&v.available===true;});}
+  function imageUrl(p){var x=p&&(p.featured_image||p.image||(p.images&&p.images[0]));if(typeof x==='string')return x;return clean(x&&(x.src||x.url));}
+  function productHref(p){var u=new URL('/products/'+encodeURIComponent(clean(p.handle)),location.origin);var pv=new URL(location.href).searchParams.get('preview_theme_id');if(pv)u.searchParams.set('preview_theme_id',pv);return u.pathname+(u.search?'?'+u.searchParams.toString():'');}
+
+  function primaryCategory(p){
+    var s=text(p);
+    if(/\b(flag|patch|patches|tab|tabs|scroll|scrolls)\b/.test(s))return 'Patches';
+    if(/\b(rank|insignia|nametape|name tape|nameplate|name plate|badge|dog tag|shoulder board|identification|unit crest|branch insignia|cap device|ribbon|medal|award|decoration)\b/.test(s))return 'Insignia';
+    if(/\b(patrol cap|service cap|garrison cap|cover|beret|beanie|boonie|headwear|watch cap|hat|balaclava|neck gaiter)\b/.test(s))return 'Headwear';
+    if(/\b(boot|boots|sock|socks|blouser|blousing|glove|gloves|dress shoe|uniform shoe)\b/.test(s))return 'Footwear';
+    if(/\b(pt|physical training|combat uniform|field uniform|uniform coat|uniform pants|uniform trouser|service uniform|dress uniform|asu|agsu|ocp|acu|ihwcu|undershirt|parka|fleece jacket|windbreaker|scrub top|scrub pants|scrubs)\b/.test(s))return 'Uniforms';
+    if(/\b(t-shirt|t shirt|tee|polo|hoodie|sweatshirt|apparel|merchandise)\b/.test(s))return 'Apparel';
+    return 'Equipment & Field Gear';
   }
-  function unwrapLegacyGlobal(){
-    var sides=[].slice.call(main.querySelectorAll('.sq-global-refine-sidebar'));
-    sides.forEach(function(side){
-      var layout=side.closest('.sq-global-refine-layout');
-      if(layout&&layout.parentNode){
-        var body=layout.querySelector(':scope > .sq-global-refine-main'),parent=layout.parentNode;
-        if(body){while(body.firstChild)parent.insertBefore(body.firstChild,layout)}
-        layout.remove();
-      }else side.remove();
+  function tactical(p){return /\b(body armor|body armour|ballistic|plate carrier|armor carrier|armour carrier|chest rig|load carriage|molle|tactical vest|tactical belt|battle belt|helmet|armor plate|armour plate|plate bag|pouch|pack|hydration|field gear|tactical gear|ifak|tourniquet|flashlight|weapon light)\b/.test(text(p));}
+  function identification(p){return /\b(rank|insignia|nametape|name tape|nameplate|name plate|badge|dog tag|identification|unit crest|branch insignia|cap device|ribbon|medal|award|decoration|shoulder board|shoulder mark)\b/.test(text(p));}
+  function matchesCategory(p,c){if(c==='Insignia & Identification')return identification(p);if(c==='Tactical Gear & Body Armor')return tactical(p);return primaryCategory(p)===c;}
+
+  function subcategory(p){
+    var s=text(p),c=primaryCategory(p);
+    if(c==='Uniforms'){if(/\b(pt|physical training)\b/.test(s))return 'PT Uniform';if(/\b(ocp|acu|ihwcu|combat uniform|field uniform)\b/.test(s))return 'OCP / Field Uniform';if(/\b(asu|agsu|service uniform|dress uniform)\b/.test(s))return 'Service / Dress Uniform';if(/\b(cold weather|fleece|parka|outerwear|windbreaker|jacket)\b/.test(s))return 'Cold Weather & Outerwear';return 'Uniform Components';}
+    if(c==='Insignia'){if(/\brank\b|chevron|grade insignia/.test(s))return 'Rank';if(/name ?tape/.test(s))return 'Name Tapes';if(/name ?plate|name badge/.test(s))return 'Name Plates';if(/dog tag|identification/.test(s))return 'Identification & Dog Tags';if(/ribbon|medal|award|decoration/.test(s))return 'Ribbons & Awards';return 'Badges & Devices';}
+    if(c==='Headwear'){if(/patrol cap/.test(s))return 'Patrol Caps';if(/service cap|garrison cap|beret/.test(s))return 'Service / Dress Headwear';if(/beanie|watch cap|cold weather|balaclava/.test(s))return 'Cold Weather Headwear';if(/boonie/.test(s))return 'Boonie Hats';return 'Other Headwear';}
+    if(c==='Patches'){if(/\bflag\b/.test(s))return 'State & U.S. Flags';if(/tab|scroll/.test(s))return 'Tabs & Scrolls';return 'Unit & Shoulder Patches';}
+    if(c==='Footwear'){if(/boot/.test(s))return 'Boots';if(/sock/.test(s))return 'Socks';if(/glove/.test(s))return 'Gloves';return 'Uniform Accessories';}
+    if(c==='Apparel'){if(/polo/.test(s))return 'Polos';if(/hoodie|sweatshirt/.test(s))return 'Hoodies & Sweatshirts';return 'T-Shirts & Casual Shirts';}
+    if(tactical(p)){if(/body armor|body armour|armor plate|armour plate|ballistic plate/.test(s))return 'Body Armor';if(/plate carrier|armor carrier|armour carrier|tactical vest/.test(s))return 'Plate Carriers & Vests';if(/chest rig|load carriage/.test(s))return 'Chest Rigs & Load Carriage';if(/helmet/.test(s))return 'Helmets';if(/pack|pouch|molle/.test(s))return 'Tactical Packs & Pouches';if(/medical|ifak|tourniquet/.test(s))return 'Medical & IFAK';if(/flashlight|weapon light/.test(s))return 'Tactical Lighting';return 'Other Tactical Gear';}
+    if(/watch|wristwatch|g-shock|g shock/.test(s))return 'Watches & Timepieces';if(/flashlight|lighting|lantern|headlamp/.test(s))return 'Flashlights & Lighting';if(/medical|ifak|tourniquet/.test(s))return 'Medical & IFAK';if(/pack|pouch/.test(s))return 'Packs & Pouches';return 'Other Equipment';
+  }
+
+  function colorValues(p){
+    var s=text(p),out=[];
+    function add(v){if(out.indexOf(v)===-1)out.push(v);}
+    if(/multicam|multi cam|\bocp\b/.test(s))add('Multicam / OCP');
+    if(/coyote|tan 499|coyote brown/.test(s))add('Coyote');
+    if(/ranger green|od green|olive drab|\bod\b/.test(s))add('OD Green / Ranger Green');
+    if(/\bblack\b/.test(s)&&!/black multicam|multicam black/.test(s))add('Black');
+    if(/navy blue|dark navy/.test(s))add('Navy Blue');
+    return out.length?out:['Other'];
+  }
+
+  function unique(values){var map={};values.forEach(function(v){v=clean(v);if(v)map[norm(v)]=v;});return Object.keys(map).map(function(k){return map[k];}).sort(function(a,b){return a.localeCompare(b);});}
+  function selected(key){return new URL(location.href).searchParams.getAll(PARAMS[key]);}
+  function anySelected(key,value){var n=norm(value);return selected(key).some(function(v){return norm(v)===n;});}
+
+  function matches(p){
+    var cats=selected('category'),subs=selected('subcategory'),types=selected('type'),makers=selected('maker'),colors=selected('color'),availability=selected('availability');
+    if(cats.length&&!cats.some(function(v){return matchesCategory(p,v);}))return false;
+    if(subs.length&&!subs.some(function(v){return norm(subcategory(p))===norm(v);}))return false;
+    if(types.length&&!types.some(function(v){return norm(p.product_type||'Other')===norm(v);}))return false;
+    if(makers.length&&!makers.some(function(v){return norm(p.vendor||'Unknown')===norm(v);}))return false;
+    if(colors.length&&!colors.some(function(v){return colorValues(p).some(function(c){return norm(c)===norm(v);});}))return false;
+    if(availability.length&&availability.some(function(v){return norm(v)==='in stock';})&&!inStock(p))return false;
+    return true;
+  }
+
+  function setParam(key,value,checked){
+    var u=new URL(location.href),name=PARAMS[key],vals=u.searchParams.getAll(name).filter(function(v){return norm(v)!==norm(value);});
+    u.searchParams.delete(name);vals.forEach(function(v){u.searchParams.append(name,v);});if(checked)u.searchParams.append(name,value);
+    if(key==='availability'){if(checked&&norm(value)==='in stock')u.searchParams.set('filter.v.availability','1');else u.searchParams.delete('filter.v.availability');}
+    history.replaceState(history.state,'',u.pathname+'?'+u.searchParams.toString()+u.hash);
+  }
+
+  function countFor(key,value){return products.filter(function(p){if(hidden(p))return false;if(key==='category')return matchesCategory(p,value);if(key==='subcategory')return norm(subcategory(p))===norm(value);if(key==='type')return norm(p.product_type||'Other')===norm(value);if(key==='maker')return norm(p.vendor||'Unknown')===norm(value);if(key==='color')return colorValues(p).some(function(c){return norm(c)===norm(value);});if(key==='availability')return inStock(p);return false;}).length;}
+
+  function addGroup(side,title,key,values,open){
+    var details=document.createElement('details');details.className='sq-ohio-refine-group';if(open)details.open=true;
+    var summary=document.createElement('summary');summary.textContent=title;details.appendChild(summary);
+    var list=document.createElement('div');list.className='sq-ohio-refine-list';
+    values.forEach(function(value){
+      var row=document.createElement('label');row.className='sq-ohio-refine-choice';row.dataset.active=anySelected(key,value)?'true':'false';
+      var input=document.createElement('input');input.type='checkbox';input.value=value;input.dataset.sqOhioGroup=key;input.checked=anySelected(key,value);input.setAttribute('aria-label',value);
+      var name=document.createElement('span');name.textContent=value;
+      var count=document.createElement('small');count.textContent=String(countFor(key,value));
+      input.addEventListener('change',function(){setParam(key,value,input.checked);render();});
+      row.appendChild(input);row.appendChild(name);row.appendChild(count);list.appendChild(row);
     });
-    stabilizeSpecializedSide();
-    document.documentElement.dataset.sqStateGuardRefineOwner='specialized';
+    details.appendChild(list);side.appendChild(details);
   }
-  var queued=false;
-  function queue(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;unwrapLegacyGlobal()})}
-  unwrapLegacyGlobal();
-  new MutationObserver(queue).observe(main,{childList:true,subtree:true});
-  [50,150,350,700,1400,2600,5000,8000].forEach(function(ms){setTimeout(unwrapLegacyGlobal,ms)});
+
+  function renderSidebar(){
+    var side=main.querySelector('[data-sq-ohio-refine-host]');if(!side)return;
+    side.dataset.sqOhioRefine='true';side.innerHTML='';
+    var title=document.createElement('h2');title.className='sq-global-refine-sidebar__title';title.textContent='Refine Products';side.appendChild(title);
+    var categories=CATEGORY_ORDER.filter(function(c){return countFor('category',c)>0;});
+    var subs=unique(products.filter(function(p){return !hidden(p);}).map(subcategory));
+    var types=unique(products.filter(function(p){return !hidden(p);}).map(function(p){return clean(p.product_type)||'Other';}));
+    var makers=unique(products.filter(function(p){return !hidden(p);}).map(function(p){return clean(p.vendor)||'Unknown';}));
+    var colors=unique([].concat.apply([],products.filter(function(p){return !hidden(p);}).map(colorValues)));
+    addGroup(side,'Shop by Category','category',categories,true);
+    addGroup(side,'Shop by Subcategory','subcategory',subs,false);
+    addGroup(side,'Shop by Type','type',types,false);
+    addGroup(side,'Shop by Manufacturers','maker',makers,false);
+    addGroup(side,'Shop by Color / Pattern','color',colors,false);
+    addGroup(side,'Availability','availability',['In stock'],true);
+  }
+
+  function renderProducts(){
+    var wrap=main.querySelector('collection-component .collection-wrapper');if(!wrap)return;
+    var panel=wrap.querySelector('[data-sq-ohio-taxonomy-products]');if(!panel){panel=document.createElement('section');panel.className='sq-ohio-products';panel.dataset.sqOhioTaxonomyProducts='true';wrap.appendChild(panel);}
+    panel.innerHTML='';
+    var shown=products.filter(function(p){return !hidden(p)&&matches(p);});
+    var head=document.createElement('div');head.className='sq-ohio-products__head';var h=document.createElement('h2');h.textContent='Ohio State Guard Products';var c=document.createElement('p');c.textContent=shown.length+' products';head.appendChild(h);head.appendChild(c);panel.appendChild(head);
+    if(!shown.length){var empty=document.createElement('div');empty.className='sq-ohio-empty';empty.textContent='No products match the selected refinements.';panel.appendChild(empty);return;}
+    var grid=document.createElement('div');grid.className='sq-ohio-products__grid';
+    shown.forEach(function(p){
+      var a=document.createElement('a');a.className='sq-ohio-product';a.href=productHref(p);
+      var media=document.createElement('div');media.className='sq-ohio-product__media';var src=imageUrl(p);if(src){var img=document.createElement('img');img.loading='lazy';img.src=src;img.alt=clean(p.title);media.appendChild(img);}
+      var copy=document.createElement('div');copy.className='sq-ohio-product__copy';var strong=document.createElement('strong');strong.textContent=clean(p.title);copy.appendChild(strong);if(clean(p.vendor)){var vendor=document.createElement('span');vendor.className='sq-ohio-product__vendor';vendor.textContent=clean(p.vendor);copy.appendChild(vendor);}
+      a.appendChild(media);a.appendChild(copy);grid.appendChild(a);
+    });panel.appendChild(grid);
+  }
+
+  function render(){renderSidebar();renderProducts();main.classList.add('sq-ohio-taxonomy-active');var side=main.querySelector('[data-sq-ohio-refine-host]');var wrap=main.querySelector('collection-component .collection-wrapper');if(side&&wrap&&side.parentNode!==wrap)wrap.insertBefore(side,wrap.firstChild);if(wrap)wrap.classList.add('sq-ohio-refine-layout');}
+
+  function fetchPage(page){return fetch('/collections/state-guard-series-ohio/products.json?limit=250&page='+page,{credentials:'same-origin'}).then(function(r){if(!r.ok)throw new Error('Ohio product fetch failed: '+r.status);return r.json();}).then(function(j){var batch=Array.isArray(j&&j.products)?j.products:[];products=products.concat(batch);if(batch.length===250&&page<20)return fetchPage(page+1);});}
+
+  var current=new URL(location.href);if(current.searchParams.get('filter.v.availability')==='1'&&!current.searchParams.has(PARAMS.availability)){current.searchParams.append(PARAMS.availability,'In stock');history.replaceState(history.state,'',current.pathname+'?'+current.searchParams.toString()+current.hash);}
+  fetchPage(1).then(render).catch(function(err){var side=main.querySelector('[data-sq-ohio-refine-host]');if(side){side.innerHTML='';var h=document.createElement('h2');h.className='sq-global-refine-sidebar__title';h.textContent='Refine Products';var p=document.createElement('p');p.textContent='Refinements could not load. Please refresh this page.';side.appendChild(h);side.appendChild(p);}console.error(err);});
 })();
 </script>
-{% endif %}
-{% endif %}
 {% endif %}
