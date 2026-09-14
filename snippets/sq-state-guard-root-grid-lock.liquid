@@ -17,6 +17,43 @@
 (function(){
   if(window.__sqStateGuardRootGridLock)return;window.__sqStateGuardRootGridLock=true;
   var main=document.getElementById('MainContent');if(!main)return;
+  var sealMap={
+    'state-guard-series-alabama':'https://upload.wikimedia.org/wikipedia/commons/f/f7/Seal_of_Alabama.svg',
+    'state-guard-series-alaska':'https://upload.wikimedia.org/wikipedia/commons/c/c1/Seal_of_the_State_of_Alaska.svg',
+    'state-guard-series-california':'https://upload.wikimedia.org/wikipedia/commons/0/0f/Seal_of_California.svg',
+    'state-guard-series-connecticut':'https://upload.wikimedia.org/wikipedia/commons/4/48/Seal_of_Connecticut.svg',
+    'state-guard-series-florida':'https://upload.wikimedia.org/wikipedia/commons/2/2b/Seal_of_Florida.svg',
+    'state-guard-series-georgia':'https://upload.wikimedia.org/wikipedia/commons/7/79/Seal_of_Georgia.svg',
+    'state-guard-series-indiana':'https://upload.wikimedia.org/wikipedia/commons/6/61/Seal_of_the_State_of_Indiana.svg',
+    'state-guard-series-louisiana':'https://upload.wikimedia.org/wikipedia/commons/2/2f/Seal_of_Louisiana.svg',
+    'state-guard-series-maryland':'https://upload.wikimedia.org/wikipedia/commons/0/00/Seal_of_Maryland_%28reverse%29.svg',
+    'state-guard-series-massachusetts':'https://upload.wikimedia.org/wikipedia/commons/8/82/Seal_of_Massachusetts.svg',
+    'state-guard-series-michigan':'https://upload.wikimedia.org/wikipedia/commons/3/3f/Seal_of_Michigan.svg',
+    'state-guard-series-mississippi':'https://upload.wikimedia.org/wikipedia/commons/e/e4/Seal_of_Mississippi.svg',
+    'state-guard-series-new-mexico':'https://upload.wikimedia.org/wikipedia/commons/9/92/Seal_of_New_Mexico.svg',
+    'new-jersey-state-guard-naval-militia':'https://upload.wikimedia.org/wikipedia/commons/8/8d/Seal_of_New_Jersey.svg',
+    'state-guard-series-new-york':'https://upload.wikimedia.org/wikipedia/commons/2/22/Seal_of_New_York_%28state%29.svg',
+    'state-guard-series-ohio':'https://upload.wikimedia.org/wikipedia/commons/f/f3/Seal_of_Ohio.svg',
+    'state-guard-series-oregon':'https://upload.wikimedia.org/wikipedia/commons/4/46/Seal_of_Oregon.svg',
+    'state-guard-series-puerto-rico':'https://upload.wikimedia.org/wikipedia/commons/6/6c/Seal_of_Puerto_Rico.svg',
+    'state-guard-series-rhode-island':'https://upload.wikimedia.org/wikipedia/commons/7/76/Seal_of_Rhode_Island.svg',
+    'state-guard-series-south-carolina':'https://upload.wikimedia.org/wikipedia/commons/8/80/Seal_of_South_Carolina.svg',
+    'state-guard-series-tennessee':'https://upload.wikimedia.org/wikipedia/commons/3/3c/Seal_of_Tennessee.svg',
+    'state-guard-series-texas':'https://upload.wikimedia.org/wikipedia/commons/c/cb/Seal_of_Texas.svg',
+    'state-guard-series-vermont':'https://upload.wikimedia.org/wikipedia/commons/0/08/State_Seal_of_Vermont.svg',
+    'state-guard-series-virginia':'https://upload.wikimedia.org/wikipedia/commons/6/6f/Seal_of_Virginia.svg',
+    'state-guard-series-washington':'https://upload.wikimedia.org/wikipedia/commons/3/3d/Seal_of_Washington.svg'
+  };
+  function fixSeals(){
+    var cards=[].slice.call(main.querySelectorAll('section.sg-series-page[data-sq-state-guard-root] [data-sg-handle]'));
+    cards.forEach(function(card){
+      var handle=card.getAttribute('data-sg-handle'),src=sealMap[handle],img=card.querySelector('img.sg-entity__seal');
+      if(!src||!img)return;
+      if(!img.dataset.sqOriginalSrc)img.dataset.sqOriginalSrc=img.getAttribute('src')||'';
+      if(img.getAttribute('src')!==src)img.setAttribute('src',src);
+      img.removeAttribute('data-alt-src');
+    });
+  }
   function apply(){
     var grids=[].slice.call(main.querySelectorAll('section.sg-series-page[data-sq-state-guard-root] > .sg-series-wrap > .sg-entity-grid'));
     grids.forEach(function(grid){
@@ -27,6 +64,7 @@
       grid.style.setProperty('grid-template-columns',cols,'important');
       grid.dataset.sqStateGuardGridColumns=w<=430?'1':(w<=760?'2':(w<=900?'3':'4'));
     });
+    fixSeals();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',apply,{once:true});else apply();
   window.addEventListener('resize',apply,{passive:true});
