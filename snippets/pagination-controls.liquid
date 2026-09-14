@@ -96,7 +96,7 @@
           </li>
         {% endfor %}
         <li class="pagination__item pagination__item--arrow">
-          {% if paginate.next %}<a href="{{ paginate.next.url }}" class="pagination__link pagination__link--arrow" aria-label="{{ 'content.pagination.next' | t }}">{{ 'icon-chevron-left.svg' | inline_asset_content }}</a>{% else %}<span class="pagination__link pagination__link--arrow pagination__link--disabled" aria-disabled="true">{{ 'icon-chevron-left.svg' | inline_asset_content }}</span>{% endif %}
+          {% if paginate.next %}<a href="{{ paginate.next.url }}" class="pagination__link pagination__link--arrow" aria-label="{{ 'content.pagination.next' | t }}">{{ 'icon-chevron-right.svg' | inline_asset_content }}</a>{% else %}<span class="pagination__link pagination__link--arrow pagination__link--disabled" aria-disabled="true">{{ 'icon-chevron-right.svg' | inline_asset_content }}</span>{% endif %}
         </li>
       </ul>
     </nav>
