@@ -1,0 +1,33 @@
+name: Case 0109 Fast API Probe
+on:
+  push:
+    branches: [case-0109-aerial-audit]
+    paths: ['.github/workflows/case-0109-api-fastprobe.yml']
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe 01-35 via collectionItems and edelivery
+        run: |
+          mkdir out
+          U='https://maine.primo.exlibrisgroup.com/primaws/rest/pub/collectionItems?limit=10&offset=0&q=any%2Ccontains%2C01-35_AK&lang=en&vid=01MAINE_INST:DigCol&isCDSearch=true&inst=01MAINE_INST&tab=DigCol'
+          curl -fsSL "$U" -o out/search.json
+          python3 - <<'PY'
+          import json,subprocess,urllib.parse
+          d=json.load(open('out/search.json'))
+          print('total',d.get('info',{}).get('total'),'docs',len(d.get('docs',[])))
+          for x in d.get('docs',[]):
+            print(json.dumps(x,indent=2)[:8000])
+            rid=x.get('pnx',{}).get('control',{}).get('recordid',[''])[0]
+            if rid:
+              u='https://maine.primo.exlibrisgroup.com/primaws/rest/pub/edelivery/'+rid+'?vid=01MAINE_INST:DigCol&googleScholar=false&lang=en'
+              subprocess.run(['curl','-fsSL',u,'-o','out/edelivery.json'],check=True)
+              e=json.load(open('out/edelivery.json'))
+              print('EDELIVERY',json.dumps(e,indent=2)[:30000])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: case-0109-fastprobe
+          path: out/**
+          retention-days: 30
