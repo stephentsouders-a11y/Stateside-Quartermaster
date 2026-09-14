@@ -28,11 +28,13 @@ jobs:
           const frame=process.env.FRAME;
           const root='https://maine.primo.exlibrisgroup.com/nde/collectionDiscovery?collectionId=81521275480008681&vid=01MAINE_INST:DigCol&lang=en';
           const browser=await chromium.launch({headless:true}); const ctx=await browser.newContext({viewport:{width:1400,height:1000}}); const page=await ctx.newPage();
-          let infoUrl=null; page.on('response',r=>{const u=r.url(); if(!infoUrl&&u.includes('na-img02.ext.exlibrisgroup.com/iiif/2/')&&u.endsWith('/info.json')) infoUrl=u;});
+          let infoUrl=null; page.on('response',r=>{const u=r.url(); if(!infoUrl&&u.includes('/iiif/2/')&&u.includes('/info.json')) infoUrl=u.split('?')[0];});
           await page.goto(root,{waitUntil:'domcontentloaded',timeout:60000}); await page.waitForTimeout(5000);
           const inp=page.locator('input[aria-label="Search inside the collection"]'); await inp.fill(frame); await inp.press('Enter'); await page.waitForTimeout(5500);
           const title=page.getByText(frame,{exact:false}).first(); if(await title.count()===0) throw new Error('not found '+frame);
-          await title.click(); await page.waitForTimeout(7000); if(!infoUrl) throw new Error('no IIIF '+frame);
+          await title.click();
+          for(let i=0;i<20 && !infoUrl;i++) await page.waitForTimeout(1000);
+          if(!infoUrl) throw new Error('no IIIF '+frame+' at '+page.url());
           const base=infoUrl.replace(/\/info\.json$/,''); const full=base+'/full/full/0/default.jpg';
           const r=await ctx.request.get(full,{timeout:120000}); if(!r.ok()) throw new Error('download '+r.status()); const buf=await r.body();
           fs.writeFileSync('../out/'+frame+'.jpg',buf); fs.writeFileSync('../out/meta.json',JSON.stringify({frame,infoUrl,full,bytes:buf.length,record:page.url()},null,2));
