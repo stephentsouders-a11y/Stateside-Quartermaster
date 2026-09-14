@@ -1,0 +1,11 @@
+{
+  "name": "case-0109-aerial-audit",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "audit": "node audit.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.55.0"
+  }
+}
