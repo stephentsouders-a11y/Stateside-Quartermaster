@@ -1,10 +1,46 @@
 {% if request.page_type == 'collection' %}
 {% if collection.handle contains 'state-guard-series-' or collection.handle == 'new-jersey-state-guard-naval-militia' %}
 {% if collection.handle == 'state-guard-series-ohio' %}
+<style data-sq-ohio-refine-owner>
+#MainContent.sq-ohio-refine-active collection-component,#MainContent.sq-ohio-refine-active .product-grid,#MainContent.sq-ohio-refine-active #product-grid{display:none!important}
+#MainContent [data-sq-ohio-filtered-products]{display:block;width:100%;padding:0 20px 48px;background:#f4f5f3;color:#071d2d}
+#MainContent [data-sq-ohio-filtered-products] .sq-ohio-products__wrap{max-width:1280px;margin:0 auto}
+#MainContent [data-sq-ohio-filtered-products] .sq-ohio-products__head{margin:0 0 18px}
+#MainContent [data-sq-ohio-filtered-products] .sq-ohio-products__head h2{margin:0 0 6px;font-size:clamp(28px,4vw,44px)}
+#MainContent [data-sq-ohio-filtered-products] .sq-ohio-products__grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+#MainContent [data-sq-ohio-filtered-products] .sq-ohio-product{display:flex;flex-direction:column;overflow:hidden;border:1px solid #d4dadd;border-radius:12px;background:#fff;color:#071d2d;text-decoration:none}
+#MainContent [data-sq-ohio-filtered-products] .sq-ohio-product__media{display:grid;place-items:center;aspect-ratio:1/1;background:#fff;overflow:hidden}
+#MainContent [data-sq-ohio-filtered-products] .sq-ohio-product__media img{width:100%;height:100%;object-fit:contain;padding:10px;box-sizing:border-box}
+#MainContent [data-sq-ohio-filtered-products] .sq-ohio-product__copy{padding:12px 14px 16px}
+#MainContent [data-sq-ohio-filtered-products] .sq-ohio-product__vendor{display:block;margin-top:5px;font-size:.82rem;opacity:.7}
+@media(max-width:900px){#MainContent [data-sq-ohio-filtered-products] .sq-ohio-products__grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){#MainContent [data-sq-ohio-filtered-products]{padding-inline:12px}#MainContent [data-sq-ohio-filtered-products] .sq-ohio-products__grid{grid-template-columns:1fr}}
+</style>
 <script data-sq-state-guard-special-refine-owner data-ohio-global-refine-owner>
 (function(){
   document.documentElement.dataset.sqStateGuardRefineOwner='global-ohio';
   if(window.__sqOhioRefineUniverseHydrated)return;window.__sqOhioRefineUniverseHydrated=true;
+  var main=document.getElementById('MainContent');if(!main)return;
+  var products=[];
+  function clean(v){return String(v==null?'':v).trim()}
+  function norm(v){return clean(v).toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ')}
+  function esc(v){return clean(v).replace(/[&<>"']/g,function(k){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[k]})}
+  function activeMaker(){var q=new URLSearchParams(location.search);return clean(q.get('sq_maker')||q.get('filter.p.vendor'))}
+  function image(p){var x=p&&(p.featured_image||p.image||(p.images&&p.images[0]));if(typeof x==='string')return x;return clean(x&&(x.src||x.url))}
+  function removeFiltered(){var old=main.querySelector('[data-sq-ohio-filtered-products]');if(old)old.remove();main.classList.remove('sq-ohio-refine-active')}
+  function renderFiltered(){
+    var maker=activeMaker();
+    if(!maker){removeFiltered();return}
+    var out=products.filter(function(p){return p&&norm(p.vendor)===norm(maker)});
+    removeFiltered();
+    var s=document.createElement('section');s.dataset.sqOhioFilteredProducts='true';s.className='sq-ohio-products';
+    var h='<div class="sq-ohio-products__wrap"><div class="sq-ohio-products__head"><h2>'+esc(maker)+'</h2><p>'+out.length+' '+(out.length===1?'product':'products')+'</p></div>';
+    if(out.length){h+='<div class="sq-ohio-products__grid">';out.forEach(function(p){var src=image(p);h+='<a class="sq-ohio-product" href="/products/'+encodeURIComponent(clean(p.handle))+'"><span class="sq-ohio-product__media">'+(src?'<img src="'+esc(src)+'" alt="'+esc(p.title)+'" loading="lazy" decoding="async">':'')+'</span><span class="sq-ohio-product__copy"><strong>'+esc(p.title)+'</strong>'+(p.vendor?'<span class="sq-ohio-product__vendor">'+esc(p.vendor)+'</span>':'')+'</span></a>'});h+='</div>'}else h+='<p>No products match this manufacturer.</p>';
+    h+='</div>';s.innerHTML=h;
+    var host=main.querySelector('.sq-global-refine-main')||main;
+    host.insertBefore(s,host.firstChild);
+    main.classList.add('sq-ohio-refine-active');
+  }
   async function hydrate(){
     var out=[],seen={};
     for(var page=1;page<=8;page++){
@@ -13,7 +49,7 @@
         if(!r.ok)break;
         var j=await r.json(),a=j&&Array.isArray(j.products)?j.products:[];
         a.forEach(function(p){
-          var pt=String(p&&p.product_type||'').toLowerCase().replace(/[_-]+/g,' ');
+          var pt=norm(p&&p.product_type);
           if(!p||!p.handle||seen[p.handle]||pt==='options hidden product')return;
           seen[p.handle]=1;out.push(p);
         });
@@ -21,11 +57,14 @@
       }catch(_){break}
     }
     if(!out.length)return;
+    products=out;
     var prior=window.__sqDirectFacetUniverse||{};
     window.__sqDirectFacetUniverse={products:out,maker:prior.maker||[],color:prior.color||[]};
     window.dispatchEvent(new CustomEvent('sq:refine-universe-ready',{detail:window.__sqDirectFacetUniverse}));
-    window.dispatchEvent(new CustomEvent('sq:refine-results-ready',{detail:{products:out}}));
+    renderFiltered();
   }
+  window.addEventListener('sq:refine-controls-change',function(){setTimeout(renderFiltered,0)});
+  window.addEventListener('popstate',function(){setTimeout(renderFiltered,0)});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',hydrate,{once:true});else hydrate();
 })();
 </script>
