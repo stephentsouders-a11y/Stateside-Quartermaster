@@ -21,25 +21,31 @@
   %}
 
   {%- comment -%}
-    Critical first-paint styles are intentionally inline before the pagination markup.
-    This prevents the legacy/base pagination design from flashing before Shopify's
-    compiled snippet stylesheet and Refine V3 pagination finish loading.
+    First-paint guard for collection roots managed by Refine V3.
+    It executes before the native pagination shell is parsed so the legacy pager
+    cannot paint before the authoritative Refine V3 pager is assembled.
   {%- endcomment -%}
-  <style data-vac-pagination-first-paint="concept-one">
-    .vac-pagination-shell{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:var(--padding-xl);width:100%}
-    .vac-page-size{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;font-size:var(--font-size--sm)}
-    .vac-page-size>span[aria-hidden='true']{display:none}
-    .vac-page-size a{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:44px;padding:0 12px;border:1px solid #cfd8df;border-radius:10px;background:#fff;color:#0b3a63;text-decoration:none;font-weight:800;line-height:1;box-shadow:0 1px 2px rgba(7,29,45,.08)}
-    .vac-page-size a[aria-current='true']{border-color:#0b3a63;background:#0b3a63;color:#fff;font-weight:900}
-    .vac-stock-pagination.pagination{--pagination-size:44px;display:flex;justify-content:center;width:100%;padding:var(--padding-sm);position:relative;isolation:isolate;box-sizing:border-box}
-    .vac-stock-pagination .pagination__list{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;list-style:none;margin:0;padding:0;position:relative;width:100%}
-    .vac-stock-pagination .pagination__item{width:var(--pagination-size);min-width:var(--pagination-size);height:var(--pagination-size);display:grid;place-items:center}
-    .vac-stock-pagination .pagination__link{box-sizing:border-box;display:grid;place-items:center;width:100%;height:100%;border:1px solid #cfd8df;border-radius:10px;background:#fff;color:#0b3a63;text-decoration:none;user-select:none;position:relative;font-size:var(--font-size--md);font-weight:900;line-height:1;box-shadow:0 1px 2px rgba(7,29,45,.08)}
-    .vac-stock-pagination .pagination__link--current,.vac-stock-pagination .pagination__link--arrow{border-color:#0b3a63;background:#0b3a63;color:#fff}
-    .vac-stock-pagination .pagination__link--disabled{opacity:.34;cursor:not-allowed;pointer-events:none}
-    .vac-stock-pagination .pagination__link svg{width:.55rem;height:.82rem;flex-shrink:0}
-    .vac-stock-pagination .pagination__link--arrow svg,.vac-stock-pagination .pagination__link--arrow svg path{color:currentColor;stroke:currentColor}
-    @media screen and (max-width:749px){.vac-pagination-shell{gap:10px}.vac-stock-pagination.pagination{--pagination-size:42px;padding-inline:4px}.vac-stock-pagination .pagination__list{gap:7px}.vac-page-size a{min-width:42px;height:42px}}
+  <script data-sq-pagination-first-paint-guard>
+    (function(){
+      var roots=new Set([
+        'accessories-gifts-collectibles','airsoft-milsim','apparel','armed-forces-gear','art',
+        'body-armor-ballistic-protection','literature','child-safety-shop','dive-scuba','firearm-accessories',
+        'first-aid-medical-ifak','flags-patriotic-decor','flashlights-lighting','footwear-gloves-eyewear',
+        'k9-dog-gear','knives-axes-cutlery','morale-patches-tactical-id','outdoor-preparedness-gear',
+        'patriotic-american-heritage','safety-rescue-climbing','sta-brite-insignia','tactical-gear','thin-line',
+        'uniforms','watches','zippos-lighters-torches','stateside-quartermaster-logo-merch',
+        'army-national-guard-series','air-national-guard-series','products-built-for-the-line-u-s-army',
+        'products-built-for-the-line-u-s-navy','products-built-for-the-line-u-s-air-force',
+        'products-built-for-the-line-u-s-marine-corps','products-built-for-the-line-u-s-coast-guard',
+        'products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series','military-schools-academies',
+        'law-enforcement-corrections','firefighting-ems-search-rescue'
+      ]);
+      var root=new URLSearchParams(location.search).get('sq_root')||'{{ collection.handle | escape }}';
+      if(roots.has(root))document.documentElement.classList.add('sq-refine-v3-pagination-authoritative');
+    })();
+  </script>
+  <style data-sq-pagination-first-paint-guard-style>
+    html.sq-refine-v3-pagination-authoritative #MainContent .vac-pagination-shell{display:none!important}
   </style>
 
   <div class="vac-pagination-shell" data-pagination-design="concept-one">
