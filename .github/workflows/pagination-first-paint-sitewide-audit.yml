@@ -1,0 +1,263 @@
+name: Pagination First-Paint Sitewide Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pagination-first-paint-sitewide-audit.yml'
+      - 'snippets/pagination-controls.liquid'
+      - 'snippets/sq-refine-v3-pagination-repair.liquid'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  STORE_ORIGIN: https://www.statesideqm.com
+  PREVIEW_THEME_ID: '158561894555'
+
+jobs:
+  chromium-playwright-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@latest
+          npx playwright install --with-deps chromium
+
+      - name: Run cold-load pagination flash audit with video, trace, screenshots, receipts
+        run: |
+          mkdir -p audit-output/pagination-first-paint/videos audit-output/pagination-first-paint/screenshots audit-output/pagination-first-paint/traces
+          cat > /tmp/pagination-audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          import path from 'node:path';
+
+          const origin = process.env.STORE_ORIGIN;
+          const themeId = process.env.PREVIEW_THEME_ID;
+          const out = 'audit-output/pagination-first-paint';
+
+          const roots = [
+            'accessories-gifts-collectibles','airsoft-milsim','apparel','armed-forces-gear','art',
+            'body-armor-ballistic-protection','literature','child-safety-shop','dive-scuba','firearm-accessories',
+            'first-aid-medical-ifak','flags-patriotic-decor','flashlights-lighting','footwear-gloves-eyewear',
+            'k9-dog-gear','knives-axes-cutlery','morale-patches-tactical-id','outdoor-preparedness-gear',
+            'patriotic-american-heritage','safety-rescue-climbing','sta-brite-insignia','tactical-gear','thin-line',
+            'uniforms','watches','zippos-lighters-torches','stateside-quartermaster-logo-merch',
+            'army-national-guard-series','air-national-guard-series','products-built-for-the-line-u-s-army',
+            'products-built-for-the-line-u-s-navy','products-built-for-the-line-u-s-air-force',
+            'products-built-for-the-line-u-s-marine-corps','products-built-for-the-line-u-s-coast-guard',
+            'products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series','military-schools-academies',
+            'law-enforcement-corrections','firefighting-ems-search-rescue'
+          ];
+
+          const explicit = [
+            {
+              name: 'dive-scuba-child-reported',
+              url: `${origin}/collections/dive-scuba-dive-bags-clips-accessories-1?sq_root=dive-scuba&preview_theme_id=${themeId}`,
+              expectedManaged: true,
+              requirePager: true
+            },
+            {
+              name: 'ordinary-state-guard-series',
+              url: `${origin}/collections/state-guard-series?preview_theme_id=${themeId}`,
+              expectedManaged: false,
+              requirePager: false
+            }
+          ];
+
+          const rootTests = roots.map(root => ({
+            name: `root-${root}`,
+            url: `${origin}/collections/${root}?sq_root=${encodeURIComponent(root)}&preview_theme_id=${themeId}`,
+            expectedManaged: true,
+            requirePager: false
+          }));
+
+          const tests = [...explicit, ...rootTests];
+          const results = [];
+          const browser = await chromium.launch({ headless: true });
+
+          async function visibleState(page) {
+            return await page.evaluate(() => {
+              const visible = el => {
+                if (!el) return false;
+                const s = getComputedStyle(el);
+                const r = el.getBoundingClientRect();
+                return s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity || '1') > 0 && r.width > 0 && r.height > 0;
+              };
+              const legacy = [...document.querySelectorAll('.vac-pagination-shell, pagination-component, #MainContent .pagination')];
+              const desired = [...document.querySelectorAll('.sq-refine-v3-pager')];
+              return {
+                readyState: document.readyState,
+                rootClass: document.documentElement.className,
+                legacyCount: legacy.length,
+                visibleLegacyCount: legacy.filter(visible).length,
+                desiredCount: desired.length,
+                visibleDesiredCount: desired.filter(visible).length,
+                desiredText: desired.filter(visible).map(x => (x.textContent || '').replace(/\s+/g,' ').trim()),
+                mainReady: document.getElementById('MainContent')?.dataset?.sqRefineV3Ready || null,
+                mainError: document.getElementById('MainContent')?.dataset?.sqRefineV3Error || null,
+                managedClass: document.documentElement.classList.contains('sq-refine-v3-pagination-authoritative')
+              };
+            });
+          }
+
+          async function auditOne(test, index) {
+            const safe = `${String(index + 1).padStart(2,'0')}-${test.name.replace(/[^a-z0-9_-]+/gi,'-')}`;
+            const context = await browser.newContext({
+              viewport: { width: 1440, height: 1100 },
+              recordVideo: { dir: path.join(out, 'videos'), size: { width: 1280, height: 720 } }
+            });
+            await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
+            const page = await context.newPage();
+            const firstPaintSamples = [];
+            const consoleErrors = [];
+            const requestFailures = [];
+            let responseStatus = null;
+            let finalUrl = null;
+            let navError = null;
+            let pagerClick = null;
+
+            page.on('console', msg => {
+              if (msg.type() === 'error') consoleErrors.push(msg.text());
+            });
+            page.on('requestfailed', req => requestFailures.push({ url: req.url(), error: req.failure()?.errorText || 'unknown' }));
+
+            await page.addInitScript(() => {
+              window.__sqPaintAudit = { samples: [], legacyEverVisible: false, desiredEverVisible: false };
+              const snap = (label) => {
+                const visible = el => {
+                  if (!el) return false;
+                  const s = getComputedStyle(el);
+                  const r = el.getBoundingClientRect();
+                  return s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity || '1') > 0 && r.width > 0 && r.height > 0;
+                };
+                const legacy = [...document.querySelectorAll('.vac-pagination-shell, pagination-component, #MainContent .pagination')];
+                const desired = [...document.querySelectorAll('.sq-refine-v3-pager')];
+                const row = {
+                  t: Math.round(performance.now()), label,
+                  legacyCount: legacy.length,
+                  visibleLegacyCount: legacy.filter(visible).length,
+                  desiredCount: desired.length,
+                  visibleDesiredCount: desired.filter(visible).length,
+                  managedClass: document.documentElement.classList.contains('sq-refine-v3-pagination-authoritative')
+                };
+                window.__sqPaintAudit.samples.push(row);
+                if (row.visibleLegacyCount > 0) window.__sqPaintAudit.legacyEverVisible = true;
+                if (row.visibleDesiredCount > 0) window.__sqPaintAudit.desiredEverVisible = true;
+              };
+              new MutationObserver(() => snap('mutation')).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['class','style'] });
+              document.addEventListener('DOMContentLoaded', () => snap('domcontentloaded'), { once: true });
+              window.addEventListener('load', () => snap('load'), { once: true });
+              const loop = () => {
+                snap('raf');
+                if (performance.now() < 5000) requestAnimationFrame(loop);
+              };
+              requestAnimationFrame(loop);
+            });
+
+            try {
+              const resp = await page.goto(test.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+              responseStatus = resp?.status() ?? null;
+              finalUrl = page.url();
+              await page.waitForTimeout(7000);
+              firstPaintSamples.push(...await page.evaluate(() => window.__sqPaintAudit?.samples || []));
+              const observed = await page.evaluate(() => window.__sqPaintAudit || {});
+              const settled = await visibleState(page);
+
+              await page.screenshot({ path: path.join(out, 'screenshots', `${safe}-settled.png`), fullPage: true });
+
+              const next = page.locator('a[data-sq-pagination-repair="next"], .sq-refine-v3-pager a[aria-label*="Next"]');
+              if (settled.visibleDesiredCount > 0 && await next.count() > 0) {
+                const href = await next.first().getAttribute('href');
+                pagerClick = { href, attempted: true, passed: false };
+                await Promise.all([
+                  page.waitForLoadState('domcontentloaded', { timeout: 45000 }).catch(() => {}),
+                  next.first().click({ timeout: 10000 })
+                ]);
+                await page.waitForTimeout(2500);
+                pagerClick.finalUrl = page.url();
+                pagerClick.passed = /sq_view_page=2|page=2/.test(page.url());
+                await page.screenshot({ path: path.join(out, 'screenshots', `${safe}-after-next.png`), fullPage: true });
+              }
+
+              const legacyFlash = !!observed.legacyEverVisible;
+              const managedGuard = settled.managedClass;
+              const desiredSettled = settled.visibleDesiredCount > 0;
+              const statusOkay = responseStatus === null || responseStatus < 400;
+              const flashPass = test.expectedManaged ? !legacyFlash : true;
+              const guardPass = test.expectedManaged ? managedGuard : !managedGuard;
+              const pagerPass = test.requirePager ? desiredSettled : true;
+              const clickPass = test.requirePager ? !!pagerClick?.passed : true;
+              const passed = statusOkay && flashPass && guardPass && pagerPass && clickPass;
+
+              results.push({
+                ...test, passed, responseStatus, finalUrl, legacyFlash, managedGuard, desiredSettled,
+                settled, pagerClick, consoleErrors: consoleErrors.slice(0,20), requestFailures: requestFailures.slice(0,20),
+                firstPaintSampleCount: firstPaintSamples.length,
+                firstVisibleLegacySample: firstPaintSamples.find(x => x.visibleLegacyCount > 0) || null,
+                firstVisibleDesiredSample: firstPaintSamples.find(x => x.visibleDesiredCount > 0) || null
+              });
+            } catch (e) {
+              navError = String(e?.stack || e);
+              results.push({ ...test, passed: false, responseStatus, finalUrl: finalUrl || page.url(), navError, consoleErrors, requestFailures });
+            } finally {
+              await context.tracing.stop({ path: path.join(out, 'traces', `${safe}.zip`) }).catch(() => {});
+              const video = page.video();
+              await page.close().catch(() => {});
+              await context.close().catch(() => {});
+              if (video) {
+                try {
+                  const oldPath = await video.path();
+                  if (fs.existsSync(oldPath)) fs.renameSync(oldPath, path.join(out, 'videos', `${safe}.webm`));
+                } catch {}
+              }
+            }
+          }
+
+          for (let i = 0; i < tests.length; i++) {
+            console.log(`[${i+1}/${tests.length}] ${tests[i].name}`);
+            await auditOne(tests[i], i);
+          }
+
+          await browser.close();
+
+          fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify(results, null, 2));
+          const rows = results.map(r => `| ${r.passed ? 'PASS' : 'FAIL'} | ${r.name} | ${r.responseStatus ?? ''} | ${r.legacyFlash === undefined ? '' : (r.legacyFlash ? 'YES' : 'NO')} | ${r.managedGuard === undefined ? '' : (r.managedGuard ? 'YES' : 'NO')} | ${r.desiredSettled === undefined ? '' : (r.desiredSettled ? 'YES' : 'NO')} | ${r.pagerClick?.passed === undefined ? '' : (r.pagerClick.passed ? 'PASS' : 'FAIL')} | ${r.navError ? r.navError.split('\n')[0].replace(/\|/g,'\\|') : ''} |`);
+          const md = [
+            '# Pagination First-Paint Chromium Playwright Audit',
+            '',
+            `Generated: ${new Date().toISOString()}`,
+            `Preview theme: ${themeId}`,
+            '',
+            '| Result | Test | HTTP | Legacy flash | Guard active | Desired pager settled | Next click | Error |',
+            '|---|---|---:|---|---|---|---|---|',
+            ...rows,
+            '',
+            `Overall: ${results.every(r => r.passed) ? 'PASS' : 'FAIL'}`,
+            `Passed: ${results.filter(r => r.passed).length}/${results.length}`
+          ].join('\n');
+          fs.writeFileSync(path.join(out, 'AUDIT_RECEIPT.md'), md);
+          console.log(md);
+
+          const required = results.find(r => r.name === 'dive-scuba-child-reported');
+          if (!required?.passed) process.exitCode = 1;
+          EOF
+          node /tmp/pagination-audit.mjs
+
+      - name: Upload Chromium Playwright audit receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pagination-first-paint-audit-${{ github.run_id }}
+          path: audit-output/pagination-first-paint
+          if-no-files-found: error
+          retention-days: 30
