@@ -22,8 +22,8 @@
 
   {%- comment -%}
     First-paint guard for collection roots managed by Refine V3.
-    It executes before the native pagination shell is parsed so the legacy pager
-    cannot paint before the authoritative Refine V3 pager is assembled.
+    It executes before any native pagination shell is parsed so legacy pagination
+    can never paint before the authoritative Refine V3 Concept One pager is assembled.
   {%- endcomment -%}
   <script data-sq-pagination-first-paint-guard>
     (function(){
@@ -45,7 +45,14 @@
     })();
   </script>
   <style data-sq-pagination-first-paint-guard-style>
-    html.sq-refine-v3-pagination-authoritative #MainContent .vac-pagination-shell{display:none!important}
+    html.sq-refine-v3-pagination-authoritative #MainContent .vac-pagination-shell,
+    html.sq-refine-v3-pagination-authoritative #MainContent pagination-component,
+    html.sq-refine-v3-pagination-authoritative #MainContent .pagination {
+      display:none!important;
+      visibility:hidden!important;
+      opacity:0!important;
+      pointer-events:none!important;
+    }
   </style>
 
   <div class="vac-pagination-shell" data-pagination-design="concept-one">
