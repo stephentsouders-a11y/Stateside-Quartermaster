@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const out = path.resolve('artifacts');
+fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 
 const frames = [
@@ -19,39 +20,77 @@ const results = [];
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
   viewport: { width: 1600, height: 1200 },
-  recordVideo: { dir: path.join(out, 'video'), size: { width: 1600, height: 1200 } }
+  recordVideo: { dir: path.join(out, 'video'), size: { width: 1600, height: 1200 } },
+  userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140 Safari/537.36'
 });
 
+const clean = s => (s || '').replace(/\s+/g, ' ').trim();
+
+async function captureRecord(page, rec, candidateUrl) {
+  rec.record_url = candidateUrl;
+  const response = await page.goto(candidateUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  rec.record_http_status = response?.status() ?? null;
+  await page.waitForTimeout(2500);
+  rec.final_url = page.url();
+  rec.record_text = (await page.locator('body').innerText()).slice(0, 50000);
+  rec.images = await page.locator('img').evaluateAll(imgs => imgs.map(i => ({ src: i.currentSrc || i.src, alt: i.alt, width: i.naturalWidth, height: i.naturalHeight })).filter(x => x.src));
+  rec.record_links = await page.locator('a').evaluateAll(as => as.map(a => ({ text: (a.textContent||'').trim(), href: a.href })).filter(x => x.href));
+  rec.resources = await page.evaluate(() => performance.getEntriesByType('resource').map(r => r.name).filter(u => /iiif|jpg|jpeg|png|tif|tiff|image/i.test(u)).slice(-100));
+  await page.screenshot({ path: path.join(out, `${rec.frame}-record.png`), fullPage: true });
+  const allUrls = [
+    ...rec.images.map(x => x.src),
+    ...rec.record_links.map(x => x.href),
+    ...rec.resources
+  ];
+  rec.image_candidates = [...new Set(allUrls.filter(u => /iiif|\.jpe?g(?:\?|$)|\.tiff?(?:\?|$)|download/i.test(u)))].slice(0, 100);
+  rec.status = rec.record_text.includes(rec.frame) || rec.final_url.includes(rec.frame) ? 'VERIFIED_RECORD' : 'RECORD_REVIEW';
+}
+
 async function searchFrame(page, frame) {
-  const q = encodeURIComponent(frame);
-  const url = `https://maine.primo.exlibrisgroup.com/nde/search?query=any,contains,${q}&vid=01MAINE_INST:DigCol&lang=en`;
-  const rec = { frame, search_url: url, target, status: 'UNKNOWN', notes: [] };
+  const rec = { frame, target, status: 'UNKNOWN', notes: [] };
   try {
-    const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    rec.http_status = resp?.status() ?? null;
-    await page.waitForTimeout(2500);
-    const body = (await page.locator('body').innerText()).slice(0, 30000);
-    rec.body_excerpt = body;
-    const links = await page.locator('a').evaluateAll(as => as.map(a => ({ text: (a.textContent||'').trim(), href: a.href })).filter(x => x.href));
-    rec.links = links.filter(x => x.text.includes(frame) || x.href.includes(frame)).slice(0, 20);
-    await page.screenshot({ path: path.join(out, `${frame}-search.png`), fullPage: true });
-    if (!body.includes(frame)) {
-      rec.status = 'NOT_FOUND';
-      rec.notes.push('Frame identifier not visible in returned search page.');
+    // 1) Check the migrated Maine catalog directly, but do not accept the query echo as evidence.
+    const primo = `https://maine.primo.exlibrisgroup.com/nde/search?query=any,contains,${encodeURIComponent(frame)}&vid=01MAINE_INST:DigCol&lang=en`;
+    rec.primo_search_url = primo;
+    let response = await page.goto(primo, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    rec.primo_http_status = response?.status() ?? null;
+    await page.waitForTimeout(1800);
+    let body = await page.locator('body').innerText();
+    await page.screenshot({ path: path.join(out, `${frame}-primo.png`), fullPage: true });
+    const noRecords = /No records found|no results matching/i.test(body);
+    const primoLinks = await page.locator('a').evaluateAll(as => as.map(a => ({ text: (a.textContent||'').trim(), href: a.href })).filter(x => x.href));
+    let candidate = primoLinks.find(x => x.text.includes(frame) && !/search/i.test(x.href));
+    if (candidate && !noRecords) {
+      rec.discovery = 'maine-primo';
+      await captureRecord(page, rec, candidate.href);
       return rec;
     }
-    rec.status = 'FOUND';
-    const candidate = links.find(x => x.text.includes(frame)) || links.find(x => x.href.includes(frame));
-    if (candidate) {
-      rec.record_url = candidate.href;
-      const r2 = await page.goto(candidate.href, { waitUntil: 'domcontentloaded', timeout: 45000 });
-      rec.record_http_status = r2?.status() ?? null;
-      await page.waitForTimeout(2500);
-      rec.record_text = (await page.locator('body').innerText()).slice(0, 40000);
-      rec.images = await page.locator('img').evaluateAll(imgs => imgs.map(i => ({ src: i.src, alt: i.alt, width: i.naturalWidth, height: i.naturalHeight })).filter(x => x.src));
-      rec.record_links = await page.locator('a').evaluateAll(as => as.map(a => ({ text: (a.textContent||'').trim(), href: a.href })).filter(x => x.href)).then(xs => xs.filter(x => /iiif|download|image|jpg|jpeg|tif|tiff/i.test(`${x.text} ${x.href}`)).slice(0,40));
-      await page.screenshot({ path: path.join(out, `${frame}-record.png`), fullPage: true });
+
+    // 2) Use a public search engine to resolve legacy Digital Commons records into their current location.
+    const query = `\"An Khe February 16 1966 ${frame}\"`;
+    const ddg = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    rec.web_search_url = ddg;
+    response = await page.goto(ddg, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    rec.web_http_status = response?.status() ?? null;
+    await page.waitForTimeout(1200);
+    body = await page.locator('body').innerText();
+    rec.web_body_excerpt = body.slice(0, 20000);
+    await page.screenshot({ path: path.join(out, `${frame}-websearch.png`), fullPage: true });
+    const webLinks = await page.locator('a').evaluateAll(as => as.map(a => ({ text: (a.textContent||'').trim(), href: a.href })).filter(x => x.href));
+    const matching = webLinks.filter(x => clean(x.text).includes(frame) || x.href.includes(frame));
+    rec.web_matches = matching.slice(0, 20);
+    candidate = matching.find(x => /digitalcommons\.library\.umaine\.edu|maine\.primo\.exlibrisgroup\.com/i.test(x.href));
+    if (!candidate) {
+      candidate = webLinks.find(x => /digitalcommons\.library\.umaine\.edu\/sewell_aerial_vietnam_all\//i.test(x.href) && clean(x.text).includes(frame));
     }
+    if (candidate) {
+      rec.discovery = 'web-search';
+      await captureRecord(page, rec, candidate.href);
+      return rec;
+    }
+
+    rec.status = 'NOT_LOCATED';
+    rec.notes.push(noRecords ? 'Maine catalog direct search returned no records.' : 'No verified record link found.');
   } catch (e) {
     rec.status = 'ERROR';
     rec.error = String(e?.stack || e);
@@ -66,17 +105,20 @@ for (const frame of frames) {
   fs.writeFileSync(path.join(out, 'audit-progress.json'), JSON.stringify({ target, results }, null, 2));
 }
 
-fs.writeFileSync(path.join(out, 'audit.json'), JSON.stringify({ target, generated_at: new Date().toISOString(), results }, null, 2));
+const payload = { target, generated_at: new Date().toISOString(), results };
+fs.writeFileSync(path.join(out, 'audit.json'), JSON.stringify(payload, null, 2));
 const md = [
   '# Case 0109 Aerial Audit',
   '',
   `Target: ${target.grid} / ${target.lat}, ${target.lon}`,
   '',
-  '| Frame | Status | HTTP | Record |',
-  '|---|---|---:|---|',
-  ...results.map(r => `| ${r.frame} | ${r.status} | ${r.http_status ?? ''} | ${r.record_url ? `[record](${r.record_url})` : ''} |`),
+  '| Frame | Status | Discovery | Record | Image candidates |',
+  '|---|---|---|---|---:|',
+  ...results.map(r => `| ${r.frame} | ${r.status} | ${r.discovery ?? ''} | ${r.record_url ? `[record](${r.record_url})` : ''} | ${r.image_candidates?.length ?? 0} |`),
   '',
-  'This audit records only real archival pages and images retrieved by Chromium. No generated imagery is used.'
+  'PASS RULE: A frame is never accepted merely because its identifier is echoed in a search query or a “No records found” page.',
+  '',
+  'This audit records only real archival pages/images retrieved by Chromium. No generated imagery is used.'
 ].join('\n');
 fs.writeFileSync(path.join(out, 'AUDIT.md'), md);
 
