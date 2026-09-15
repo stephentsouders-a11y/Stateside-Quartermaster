@@ -1,0 +1,94 @@
+name: Project Delta deep 1965 crawl
+
+on:
+  push:
+    branches:
+      - research/fred-taylor-video-capture
+  workflow_dispatch:
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g playwright
+      - run: npx playwright install chromium --with-deps
+      - name: Crawl Project Delta legacy and new site for 1965 and Taylor Gallant evidence
+        run: |
+          mkdir -p deep1965/pages deep1965/images
+          cat > /tmp/deepcrawl.js <<'EOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const path = require('path');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const context=await browser.newContext({viewport:{width:1365,height:900}});
+            const page=await context.newPage();
+            const start=[
+              'https://projectdelta-b52.com/',
+              'https://projectdelta-b52.com/new/index.html',
+              'https://projectdelta-b52.com/new/master-gallery.html',
+              'https://projectdelta-b52.com/new/photos.html',
+              'https://projectdelta-b52.com/new/val_stories2.html',
+              'https://projectdelta-b52.com/new/taylor.html',
+              'https://projectdelta-b52.com/new/gallant.html'
+            ];
+            const q=[...start], seen=new Set(), records=[], imageMap=new Map();
+            const clean=u=>{try{const x=new URL(u); x.hash=''; return x.href;}catch{return null}};
+            const onDomain=u=>{try{const x=new URL(u); return /(^|\.)projectdelta-b52\.com$/i.test(x.hostname);}catch{return false}};
+            const pageRe=/(1965|taylor|gallant|baker|history|photo|gallery|operation|story|memorial|kia|mia|recon|delta)/i;
+            let processed=0;
+            while(q.length && processed<350){
+              const url=clean(q.shift()); if(!url||seen.has(url)||!onDomain(url)) continue; seen.add(url);
+              if(/\.(jpg|jpeg|png|gif|webp|pdf|zip|mp4|mov|avi)$/i.test(new URL(url).pathname)) continue;
+              processed++;
+              try{
+                const resp=await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
+                await page.waitForTimeout(350);
+                const status=resp?resp.status():0;
+                const title=await page.title().catch(()=> '');
+                const body=await page.locator('body').innerText().catch(()=> '');
+                const html=await page.content().catch(()=> '');
+                const links=await page.locator('a').evaluateAll(as=>as.map(a=>({href:a.href,text:(a.innerText||a.textContent||'').trim()})).filter(x=>x.href));
+                for(const l of links){ const cu=clean(l.href); if(cu&&onDomain(cu)&&!seen.has(cu) && (pageRe.test(cu)||pageRe.test(l.text))) q.push(cu); }
+                const imgs=await page.locator('img').evaluateAll(els=>els.map(e=>({src:e.currentSrc||e.src,alt:e.alt||'',title:e.title||'',w:e.naturalWidth,h:e.naturalHeight})).filter(x=>x.src));
+                const hit=/(fred\s+taylor|henry\s+(j\.?\s*)?gallant|willie\s+gallant|july\s+13,?\s+1965|1965)/i.test(body+' '+url+' '+title);
+                if(hit){
+                  const rec={url,status,title,text:body.slice(0,50000),images:imgs,links:links.filter(x=>/1965|taylor|gallant/i.test(x.href+' '+x.text)).slice(0,200)};
+                  records.push(rec);
+                  const slug=String(records.length-1).padStart(3,'0');
+                  fs.writeFileSync(`deep1965/pages/${slug}.txt`,url+'\nTITLE: '+title+'\nSTATUS: '+status+'\n\n'+body);
+                  fs.writeFileSync(`deep1965/pages/${slug}.html`,html);
+                  await page.screenshot({path:`deep1965/pages/${slug}.png`,fullPage:true}).catch(()=>{});
+                  for(const im of imgs){
+                    try{
+                      if(!onDomain(im.src)) continue;
+                      if(imageMap.has(im.src)) continue;
+                      const r=await context.request.get(im.src,{timeout:30000}); if(!r.ok()) continue;
+                      const b=await r.body(); if(b.length<1500) continue;
+                      const pathname=new URL(im.src).pathname;
+                      let ext=(pathname.split('.').pop()||'bin').toLowerCase(); if(ext.length>5) ext='bin';
+                      const hash=crypto.createHash('sha1').update(b).digest('hex').slice(0,12);
+                      const fn=`${String(imageMap.size).padStart(4,'0')}_${hash}.${ext}`;
+                      fs.writeFileSync(`deep1965/images/${fn}`,b);
+                      imageMap.set(im.src,{file:fn,alt:im.alt,title:im.title,w:im.w,h:im.h,source_page:url});
+                    }catch(e){}
+                  }
+                }
+              }catch(e){ fs.appendFileSync('deep1965/errors.txt',url+'\t'+e.message+'\n'); }
+            }
+            fs.writeFileSync('deep1965/records.json',JSON.stringify(records,null,2));
+            fs.writeFileSync('deep1965/images.json',JSON.stringify(Object.fromEntries(imageMap),null,2));
+            fs.writeFileSync('deep1965/seen.txt',[...seen].join('\n'));
+            fs.writeFileSync('deep1965/summary.txt',`Processed ${processed}\nSeen ${seen.size}\nHit pages ${records.length}\nDownloaded images ${imageMap.size}\n`);
+            await browser.close();
+          })();
+          EOF
+          NODE_PATH=$(npm root -g) node /tmp/deepcrawl.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-delta-deep-1965-crawl
+          path: deep1965/
+          retention-days: 7
