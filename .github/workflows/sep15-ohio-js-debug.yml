@@ -39,10 +39,19 @@ jobs:
               try{text=script.src?await fetch(script.src,{credentials:'same-origin'}).then(r=>r.text()):script.textContent||'';}catch(e){rows.push({source,fetchError:String(e)});continue;}
               let syntax=null;
               try{new Function(text);}catch(e){syntax={message:e.message,stack:e.stack};}
-              if(syntax || /ohio|state.guard|vac.stock|sq.refine/i.test(source+' '+text.slice(0,1000))){rows.push({source,length:text.length,syntax,head:text.slice(0,500)});}
+              if(syntax && syntax.message==='Invalid or unexpected token'){
+                const section=script.closest('.shopify-section');
+                rows.push({
+                  source,length:text.length,syntax,
+                  head:text.slice(0,800),tail:text.slice(-800),
+                  scriptAttrs:Object.fromEntries([...script.attributes].map(a=>[a.name,a.value])),
+                  parentTag:script.parentElement?.tagName||'',parentId:script.parentElement?.id||'',parentClass:script.parentElement?.className||'',
+                  sectionId:section?.id||'',sectionClass:section?.className||'',sectionHead:section?.outerHTML?.slice(0,1200)||''
+                });
+              }
             }
             const main=document.querySelector('#MainContent');
-            return {url:location.href,title:document.title,rows,mainText:(main?.innerText||'').slice(0,5000),htmlClasses:document.documentElement.className,owner:document.documentElement.dataset.sqStateGuardRefineOwner||'',sidebarCount:document.querySelectorAll('[data-sq-ohio-refine-host]').length};
+            return {url:location.href,title:document.title,rows,mainText:(main?.innerText||'').slice(0,5000),owner:document.documentElement.dataset.sqStateGuardRefineOwner||'',sidebarCount:document.querySelectorAll('[data-sq-ohio-refine-host]').length};
           });
           const out={status:response?.status()??null,pageErrors,scripts};
           fs.writeFileSync('out/debug.json',JSON.stringify(out,null,2));
@@ -54,6 +63,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: sep15-ohio-js-debug
+          name: sep15-ohio-js-debug-parent
           path: out
           retention-days: 7
