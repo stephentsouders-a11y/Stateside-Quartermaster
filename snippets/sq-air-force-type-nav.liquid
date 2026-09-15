@@ -1,0 +1,111 @@
+{% doc %}
+Builds U.S. Air Force Shop by Type cards from exact SQ Type tag routes. Each destination is verified at a controlled pace to preserve exact counts and representative product images without concurrent child-page request storms. Type-result pages hide redundant type navigation and expose the product grid.
+{% enddoc %}
+{% liquid
+  assign sq_af_type_scope = false
+  assign sq_af_type_result = false
+  if request.page_type == 'collection'
+    if collection.handle contains 'bfl-air-force-' or collection.handle contains 'bfl-u-s-air-force-' or collection.handle contains 'u-s-air-force-'
+      assign sq_af_type_scope = true
+    endif
+    if sq_af_type_scope
+      for sq_current_tag in current_tags
+        assign sq_current_prefix = sq_current_tag | slice: 0, 8
+        if sq_current_prefix == 'SQ Type:'
+          assign sq_af_type_result = true
+          break
+        endif
+      endfor
+    endif
+  endif
+  assign sq_af_rows_seen = '||'
+  capture sq_af_rows_raw
+    if sq_af_type_scope and sq_af_type_result == false
+      for sq_tag in collection.tags
+        assign sq_prefix = sq_tag | slice: 0, 8
+        if sq_prefix == 'SQ Type:'
+          assign sq_label = sq_tag | remove_first: 'SQ Type:' | strip
+          assign sq_blocked = false
+          if sq_label contains 'Army' or sq_label contains 'Navy' or sq_label contains 'Marine' or sq_label contains 'Coast Guard' or sq_label contains 'Space Force' or sq_label contains 'ROTC' or sq_label contains 'JROTC' or sq_label contains 'State Guard'
+            assign sq_blocked = true
+          endif
+          if collection.handle == 'bfl-u-s-air-force-stickers-decals-vehicle-accessories' and sq_label == 'Stickers & Decals'
+            assign sq_blocked = true
+          endif
+          if sq_label != blank and sq_blocked == false
+            assign sq_token = sq_label | downcase | prepend: '||' | append: '||'
+            unless sq_af_rows_seen contains sq_token
+              echo sq_label | downcase
+              echo '~'
+              echo sq_label | replace: '~', ' '
+              echo '~'
+              echo sq_tag | replace: '~', ' '
+              echo '||'
+              assign sq_af_rows_seen = sq_af_rows_seen | append: sq_label | downcase | append: '||'
+            endunless
+          endif
+        endif
+      endfor
+    endif
+  endcapture
+  assign sq_af_rows = sq_af_rows_raw | split: '||' | sort_natural
+%}
+{% if sq_af_type_scope %}
+{% if sq_af_type_result %}
+<style data-sq-air-force-type-result>.sq-third-level,.sq-subcategory-section{display:none!important}collection-component,#ResultsList,.product-grid-container{display:block!important}</style>
+{% else %}
+<script data-sq-air-force-type-nav data-uniforms="{% if collection.handle contains 'uniforms-uniform-accessories' or collection.handle contains 'uniforms-accessories' %}true{% else %}false{% endif %}">
+(function(){
+  var script=document.currentScript;
+  var rows=[
+  {% for sq_row in sq_af_rows %}
+    {% if sq_row contains '~' %}
+      {% assign sq_parts = sq_row | split: '~' %}
+      {% assign sq_label = sq_parts[1] | strip %}
+      {% assign sq_tag = sq_parts[2] | strip %}
+      {% assign sq_tag_handle = sq_tag | handleize %}
+      {label:{{ sq_label | json }},href:{{ collection.url | append: '/' | append: sq_tag_handle | append: '?filter.v.availability=1' | json }}}{% unless forloop.last %},{% endunless %}
+    {% endif %}
+  {% endfor %}
+  ].filter(function(row){return row&&row.label&&row.href;});
+  var uniforms=script.getAttribute('data-uniforms')==='true';
+  function displayLabel(raw){return raw.replace(/^U\.S\. Air Force\s+/i,'').replace(/^USAF\s+/i,'').replace(/^Air Force\s+/i,'').trim()||raw;}
+  function uniformWeight(label){var s=label.toLowerCase();if(/ocp|utility|combat/.test(s))return 1;if(/service dress|blue|service uniform/.test(s))return 2;if(/pt|physical training/.test(s))return 3;if(/cold|ecwcs/.test(s))return 4;if(/head|cap|hat|flight cap|service cap|beret/.test(s))return 10;if(/coat|jacket|parka|outerwear/.test(s))return 20;if(/shirt|blouse/.test(s))return 30;if(/tie|neck|tab/.test(s))return 40;if(/name tape|name tag|name plate/.test(s))return 50;if(/belt|buckle/.test(s))return 60;if(/trouser|slack|skirt|pant/.test(s))return 70;if(/shoe|boot|footwear/.test(s))return 80;if(/blouser/.test(s))return 85;if(/button|braid|trim/.test(s))return 95;return 90;}
+  rows.sort(function(a,b){if(uniforms){var d=uniformWeight(a.label)-uniformWeight(b.label);if(d)return d;}return displayLabel(a.label).localeCompare(displayLabel(b.label),undefined,{numeric:true,sensitivity:'base'});});
+  function norm(src){if(!src)return '';try{var u=new URL(src,location.origin);return u.origin+u.pathname;}catch(e){return String(src).split('?')[0];}}
+  function productImages(doc){var out=[],seen={};doc.querySelectorAll('collection-component img[src],#ResultsList img[src],.product-grid img[src]').forEach(function(img){var src=img.getAttribute('src')||'',key=norm(src);if(!src||!key||seen[key])return;seen[key]=1;out.push(src);});return out;}
+  function requestText(href){return new Promise(function(resolve,reject){var request=new XMLHttpRequest();request.open('GET',href,true);request.setRequestHeader('X-Requested-With','XMLHttpRequest');request.onload=function(){if(request.status<200||request.status>=400){reject(new Error('HTTP '+request.status));return;}resolve({url:request.responseURL||href,html:request.responseText});};request.onerror=function(){reject(new Error('network'));};request.send();});}
+  function make(row){
+    var a=document.createElement('a');a.className='sq-third-level__type';a.href=row.href;a.setAttribute('data-sq-air-force-type-card','true');a.setAttribute('aria-label','Shop '+displayLabel(row.label));
+    var m=document.createElement('span');m.className='sq-third-level__media';var p=document.createElement('span');p.className='sq-third-level__placeholder';p.textContent='USAF';m.appendChild(p);
+    var c=document.createElement('span');c.className='sq-third-level__copy';var n=document.createElement('span');n.className='sq-third-level__name';n.textContent=displayLabel(row.label);var ct=document.createElement('span');ct.className='sq-air-force-type-count';ct.textContent='View items';var ar=document.createElement('span');ar.className='sq-third-level__arrow';ar.setAttribute('aria-hidden','true');ar.textContent='›';c.appendChild(n);c.appendChild(ct);c.appendChild(ar);a.appendChild(m);a.appendChild(c);return a;
+  }
+  async function hydrate(card,row,used){
+    var count=card.querySelector('.sq-air-force-type-count');
+    try{
+      var loaded=await requestText(row.href);
+      var finalUrl=new URL(loaded.url||row.href,location.origin),target=new URL(row.href,location.origin);if(finalUrl.pathname.replace(/\/$/,'')!==target.pathname.replace(/\/$/,'') )throw new Error('redirect');
+      var doc=new DOMParser().parseFromString(loaded.html,'text/html');var marker=doc.querySelector('[data-sq-air-force-route-count]');var n=marker?parseInt(marker.getAttribute('data-sq-air-force-route-count')||'',10):NaN;
+      count.textContent=Number.isFinite(n)?n+' '+(n===1?'item':'items'):'View items';if(Number.isFinite(n))card.setAttribute('data-sq-item-count',String(n));
+      var list=productImages(doc),pick='';for(var i=0;i<list.length;i++){var k=norm(list[i]);if(k&&!used[k]){pick=list[i];break;}}if(!pick&&list.length)pick=list[0];
+      if(pick){var media=card.querySelector('.sq-third-level__media');media.innerHTML='';var img=document.createElement('img');img.src=pick;img.alt=displayLabel(row.label);img.loading='lazy';img.width=720;img.height=500;media.appendChild(img);used[norm(pick)]=1;card.setAttribute('data-sq-air-force-image-verified','true');}
+      card.setAttribute('data-sq-air-force-route-verified','true');
+    }catch(e){card.setAttribute('data-sq-count-error','true');card.setAttribute('data-sq-air-force-route-verified','false');}
+  }
+  function sleep(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});}
+  function build(){
+    if(!rows.length)return;var root=document.querySelector('.sq-third-level');if(!root||root.dataset.sqAirForceTypes==='true')return;
+    var oldGrid=root.querySelector('.sq-third-level__type-grid');var group=root.querySelector('.sq-third-level__group');if(!group)return;
+    var grid=oldGrid?oldGrid.cloneNode(false):document.createElement('div');grid.className='sq-third-level__type-grid';grid.innerHTML='';var cards=[];
+    rows.forEach(function(row){var card=make(row);grid.appendChild(card);cards.push(card);});
+    root.querySelectorAll('.sq-third-level__group').forEach(function(g){g.remove();});var next=group.cloneNode(false);next.className='sq-third-level__group';var head=document.createElement('div');head.className='sq-third-level__group-head';var h=document.createElement('h3');h.textContent='Shop by Type';var s=document.createElement('span');s.textContent=rows.length+' choices';head.appendChild(h);head.appendChild(s);next.appendChild(head);next.appendChild(grid);root.appendChild(next);root.dataset.sqAirForceTypes='true';
+    var h2=root.querySelector('h2');if(h2)h2.textContent='Shop U.S. Air Force by Type';
+    document.querySelectorAll('collection-component').forEach(function(el){el.style.display='none';});
+    var used={},cursor=0;async function worker(){while(cursor<cards.length){var i=cursor++;await hydrate(cards[i],rows[i],used);if(cursor<cards.length)await sleep(750);}}worker().then(function(){root.setAttribute('data-sq-air-force-types-ready','true');});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',build,{once:true});else build();
+  [500,1200,2400].forEach(function(ms){setTimeout(build,ms);});
+})();
+</script>
+{% endif %}
+{% endif %}
