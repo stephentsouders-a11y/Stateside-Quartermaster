@@ -1,0 +1,85 @@
+name: Fred Taylor thumbnail and article image recovery
+
+on:
+  push:
+    branches:
+      - research/fred-taylor-video-capture
+  workflow_dispatch:
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl jq imagemagick
+          npm install -g playwright
+          npx playwright install chromium --with-deps
+
+      - name: Download YouTube generated stills
+        run: |
+          mkdir -p recovery/youtube_stills recovery/article_images recovery/diagnostics
+          for f in maxresdefault.jpg sddefault.jpg hqdefault.jpg mqdefault.jpg default.jpg 0.jpg 1.jpg 2.jpg 3.jpg hq1.jpg hq2.jpg hq3.jpg mq1.jpg mq2.jpg mq3.jpg; do
+            echo "FETCH $f"
+            curl -L --fail --retry 2 -A 'Mozilla/5.0' "https://i.ytimg.com/vi/4daoYCNbyBA/$f" -o "recovery/youtube_stills/$f" || true
+          done
+          identify recovery/youtube_stills/* > recovery/youtube_stills/dimensions.txt 2>&1 || true
+
+      - name: Extract article images with Chromium
+        run: |
+          cat > /tmp/article_images.js <<'EOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          const path = require('path');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const page=await browser.newPage({viewport:{width:1440,height:1600}});
+            await page.goto('https://historicexplorations.com/american-history/sergeant-first-class-fred-taylor/',{waitUntil:'networkidle',timeout:120000});
+            const imgs=await page.locator('img').evaluateAll(els=>els.map((e,i)=>({i,src:e.currentSrc||e.src,alt:e.alt||'',w:e.naturalWidth,h:e.naturalHeight})));
+            fs.writeFileSync('recovery/article_images/image_manifest.json',JSON.stringify(imgs,null,2));
+            console.log('ARTICLE_IMAGE_COUNT',imgs.length);
+            for (let i=0;i<imgs.length;i++) {
+              const loc=page.locator('img').nth(i);
+              try { await loc.scrollIntoViewIfNeeded(); await loc.screenshot({path:`recovery/article_images/img_${String(i).padStart(2,'0')}.png`}); } catch(e){ console.log('img fail',i,e.message); }
+            }
+            const iframe=page.locator('iframe').first();
+            if (await iframe.count()) {
+              await iframe.screenshot({path:'recovery/article_images/youtube_embed_thumbnail.png'}).catch(()=>{});
+            }
+            await browser.close();
+          })();
+          EOF
+          NODE_PATH=$(npm root -g) node /tmp/article_images.js
+
+      - name: Probe YouTube watch and embed HTML for storyboard metadata
+        run: |
+          curl -L -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36' 'https://www.youtube.com/watch?v=4daoYCNbyBA' -o recovery/diagnostics/watch.html || true
+          curl -L -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36' 'https://www.youtube.com/embed/4daoYCNbyBA' -o recovery/diagnostics/embed.html || true
+          python - <<'PY'
+          import re,html,json,os
+          for fn in ['watch.html','embed.html']:
+              p='recovery/diagnostics/'+fn
+              txt=open(p,encoding='utf-8',errors='ignore').read() if os.path.exists(p) else ''
+              out={
+                  'file':fn,
+                  'length':len(txt),
+                  'has_storyboards':'storyboard' in txt.lower(),
+                  'has_player_response':'ytInitialPlayerResponse' in txt,
+                  'has_video_id':'4daoYCNbyBA' in txt,
+              }
+              specs=re.findall(r'"spec":"([^"]+)"',txt)
+              out['spec_candidates']=[html.unescape(s).replace('\\u0026','&') for s in specs[:10]]
+              open('recovery/diagnostics/'+fn+'.json','w').write(json.dumps(out,indent=2))
+              print(out)
+          PY
+
+      - name: Upload recovered stills
+        uses: actions/upload-artifact@v4
+        with:
+          name: fred-taylor-thumbnail-recovery
+          path: recovery/
+          retention-days: 7
