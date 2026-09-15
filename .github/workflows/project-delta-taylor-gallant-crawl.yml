@@ -1,0 +1,80 @@
+name: Project Delta Taylor Gallant crawl
+
+on:
+  push:
+    branches:
+      - research/fred-taylor-video-capture
+  workflow_dispatch:
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g playwright
+      - run: npx playwright install chromium --with-deps
+      - name: Capture Taylor Gallant bios and crawl internal pages
+        run: |
+          mkdir -p delta_people/pages delta_people/images
+          cat > /tmp/crawl.js <<'EOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          const crypto = require('crypto');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const context=await browser.newContext({viewport:{width:1440,height:1600}});
+            const page=await context.newPage();
+            const seeds=[
+              'https://projectdelta-b52.com/new/taylor.html',
+              'https://projectdelta-b52.com/new/gallant.html',
+              'https://projectdelta-b52.com/new/operations_overview.html',
+              'https://projectdelta-b52.com/new/master-gallery.html',
+              'https://projectdelta-b52.com/delta_history.html'
+            ];
+            const discovered=new Set(seeds);
+            for(const u of seeds){
+              try{
+                await page.goto(u,{waitUntil:'networkidle',timeout:120000});
+                await page.waitForTimeout(1000);
+                const links=await page.locator('a').evaluateAll(as=>as.map(a=>a.href).filter(h=>h&&h.includes('projectdelta-b52.com')));
+                links.forEach(h=>discovered.add(h.split('#')[0]));
+              }catch(e){}
+            }
+            let idx=0; const hits=[];
+            for(const url of [...discovered].slice(0,150)){
+              try{
+                await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+                await page.waitForTimeout(500);
+                const body=(await page.locator('body').innerText().catch(()=>''));
+                if(/fred\s+taylor|henry\s+(j\.?\s*)?gallant|willie\s+gallant|joseph\s+gallant/i.test(body)){
+                  const slug=String(idx++).padStart(3,'0');
+                  await page.screenshot({path:`delta_people/pages/hit_${slug}.png`,fullPage:true});
+                  fs.writeFileSync(`delta_people/pages/hit_${slug}.txt`,url+'\n\n'+body);
+                  const imgs=await page.locator('img').evaluateAll(els=>els.map(e=>({src:e.currentSrc||e.src,alt:e.alt||'',w:e.naturalWidth,h:e.naturalHeight})).filter(x=>x.src));
+                  hits.push({url,images:imgs});
+                  let j=0;
+                  for(const im of imgs){
+                    try{
+                      const res=await context.request.get(im.src);
+                      if(res.ok()){
+                        const b=await res.body();
+                        const ext=(new URL(im.src).pathname.split('.').pop()||'bin').slice(0,5);
+                        const hash=crypto.createHash('sha1').update(b).digest('hex').slice(0,10);
+                        fs.writeFileSync(`delta_people/images/${slug}_${String(j++).padStart(2,'0')}_${hash}.${ext}`,b);
+                      }
+                    }catch(e){}
+                  }
+                }
+              }catch(e){}
+            }
+            fs.writeFileSync('delta_people/hits.json',JSON.stringify(hits,null,2));
+            await browser.close();
+          })();
+          EOF
+          NODE_PATH=$(npm root -g) node /tmp/crawl.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-delta-taylor-gallant-crawl
+          path: delta_people/
+          retention-days: 7
