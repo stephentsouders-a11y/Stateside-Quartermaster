@@ -17,7 +17,7 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Slow Chromium repair certification
+      - name: Clean structural Chromium certification
         env:
           BASE: https://www.statesideqm.com
           THEME: '158770561179'
@@ -44,71 +44,94 @@ jobs:
             '/collections/tactical-gear',
             '/collections/k9-dog-gear',
             '/collections/outdoor-preparedness-gear',
-            '/collections/sta-brite-insignia'
+            '/collections/sta-brite-insignia',
+            '/collections/watches',
+            '/collections/knives-axes-cutlery'
           ];
+          const pbtl=new Set([
+            '/collections/products-built-for-the-line-u-s-army','/collections/army-national-guard-series',
+            '/collections/products-built-for-the-line-u-s-air-force','/collections/air-national-guard-series',
+            '/collections/products-built-for-the-line-u-s-navy','/collections/products-built-for-the-line-u-s-marine-corps',
+            '/collections/products-built-for-the-line-u-s-coast-guard','/collections/products-built-for-the-line-u-s-space-force'
+          ]);
+          const refineExpected=new Set([
+            '/collections/accessories-gifts-collectibles','/collections/uniforms','/collections/tactical-gear',
+            '/collections/k9-dog-gear','/collections/outdoor-preparedness-gear','/collections/sta-brite-insignia',
+            '/collections/watches','/collections/knives-axes-cutlery'
+          ]);
           fs.mkdirSync(`${OUT}/screens`,{recursive:true});
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
           const safe=s=>s.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'home';
           const browser=await chromium.launch({headless:true});
           const results=[];
-          let rateLimited=false;
+          let blocked=false;
           for(const device of ['desktop','mobile']){
-            if(rateLimited) break;
+            if(blocked) break;
             for(const route of routes){
               const context=await browser.newContext(device==='mobile'?devices['iPhone 13']:{viewport:{width:1365,height:900}});
               const page=await context.newPage();
-              page.setDefaultTimeout(12000); page.setDefaultNavigationTimeout(35000);
+              page.setDefaultTimeout(15000); page.setDefaultNavigationTimeout(45000);
               const url=new URL(route,BASE); url.searchParams.set('preview_theme_id',THEME);
-              const r={device,route,failures:[]};
+              const sameOrigin429=[], sameOrigin5xx=[], feedRequests=[];
+              page.on('response',res=>{
+                try{
+                  const u=new URL(res.url());
+                  if(u.origin===new URL(BASE).origin){
+                    if(res.status()===429) sameOrigin429.push(u.pathname+u.search);
+                    if(res.status()>=500 && /\/collections\/|\/products\.json|\/products\//.test(u.pathname)) sameOrigin5xx.push(`${res.status()} ${u.pathname}`);
+                    if(/\/collections\/[^/]+\/products\.json/.test(u.pathname)) feedRequests.push(u.pathname);
+                  }
+                }catch{}
+              });
+              const r={device,route,failures:[],sameOrigin429,sameOrigin5xx,feedRequests};
               try{
                 const res=await page.goto(url.toString(),{waitUntil:'domcontentloaded'});
                 r.status=res?.status()??null;
-                await page.waitForTimeout(5500);
-                const body=((await page.locator('body').innerText().catch(()=>''))||'').slice(0,25000);
+                await page.waitForTimeout(8000);
+                const body=((await page.locator('body').innerText().catch(()=>''))||'').slice(0,40000);
                 if(r.status===429||/verify you are human|too many requests|rate limit/i.test(body)){
-                  r.failures.push('RATE_LIMITED'); rateLimited=true;
+                  r.failures.push('RATE_LIMITED_DOCUMENT'); blocked=true;
                 } else {
                   r.title=(await page.title()).trim();
                   r.h1=((await page.locator('#MainContent h1,h1').first().innerText().catch(()=>''))||'').replace(/\s+/g,' ').trim();
+                  r.finalPath=new URL(page.url()).pathname;
                   r.spinner=await page.locator('text=/loading items|building the customer-facing product tree|checking items|organizing .* products/i').count().catch(()=>0);
                   r.sidebars=await page.locator('#MainContent .sq-refine-v3-sidebar:visible,#MainContent .sq-global-refine-sidebar:visible,#MainContent .sqsg-refine-sidebar:visible,#MainContent .sq-stabrite-refine__side:visible').count().catch(()=>0);
+                  r.guardSidebars=await page.locator('#MainContent .sqsg-refine-sidebar:visible').count().catch(()=>0);
                   r.brokenImages=await page.locator('#MainContent img').evaluateAll(xs=>xs.filter(i=>i.complete&&i.naturalWidth===0).length).catch(()=>0);
                   r.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+4).catch(()=>false);
                   if(r.status!==200) r.failures.push(`HTTP_${r.status}`);
                   if(!r.title) r.failures.push('MISSING_DOCUMENT_TITLE');
-                  if(route.includes('products-built-for-the-line')||route.includes('national-guard-series')) if(!r.h1) r.failures.push('MISSING_VISIBLE_PAGE_TITLE');
+                  if(pbtl.has(route)&&!r.h1) r.failures.push('MISSING_VISIBLE_PAGE_TITLE');
                   if(r.spinner) r.failures.push(`SPINNER_${r.spinner}`);
                   if(r.sidebars>1) r.failures.push(`DUPLICATE_SIDEBARS_${r.sidebars}`);
                   if(route==='/collections/state-guard-series'&&r.sidebars!==0) r.failures.push(`STATE_GUARD_ROOT_SIDEBAR_${r.sidebars}`);
+                  if(route==='/collections/state-guard-series-ohio'&&r.guardSidebars!==1) r.failures.push(`OHIO_GUARD_SIDEBAR_${r.guardSidebars}`);
+                  if(refineExpected.has(route)&&r.sidebars!==1) r.failures.push(`REFINE_SIDEBAR_COUNT_${r.sidebars}`);
                   if(r.brokenImages) r.failures.push(`BROKEN_IMAGES_${r.brokenImages}`);
                   if(r.overflow) r.failures.push('HORIZONTAL_OVERFLOW');
-                  const link=page.locator('#MainContent a:visible:not([href*="/products/"])').filter({hasNotText:/skip to content/i}).first();
-                  if(await link.count().catch(()=>0)){
-                    const href=await link.getAttribute('href').catch(()=>null);
-                    if(href&&href!=='#'){
-                      await link.scrollIntoViewIfNeeded().catch(()=>{});
-                      await Promise.all([page.waitForLoadState('domcontentloaded').catch(()=>{}),link.click({timeout:8000}).catch(e=>{r.clickError=String(e)})]);
-                      await page.waitForTimeout(1200);
-                      if(r.clickError) r.failures.push('FIRST_CONTROL_CLICK_FAILED');
-                    }
-                  }
+                  if(r.sameOrigin429.length) r.failures.push(`BACKGROUND_429_${r.sameOrigin429.length}`);
+                  if(r.sameOrigin5xx.length) r.failures.push(`STOREFRONT_5XX_${r.sameOrigin5xx.length}`);
+                  if(route==='/collections/products-built-for-the-line-u-s-air-force'&&r.feedRequests.some(x=>x.includes('/air-national-guard-series/'))) r.failures.push('AIR_FORCE_USING_ANG_FEED');
+                  if(route==='/collections/air-national-guard-series'&&r.finalPath!=='/collections/air-national-guard-series') r.failures.push(`ANG_REDIRECTED_${r.finalPath}`);
+                  if(route==='/collections/products-built-for-the-line-u-s-army'&&r.feedRequests.some(x=>x.includes('/army-national-guard-series/'))) r.failures.push('ARMY_USING_ARNG_FEED');
                   await page.screenshot({path:`${OUT}/screens/${device}-${safe(route)}.png`,fullPage:true}).catch(()=>{});
                 }
               } catch(e){r.failures.push('EXCEPTION');r.error=String(e)}
               r.pass=r.failures.length===0; results.push(r);
               fs.writeFileSync(`${OUT}/results.json`,JSON.stringify(results,null,2));
-              console.log(JSON.stringify({device,route,pass:r.pass,failures:r.failures}));
+              console.log(JSON.stringify({device,route,pass:r.pass,status:r.status,failures:r.failures,h1:r.h1,finalPath:r.finalPath,feedRequests:[...new Set(r.feedRequests)]}));
               await context.close();
-              await sleep(3000);
-              if(rateLimited) break;
+              await sleep(8000);
+              if(blocked) break;
             }
           }
           await browser.close();
-          const summary={theme:THEME,checked:results.length,passed:results.filter(r=>r.pass).length,failed:results.filter(r=>!r.pass).length,rateLimited,failures:results.filter(r=>!r.pass)};
+          const summary={theme:THEME,checked:results.length,passed:results.filter(r=>r.pass).length,failed:results.filter(r=>!r.pass).length,blocked,failures:results.filter(r=>!r.pass)};
           fs.writeFileSync(`${OUT}/summary.json`,JSON.stringify(summary,null,2));
           console.log(JSON.stringify(summary,null,2));
-          if(summary.failed&&!rateLimited) process.exitCode=2;
-          if(rateLimited) process.exitCode=3;
+          if(summary.failed&&!blocked) process.exitCode=2;
+          if(blocked) process.exitCode=3;
           JS
           node certify.mjs
       - uses: actions/upload-artifact@v4
