@@ -1,0 +1,18 @@
+{% liquid
+  assign sq_refine_restore = false
+  assign sq_refine_ohio = false
+  if request.page_type == 'collection'
+    case collection.handle
+      when 'accessories-gifts-collectibles', 'uniforms', 'tactical-gear', 'k9-dog-gear', 'outdoor-preparedness-gear', 'sta-brite-insignia', 'watches', 'knives-axes-cutlery'
+        assign sq_refine_restore = true
+      when 'state-guard-series-ohio'
+        assign sq_refine_restore = true
+        assign sq_refine_ohio = true
+    endcase
+  endif
+%}
+{% if sq_refine_restore %}
+<link rel="stylesheet" href="{{ 'sq-refine-restoration.css' | asset_url }}">
+<div class="sq-refine-restoration-anchor" data-sq-refine-restoration-anchor data-root-handle="{{ collection.handle | escape }}" data-ohio="{% if sq_refine_ohio %}true{% else %}false{% endif %}"></div>
+<script src="{{ 'sq-refine-restoration.js' | asset_url }}" defer></script>
+{% endif %}
