@@ -1,0 +1,59 @@
+name: Sep15 Ohio JavaScript diagnostic
+on:
+  push:
+    paths:
+      - '.github/workflows/sep15-ohio-js-debug.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Diagnose Ohio scripts
+        run: |
+          cat > debug.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('out',{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:1100}});
+          const pageErrors=[];
+          page.on('pageerror',e=>pageErrors.push({message:e.message,stack:e.stack}));
+          let response=await page.goto('https://www.statesideqm.com/collections/state-guard-series-ohio?preview_theme_id=158770561179',{waitUntil:'domcontentloaded',timeout:60000});
+          if(response?.status()===429){await page.waitForTimeout(15000);response=await page.goto('https://www.statesideqm.com/collections/state-guard-series-ohio?preview_theme_id=158770561179',{waitUntil:'domcontentloaded',timeout:60000});}
+          await page.waitForTimeout(7000);
+          const scripts=await page.evaluate(async()=>{
+            const rows=[];
+            const all=[...document.scripts];
+            for(let i=0;i<all.length;i++){
+              const script=all[i];
+              let source=script.src||('inline#'+i),text='';
+              try{text=script.src?await fetch(script.src,{credentials:'same-origin'}).then(r=>r.text()):script.textContent||'';}catch(e){rows.push({source,fetchError:String(e)});continue;}
+              let syntax=null;
+              try{new Function(text);}catch(e){syntax={message:e.message,stack:e.stack};}
+              if(syntax || /ohio|state.guard|vac.stock|sq.refine/i.test(source+' '+text.slice(0,1000))){rows.push({source,length:text.length,syntax,head:text.slice(0,500)});}
+            }
+            const main=document.querySelector('#MainContent');
+            return {url:location.href,title:document.title,rows,mainText:(main?.innerText||'').slice(0,5000),htmlClasses:document.documentElement.className,owner:document.documentElement.dataset.sqStateGuardRefineOwner||'',sidebarCount:document.querySelectorAll('[data-sq-ohio-refine-host]').length};
+          });
+          const out={status:response?.status()??null,pageErrors,scripts};
+          fs.writeFileSync('out/debug.json',JSON.stringify(out,null,2));
+          await page.screenshot({path:'out/ohio-debug.png',fullPage:true});
+          console.log(JSON.stringify(out,null,2));
+          await browser.close();
+          EOF
+          node debug.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep15-ohio-js-debug
+          path: out
+          retention-days: 7
