@@ -1,0 +1,24 @@
+{% assign sq_army_family = false %}
+{% if collection.handle == 'products-built-for-the-line-u-s-army' or collection.handle == 'army-national-guard-series' %}{% assign sq_army_family = true %}{% endif %}
+{% if request.page_type == 'collection' and sq_army_family %}
+<script data-sq-army-canonical-catalog-v26>
+(function(){
+if(window.__sqArmyCanonicalPreloadV26)return;window.__sqArmyCanonicalPreloadV26=true;
+window.__sqArmyCanonicalCatalogV18=true;
+window.__sqArmyCanonicalCatalogV21=true;
+window.__sqArmyLiteralGuardMirrorV25=false;
+window.__sqPbtlFlashlightRoutingHotfixV5=true;
+window.__sqPbtlFlashlightMoveDedupeV2=true;
+var priorFetch=window.fetch.bind(window);
+window.fetch=function(input,init){
+  try{
+    var raw=typeof input==='string'?input:(input&&input.url)||'',u=new URL(raw,location.origin),page=parseInt(u.searchParams.get('page')||'1',10);
+    if(/^\/collections\/(?:products-built-for-the-line-u-s-army|army-national-guard-series)\/products\.json$/.test(u.pathname)&&page>24){
+      return Promise.resolve(new Response(JSON.stringify({products:[]}),{status:200,headers:{'content-type':'application/json; charset=utf-8','x-sq-army-canonical':'v26'}}));
+    }
+  }catch(e){}
+  return priorFetch(input,init);
+};
+})();
+</script>
+{% endif %}
