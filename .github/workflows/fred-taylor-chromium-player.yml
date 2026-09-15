@@ -1,0 +1,170 @@
+name: Fred Taylor Chromium player capture
+
+on:
+  push:
+    branches:
+      - research/fred-taylor-video-capture
+  workflow_dispatch:
+
+jobs:
+  chromium-capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Chromium capture tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python -m pip install pillow
+          npm install -g playwright
+          npx playwright install chromium --with-deps
+
+      - name: Capture article and discover embedded player
+        run: |
+          mkdir -p research_output/page research_output/video_frames research_output/browser_recording research_output/diagnostics
+          cat > /tmp/article.js <<'EOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          (async()=>{
+            const browser = await chromium.launch({headless:true});
+            const page = await browser.newPage({viewport:{width:1440,height:1800}});
+            await page.goto('https://historicexplorations.com/american-history/sergeant-first-class-fred-taylor/', {waitUntil:'networkidle',timeout:120000});
+            await page.screenshot({path:'research_output/page/fred_taylor_article_full.png',fullPage:true});
+            fs.writeFileSync('research_output/page/fred_taylor_article.txt', await page.locator('body').innerText());
+            const iframes = await page.locator('iframe').evaluateAll(els => els.map(x => x.src));
+            fs.writeFileSync('research_output/page/iframe_sources.json', JSON.stringify(iframes,null,2));
+            console.log('Embedded iframe sources:', iframes);
+            await browser.close();
+          })();
+          EOF
+          NODE_PATH=$(npm root -g) node /tmp/article.js
+
+      - name: Chromium video playback and frame capture
+        run: |
+          cat > /tmp/player.js <<'EOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          const path = require('path');
+          (async()=>{
+            const browser = await chromium.launch({
+              headless:true,
+              args:['--autoplay-policy=no-user-gesture-required','--disable-blink-features=AutomationControlled']
+            });
+            const context = await browser.newContext({
+              viewport:{width:1280,height:720},
+              recordVideo:{dir:'research_output/browser_recording',size:{width:1280,height:720}},
+              userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36'
+            });
+            const page = await context.newPage();
+            const recorder = page.video();
+            const candidates = [
+              'https://www.youtube.com/embed/4daoYCNbyBA?autoplay=1&mute=1&controls=1&rel=0',
+              'https://www.youtube-nocookie.com/embed/4daoYCNbyBA?autoplay=1&mute=1&controls=1&rel=0',
+              'https://www.youtube.com/watch?v=4daoYCNbyBA'
+            ];
+            let playable = false;
+            let selected = '';
+            for (const u of candidates) {
+              console.log('Trying player URL:', u);
+              try {
+                await page.goto(u,{waitUntil:'domcontentloaded',timeout:120000});
+                await page.waitForTimeout(7000);
+                await page.screenshot({path:`research_output/diagnostics/player_${candidates.indexOf(u)+1}.png`,fullPage:true});
+                fs.writeFileSync(`research_output/diagnostics/player_${candidates.indexOf(u)+1}.txt`, await page.locator('body').innerText().catch(()=>''));
+                const count = await page.locator('video').count();
+                console.log('video element count:', count);
+                if (count > 0) {
+                  let d = await page.evaluate(() => {
+                    const v=document.querySelector('video');
+                    return v ? v.duration : 0;
+                  });
+                  for (let i=0; i<12 && (!Number.isFinite(d) || d <= 0); i++) {
+                    await page.waitForTimeout(1000);
+                    d = await page.evaluate(() => {
+                      const v=document.querySelector('video');
+                      return v ? v.duration : 0;
+                    });
+                  }
+                  if (Number.isFinite(d) && d > 0) {
+                    playable=true; selected=u; break;
+                  }
+                }
+              } catch (e) {
+                console.log('Candidate failed:', e.message);
+              }
+            }
+            if (!playable) {
+              fs.writeFileSync('research_output/diagnostics/failure.txt','No playable HTML5 video element with finite duration was available in Chromium.');
+              await context.close();
+              await browser.close();
+              process.exit(2);
+            }
+            console.log('Selected player URL:', selected);
+            const duration = await page.evaluate(() => document.querySelector('video').duration);
+            fs.writeFileSync('research_output/video_duration_seconds.txt', String(duration));
+            console.log('Video duration seconds:', duration);
+            const video = page.locator('video');
+            const interval = 2;
+            let index = 0;
+            for (let t=0; t<duration; t+=interval) {
+              await page.evaluate(async (tt) => {
+                const v=document.querySelector('video');
+                v.muted=true;
+                v.pause();
+                await new Promise(resolve => {
+                  let done=false;
+                  const finish=()=>{ if(done) return; done=true; resolve(); };
+                  v.addEventListener('seeked',finish,{once:true});
+                  v.currentTime=Math.min(tt,Math.max(0,v.duration-0.1));
+                  setTimeout(finish,3500);
+                });
+              }, t);
+              await page.waitForTimeout(180);
+              const fn=`research_output/video_frames/frame_${String(index).padStart(5,'0')}_${String(Math.floor(t)).padStart(5,'0')}s.png`;
+              await video.screenshot({path:fn});
+              if (index % 15 === 0) console.log(`CAPTURE_PROGRESS ${index} frames, timestamp ${t}s / ${duration}s`);
+              index++;
+            }
+            fs.writeFileSync('research_output/frame_count.txt',String(index));
+            await context.close();
+            if (recorder) await recorder.saveAs('research_output/browser_recording/fred_taylor_player_capture.webm');
+            await browser.close();
+            console.log('CAPTURE_COMPLETE frames:', index);
+          })();
+          EOF
+          NODE_PATH=$(npm root -g) node /tmp/player.js
+
+      - name: Build screenshot contact sheets
+        if: always()
+        run: |
+          mkdir -p research_output/contact_sheets
+          python - <<'PY'
+          from PIL import Image,ImageDraw
+          import glob,os
+          files=sorted(glob.glob('research_output/video_frames/frame_*.png'))
+          print('Contact sheet source frame count:', len(files))
+          batch=20
+          for bi in range(0,len(files),batch):
+              chunk=files[bi:bi+batch]
+              sheet=Image.new('RGB',(1600,900),'white')
+              for i,f in enumerate(chunk):
+                  im=Image.open(f).convert('RGB')
+                  im.thumbnail((380,180))
+                  x=(i%4)*400+(400-im.width)//2
+                  y=(i//4)*180
+                  sheet.paste(im,(x,y))
+                  ImageDraw.Draw(sheet).text(((i%4)*400+8,y+158),os.path.basename(f),fill='black')
+              out=f'research_output/contact_sheets/contact_{bi//batch+1:03d}.jpg'
+              sheet.save(out,quality=90)
+              print('Wrote',out)
+          PY
+
+      - name: Upload all Chromium capture evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fred-taylor-chromium-player-capture
+          path: research_output/
+          retention-days: 7
