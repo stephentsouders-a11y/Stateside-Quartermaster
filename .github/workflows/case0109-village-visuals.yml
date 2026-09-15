@@ -16,7 +16,7 @@ jobs:
         run: |
           mkdir -p case0109_visuals
           python - <<'PY'
-          import requests, os
+          import requests, os, json
           urls = {
             '1960s_central_highlands_village_joseph_carrier.jpg': 'https://cdn.baogialai.com.vn/images/5d93661b5836672daa8629aec90c6a0bc4cc2bedcb0c5752fa568786730112f115298b146129d111e2689c53058570fc60aa308843c8208c6a2b373124f148a0938f2371dcd91d3905587cf7308a34ca43ac4dcea9ab9bf18c34ab24cf3d49e4ee97e58b22a5accf616819f8fa924a6fd207cc6da57067726738fde095bdda1350d39b57d2e79d72a1b6dc2dd7866221/images3080895__nh_1_H_nh__nh_con_ng__i_v__ki_n_tr_c_c_a_bu_n_l_ng_Jrai_trong_th_p_ni_n_1960s.jpg',
             'mo_hra_dap_modern_road.jpg': 'https://cdn.baogialai.com.vn/images/d5e98b706c8764fc665c0a4e8481036249bda584fcbc547e0f4e7abc71d0caa5675708fd83e9b26d98914cba87cb7939f352fd9b8feb47f39299ce213868364450d39b57d2e79d72a1b6dc2dd7866221/3-canh-quan-lang-mo-hra-dap.jpg',
@@ -24,15 +24,24 @@ jobs:
             'dinh_hnop_cand_2013.jpg': 'https://www.cand.com.vn/Uploaded_CANDONLINE/hakhong/3_dinh2780-450.jpg',
           }
           headers={'User-Agent':'Mozilla/5.0'}
+          manifest=[]
           for name,url in urls.items():
-              r=requests.get(url,headers=headers,timeout=30)
-              print(name, r.status_code, r.headers.get('content-type'), len(r.content))
-              r.raise_for_status()
-              open(os.path.join('case0109_visuals',name),'wb').write(r.content)
+              try:
+                  r=requests.get(url,headers=headers,timeout=30)
+                  print(name, r.status_code, r.headers.get('content-type'), len(r.content))
+                  ok=(r.status_code==200 and (r.headers.get('content-type') or '').startswith('image/') and len(r.content)>1000)
+                  manifest.append({'name':name,'url':url,'status':r.status_code,'ok':ok,'content_type':r.headers.get('content-type'),'bytes':len(r.content)})
+                  if ok:
+                      open(os.path.join('case0109_visuals',name),'wb').write(r.content)
+              except Exception as e:
+                  manifest.append({'name':name,'url':url,'ok':False,'error':str(e)})
+                  print('FAILED',name,e)
+          open('case0109_visuals/manifest.json','w').write(json.dumps(manifest,indent=2,ensure_ascii=False))
           PY
-          file case0109_visuals/*
+          file case0109_visuals/* || true
       - name: Upload sourced visuals
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: case0109-village-visuals
           path: case0109_visuals/
