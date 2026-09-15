@@ -1,0 +1,129 @@
+name: Sep15 State Guard focused certification
+on:
+  push:
+    paths:
+      - '.github/workflows/sep15-state-guard-focused-cert.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Focused State Guard certification
+        run: |
+          cat > focused.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const base='https://www.statesideqm.com';
+          const theme='158770561179';
+          const checks=[
+            ['state-guard-root','/collections/state-guard-series','root'],
+            ['ohio-clean','/collections/state-guard-series-ohio','ohio'],
+            ['ohio-bad-availability','/collections/state-guard-series-ohio?filter.v.availability=1','ohio']
+          ];
+          const viewports=[['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]];
+          fs.mkdirSync('out',{recursive:true});
+          const results=[];
+          async function gotoWithRetry(page,url){
+            let status=null,error=null;
+            for(let attempt=1;attempt<=4;attempt++){
+              try{
+                const r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+                status=r?.status()??null;
+                if(status!==429)return{status,error:null,attempt};
+              }catch(e){error=String(e);}
+              await page.waitForTimeout(12000*attempt);
+            }
+            return{status,error,attempt:4};
+          }
+          for(const [slug,route,kind] of checks){
+            for(const [device,viewport] of viewports){
+              const browser=await chromium.launch({headless:true});
+              const ctx=await browser.newContext({viewport});
+              const page=await ctx.newPage();
+              const consoleErrors=[];
+              page.on('pageerror',e=>consoleErrors.push('pageerror:'+String(e)));
+              page.on('console',m=>{if(m.type()==='error')consoleErrors.push('console:'+m.text())});
+              const u=new URL(route,base);u.searchParams.set('preview_theme_id',theme);
+              const nav=await gotoWithRetry(page,u.toString());
+              if(nav.status===200&&!nav.error)await page.waitForTimeout(8000);
+              const data=await page.evaluate(({kind,device})=>{
+                const main=document.querySelector('#MainContent');
+                const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;
+                const text=(main?.innerText||'').replace(/\s+/g,' ').trim();
+                const sidebars=[...(main?.querySelectorAll('.sq-global-refine-sidebar,[aria-label="Refine Products"]')||[])].filter(vis);
+                const native=[...(main?.querySelectorAll('.facets-block-wrapper--horizontal,.facets-container-horizontal,theme-drawer#filters-drawer,.facets-toggle')||[])].filter(vis);
+                const cards=[...(main?.querySelectorAll('.sg-entity,.sq-ohio-product,.product-card,.product-grid__item')||[])].filter(vis);
+                const root=document.querySelector('[data-sq-state-guard-root]');
+                const promo=document.querySelector('[data-sq-state-guard-merch-feature]');
+                const chooser=[...document.querySelectorAll('h2')].find(x=>/choose your state or territory/i.test((x.textContent||'').trim()));
+                const grid=root?.querySelector('.sg-entity-grid');
+                const broken=[...(main?.querySelectorAll('img')||[])].filter(img=>img.complete&&img.naturalWidth===0).map(img=>({src:img.currentSrc||img.src,alt:img.alt||'',handle:img.closest('[data-sg-handle]')?.getAttribute('data-sg-handle')||'',className:img.className||''}));
+                const params=new URL(location.href).searchParams;
+                const categories=['Uniforms','Insignia & Identification','Awards & Decorations','Headwear','Patches & Flags','Footwear & Uniform Accessories','Apparel & Merchandise','Equipment & Field Gear','Reference & Training'];
+                const orgs=['Ohio Military Reserve','Ohio Naval Militia','Ohio Cyber Reserve'];
+                const pageSizes=['50','100','250'].filter(v=>[...(main?.querySelectorAll('input[name="sq_ohio_page_size"]')||[])].some(x=>x.value===v));
+                const availabilityLabels=[...document.querySelectorAll('summary,h2,h3,label,span')].filter(e=>vis(e)&&/^availability$/i.test((e.textContent||'').trim())).length;
+                const labelClickLeak=[...(main?.querySelectorAll('.sq-ohio-refine-choice>span')||[])].filter(e=>getComputedStyle(e).pointerEvents!=='none').length;
+                const rootOrder=!!(promo&&chooser&&(promo.compareDocumentPosition(chooser)&Node.DOCUMENT_POSITION_FOLLOWING));
+                const gridCols=grid?getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length:0;
+                return {
+                  kind,device,url:location.href,title:document.title,h1:main?.querySelector('h1')?.textContent?.trim()||'',
+                  textLen:text.length,sidebars:sidebars.length,nativeFacets:native.length,cards:cards.length,
+                  rootOrder,gridCols,broken,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,
+                  spinner:/loading refinements|loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(text),
+                  bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+text),
+                  availabilityLeak:params.has('filter.v.availability')||params.has('sq_oh_availability'),
+                  orgsFound:orgs.filter(x=>text.includes(x)),categoriesFound:categories.filter(x=>text.includes(x)),pageSizes,
+                  availabilityLabels,labelClickLeak,
+                  stateHandles:[...(root?.querySelectorAll('[data-sg-handle]')||[])].map(x=>x.getAttribute('data-sg-handle')),
+                  soldOutVisible:[...(main?.querySelectorAll('.sq-ohio-product__stock--sold')||[])].filter(vis).length
+                };
+              },{kind,device}).catch(e=>({kind,device,bad:true,evaluateError:String(e),broken:[]}));
+              let interaction=null;
+              if(kind==='ohio'&&nav.status===200&&!nav.error&&!data.bad&&!data.spinner){
+                interaction=await page.evaluate(async()=>{
+                  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+                  const box=[...document.querySelectorAll('input[data-sq-ohio-group="organization"]')].find(x=>x.value==='Ohio Military Reserve');
+                  if(!box)return{available:false};
+                  const before=location.href;
+                  box.click();await sleep(700);const after=location.href;
+                  history.back();await sleep(900);const back=location.href;
+                  history.forward();await sleep(900);const forward=location.href;
+                  return{available:true,before,after,back,forward,afterSet:new URL(after).searchParams.get('sq_oh_org')==='Ohio Military Reserve',backCleared:!new URL(back).searchParams.has('sq_oh_org'),forwardSet:new URL(forward).searchParams.get('sq_oh_org')==='Ohio Military Reserve'};
+                }).catch(e=>({available:false,error:String(e)}));
+              }
+              let failed=nav.status!==200||!!nav.error||data.bad||data.spinner||data.overflow||data.broken.length>0||data.textLen<80;
+              if(kind==='root')failed ||= data.sidebars!==0||!data.rootOrder||data.cards<20||(device==='desktop'&&data.gridCols!==4);
+              if(kind==='ohio')failed ||= data.sidebars!==1||data.nativeFacets!==0||data.availabilityLeak||data.orgsFound?.length!==3||data.categoriesFound?.length<5||data.pageSizes?.length!==3||data.availabilityLabels!==0||data.labelClickLeak!==0||data.cards<1||!interaction?.available||!interaction.afterSet||!interaction.backCleared||!interaction.forwardSet;
+              const meaningfulErrors=consoleErrors.filter(x=>!/favicon|Failed to load resource.*404|ResizeObserver loop|ERR_BLOCKED_BY_CLIENT/i.test(x));
+              if(meaningfulErrors.length>3)failed=true;
+              const row={slug,device,status:nav.status,attempt:nav.attempt,navigationError:nav.error,failed:!!failed,consoleErrors:meaningfulErrors.slice(0,20),...data,interaction};
+              results.push(row);console.log('FOCUSED '+JSON.stringify(row));
+              await page.screenshot({path:`out/${slug}-${device}.png`,fullPage:true}).catch(()=>{});
+              await ctx.close();await browser.close();
+              await new Promise(r=>setTimeout(r,7000));
+            }
+            await new Promise(r=>setTimeout(r,10000));
+          }
+          const failures=results.filter(x=>x.failed);
+          fs.writeFileSync('out/focused-results.json',JSON.stringify({theme,tested:results.length,passed:results.length-failures.length,failed:failures.length,failures,results},null,2));
+          console.log(`FOCUSED CERT ${results.length-failures.length}/${results.length} PASS; ${failures.length} FAIL`);
+          if(failures.length)process.exitCode=2;
+          EOF
+          node focused.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep15-state-guard-focused-cert
+          path: out
+          retention-days: 7
