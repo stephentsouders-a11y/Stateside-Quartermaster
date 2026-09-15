@@ -1,0 +1,39 @@
+name: CASE 0109 village visuals
+
+on:
+  push:
+    branches:
+      - research/browseract-case0109
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download sourced village and local-history images
+        run: |
+          mkdir -p case0109_visuals
+          python - <<'PY'
+          import requests, os
+          urls = {
+            '1960s_central_highlands_village_joseph_carrier.jpg': 'https://cdn.baogialai.com.vn/images/5d93661b5836672daa8629aec90c6a0bc4cc2bedcb0c5752fa568786730112f115298b146129d111e2689c53058570fc60aa308843c8208c6a2b373124f148a0938f2371dcd91d3905587cf7308a34ca43ac4dcea9ab9bf18c34ab24cf3d49e4ee97e58b22a5accf616819f8fa924a6fd207cc6da57067726738fde095bdda1350d39b57d2e79d72a1b6dc2dd7866221/images3080895__nh_1_H_nh__nh_con_ng__i_v__ki_n_tr_c_c_a_bu_n_l_ng_Jrai_trong_th_p_ni_n_1960s.jpg',
+            'mo_hra_dap_modern_road.jpg': 'https://cdn.baogialai.com.vn/images/d5e98b706c8764fc665c0a4e8481036249bda584fcbc547e0f4e7abc71d0caa5675708fd83e9b26d98914cba87cb7939f352fd9b8feb47f39299ce213868364450d39b57d2e79d72a1b6dc2dd7866221/3-canh-quan-lang-mo-hra-dap.jpg',
+            'mo_hra_dap_modern_communal_house.jpg': 'https://cdn.baogialai.com.vn/images/18a0651672861ca66357657ae76bf436e942ac4ebac969fc60339b0b143ca15542e05965fb5cb4b753e47a32d916fa0b53e7754609f07b1ad84becad61637d78f117f7b2eafc9d274189976c6cbbda32ba8b9c06aa21692991fd1ccd821f6227984b53c0a6fe4f1ca0c5a1d8b6bbb925/4-nha-rong-truyen-thong-cua-nguoi-ba-na-do-du-an-phuc-dung.jpg',
+            'dinh_hnop_cand_2013.jpg': 'https://www.cand.com.vn/Uploaded_CANDONLINE/hakhong/3_dinh2780-450.jpg',
+          }
+          headers={'User-Agent':'Mozilla/5.0'}
+          for name,url in urls.items():
+              r=requests.get(url,headers=headers,timeout=30)
+              print(name, r.status_code, r.headers.get('content-type'), len(r.content))
+              r.raise_for_status()
+              open(os.path.join('case0109_visuals',name),'wb').write(r.content)
+          PY
+          file case0109_visuals/*
+      - name: Upload sourced visuals
+        uses: actions/upload-artifact@v4
+        with:
+          name: case0109-village-visuals
+          path: case0109_visuals/
+          retention-days: 7
