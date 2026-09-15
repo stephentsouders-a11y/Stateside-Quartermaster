@@ -1,0 +1,37 @@
+name: Fred Taylor official profile capture
+on:
+  push:
+    branches: [research/fred-taylor-video-capture]
+  workflow_dispatch:
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install playwright
+      - run: npx playwright install chromium --with-deps
+      - name: Capture official profile
+        run: |
+          mkdir -p official_profile
+          cat > /tmp/capture.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const browser = await chromium.launch({headless:true});
+          const page = await browser.newPage({viewport:{width:1440,height:1800}});
+          await page.goto('https://dpaa-mil.sites.crmforce.mil/dpaaProfile?id=a0Jt0000000KYjOEAW',{waitUntil:'domcontentloaded',timeout:120000});
+          await page.waitForTimeout(8000);
+          fs.writeFileSync('official_profile/profile.txt',await page.locator('body').innerText());
+          fs.writeFileSync('official_profile/profile.html',await page.content());
+          await page.screenshot({path:'official_profile/profile.png',fullPage:true});
+          const imgs=await page.locator('img').evaluateAll(els=>els.map((e,i)=>({i,src:e.currentSrc||e.src,alt:e.alt||'',w:e.naturalWidth,h:e.naturalHeight})));
+          fs.writeFileSync('official_profile/images.json',JSON.stringify(imgs,null,2));
+          for(const im of imgs){try{await page.locator('img').nth(im.i).screenshot({path:`official_profile/image_${String(im.i).padStart(2,'0')}.png`});}catch{}}
+          await browser.close();
+          EOF
+          node /tmp/capture.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fred-taylor-official-profile
+          path: official_profile/
+          retention-days: 7
