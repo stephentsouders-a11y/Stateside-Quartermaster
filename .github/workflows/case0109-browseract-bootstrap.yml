@@ -1,0 +1,36 @@
+name: CASE 0109 BrowserAct bootstrap
+
+on:
+  push:
+    branches:
+      - research/browseract-case0109
+  workflow_dispatch:
+
+jobs:
+  browseract-bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv and BrowserAct CLI
+        run: |
+          python -m pip install --upgrade pip uv
+          uv tool install browser-act-cli --python 3.12
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Verify BrowserAct and load runtime skill
+        run: |
+          mkdir -p browseract_bootstrap
+          export PATH="$HOME/.local/bin:$PATH"
+          browser-act --version | tee browseract_bootstrap/version.txt
+          browser-act get-skills core --skill-version 2.0.2 | tee browseract_bootstrap/core_skill.txt
+          browser-act browser list | tee browseract_bootstrap/browser_list.txt || true
+      - name: Upload bootstrap diagnostics
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: case0109-browseract-bootstrap
+          path: browseract_bootstrap/
+          retention-days: 7
