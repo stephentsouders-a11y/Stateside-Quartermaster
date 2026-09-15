@@ -1,4 +1,4 @@
-name: Sep15 ARNG isolated spinner diagnostic
+name: Sep15 ARNG repeated render diagnostic
 on:
   push:
     paths:
@@ -16,21 +16,32 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Trace ARNG unresolved loading text in isolation
+      - name: Retry ARNG current-draft rendering three times
         run: |
           cat > diag.mjs <<'EOF'
           import { chromium } from 'playwright'; import fs from 'fs';
-          const base='https://www.statesideqm.com',theme='158770561179';
-          const routes=['army-national-guard-series'];
-          const browser=await chromium.launch({headless:true});const rows=[];
-          for(const h of routes){const page=await browser.newPage({viewport:{width:1440,height:1000}});const u=new URL('/collections/'+h,base);u.searchParams.set('preview_theme_id',theme);const rec={handle:h,status:null,nodes:[],scripts:[],requests:[],console:[]};page.on('response',r=>{if(r.status()>=400||/collections\/.+(products\.json|view=|section_id)/.test(r.url()))rec.requests.push({status:r.status(),url:r.url()})});page.on('console',m=>{if(m.type()==='error'||/fetch|load|product/i.test(m.text()))rec.console.push({type:m.type(),text:m.text().slice(0,1000)})});try{const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000});rec.status=r?.status()??null;await page.waitForTimeout(8000);rec.title=await page.title();rec.h1=await page.locator('#MainContent h1,h1').first().innerText().catch(()=>null);rec.nodes=await page.evaluate(()=>{const rx=/checking items|loading items|counting items|building the customer-facing product tree|organizing .* products/i;return [...document.querySelectorAll('#MainContent *')].filter(e=>e.children.length===0&&rx.test((e.textContent||'').trim())).slice(0,60).map(e=>{let p=e;const chain=[];for(let i=0;i<7&&p;i++,p=p.parentElement)chain.push({tag:p.tagName,cls:p.className||'',id:p.id||'',attrs:[...p.attributes].filter(a=>a.name.startsWith('data-sq')).map(a=>[a.name,a.value])});return{text:(e.textContent||'').trim(),html:e.outerHTML.slice(0,1500),chain}})});rec.scripts=await page.evaluate(()=>{const needles=/checking items|loading items|counting items|building the customer-facing product tree|organizing/i;return [...document.querySelectorAll('script:not([src])')].map((s,i)=>({i,mark:[...s.attributes].filter(a=>a.name.startsWith('data-sq')).map(a=>a.name+'='+a.value).join(' '),text:s.textContent||''})).filter(x=>needles.test(x.text)).map(x=>({i:x.i,mark:x.mark,excerpt:x.text.match(/.{0,400}(checking items|loading items|counting items|building the customer-facing product tree|organizing).{0,900}/i)?.[0]||x.text.slice(0,1400)})).slice(0,30)});await page.screenshot({path:`${h}.png`,fullPage:false}).catch(()=>{})}catch(e){rec.error=String(e)}rows.push(rec);await page.close()}await browser.close();fs.mkdirSync('out',{recursive:true});fs.writeFileSync('out/results.json',JSON.stringify(rows,null,2));for(const r of rows)console.log('\n### '+r.handle+' '+r.status+'\n'+JSON.stringify(r,null,2));
+          const base='https://www.statesideqm.com',theme='158770561179',handle='army-national-guard-series';
+          const browser=await chromium.launch({headless:true}); const rows=[];
+          for(let attempt=1;attempt<=3;attempt++){
+            const context=await browser.newContext({viewport:{width:1440,height:1000}}); const page=await context.newPage();
+            const u=new URL('/collections/'+handle,base); u.searchParams.set('preview_theme_id',theme); u.searchParams.set('_sq_attempt',String(attempt));
+            const rec={attempt,status:null,requests:[],nodes:[]};
+            page.on('response',r=>{if(r.status()>=400||/collections\/.+(products\.json|view=|section_id)/.test(r.url()))rec.requests.push({status:r.status(),url:r.url()})});
+            try{
+              const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000}); rec.status=r?.status()??null;
+              await page.waitForTimeout(9000); rec.title=await page.title(); rec.h1=await page.locator('#MainContent h1,h1').first().innerText().catch(()=>null);
+              rec.nodes=await page.evaluate(()=>{const rx=/checking items|loading items|counting items|building the customer-facing product tree|organizing .* products/i;return [...document.querySelectorAll('#MainContent *')].filter(e=>e.children.length===0&&rx.test((e.textContent||'').trim())).map(e=>(e.textContent||'').trim()).slice(0,30)});
+              rec.loadState=await page.locator('[data-sqbfl-load-state]').first().getAttribute('data-sqbfl-load-state').catch(()=>null);
+            }catch(e){rec.error=String(e)}
+            rows.push(rec); console.log(JSON.stringify(rec)); await context.close();
+            if(attempt<3) await new Promise(r=>setTimeout(r,15000));
+          }
+          await browser.close(); fs.mkdirSync('out',{recursive:true}); fs.writeFileSync('out/results.json',JSON.stringify(rows,null,2));
           EOF
           node diag.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: sep15-arng-isolated-spinner-source
-          path: |
-            out
-            *.png
+          name: sep15-arng-repeated-render
+          path: out
           retention-days: 7
