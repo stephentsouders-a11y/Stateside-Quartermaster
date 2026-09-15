@@ -1,0 +1,25 @@
+name: Theme routing regression tests
+
+on:
+  pull_request:
+    paths:
+      - 'shopify/snippets/**'
+      - 'tests/theme-routing.test.mjs'
+      - '.github/workflows/theme-routing-tests.yml'
+  push:
+    branches:
+      - 'audit/**'
+    paths:
+      - 'shopify/snippets/**'
+      - 'tests/theme-routing.test.mjs'
+      - '.github/workflows/theme-routing-tests.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/theme-routing.test.mjs
