@@ -1,0 +1,72 @@
+name: Sep15 final cross-store regression certification
+on:
+  push:
+    paths:
+      - '.github/workflows/sep15-cross-store-regression-cert.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Cross-store Chromium certification
+        run: |
+          cat > regression.mjs <<'EOF'
+          import { chromium } from 'playwright'; import fs from 'fs';
+          const base='https://www.statesideqm.com',theme='158770561179';
+          const routes=[
+            ['army','/collections/products-built-for-the-line-u-s-army'],
+            ['arng','/collections/army-national-guard-series'],
+            ['air-force','/collections/products-built-for-the-line-u-s-air-force'],
+            ['ang','/collections/air-national-guard-series'],
+            ['navy','/collections/products-built-for-the-line-u-s-navy'],
+            ['marines','/collections/products-built-for-the-line-u-s-marine-corps'],
+            ['coast-guard','/collections/products-built-for-the-line-u-s-coast-guard'],
+            ['space-force','/collections/products-built-for-the-line-u-s-space-force'],
+            ['afg','/collections/armed-forces-gear'],
+            ['thin-line','/collections/thin-line'],
+            ['sta-brite','/collections/sta-brite-insignia'],
+            ['law','/collections/law-enforcement-corrections'],
+            ['fire-ems-sar','/collections/firefighting-ems-search-rescue'],
+            ['rotc','/collections/rotc-series'],
+            ['jrotc','/collections/jrotc-series'],
+            ['msa','/collections/military-schools-academies'],
+            ['uniforms','/collections/uniforms'],
+            ['tactical','/collections/tactical-gear'],
+            ['k9','/collections/k9-dog-gear'],
+            ['accessories','/collections/accessories-gifts-collectibles']
+          ];
+          const viewports=[['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]];
+          fs.mkdirSync('out',{recursive:true}); const results=[];
+          async function open(page,url){let status=null,error=null;for(let a=1;a<=4;a++){try{let r=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});status=r?.status()??null;if(status!==429&&status!==500)return{status,error:null,attempt:a};}catch(e){error=String(e)}await page.waitForTimeout(9000*a)}return{status,error,attempt:4}}
+          for(const [slug,route] of routes){
+            for(const [device,viewport] of viewports){
+              const browser=await chromium.launch({headless:true}); const ctx=await browser.newContext({viewport}); const page=await ctx.newPage(); const errors=[];
+              page.on('pageerror',e=>errors.push('pageerror:'+String(e))); page.on('console',m=>{if(m.type()==='error')errors.push('console:'+m.text())});
+              const u=new URL(route,base);u.searchParams.set('preview_theme_id',theme);const nav=await open(page,u.toString());if(nav.status===200&&!nav.error)await page.waitForTimeout(5500);
+              const d=await page.evaluate(()=>{const m=document.querySelector('#MainContent'),vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0,t=(m?.innerText||'').replace(/\s+/g,' ').trim();const side=[...(m?.querySelectorAll('.sq-global-refine-sidebar,[aria-label="Refine Products"]')||[])].filter(vis);const cards=[...(m?.querySelectorAll('.sqbfl-card,.sq-subcategory-card,.sq-third-level__type,.sq-afg-branch-card,.sg-entity,.sq-type-family-product,.product-card,.product-grid__item,a[class*="card"]')||[])].filter(vis);const imgs=[...(m?.querySelectorAll('img')||[])].filter(x=>vis(x));const broken=imgs.filter(x=>x.complete&&x.naturalWidth===0).map(x=>({src:x.currentSrc||x.src,alt:x.alt||'',className:x.className||''}));return{url:location.href,title:document.title,h1:m?.querySelector('h1')?.textContent?.trim()||'',textLen:t.length,sidebars:side.length,cards:cards.length,broken,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,bad:/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+t),spinner:/loading items|checking items|tree unavailable|building the customer-facing product tree|loading refinements/i.test(t),duplicateRefine:side.length>1};}).catch(e=>({bad:true,evaluateError:String(e),broken:[]}));
+              const meaningful=errors.filter(x=>!/favicon|shop\.app|frame-ancestors|ERR_BLOCKED_BY_CLIENT|Failed to load resource: the server responded with a status of 403/i.test(x));
+              const failed=nav.status!==200||!!nav.error||d.bad||d.spinner||d.overflow||d.duplicateRefine||d.textLen<60||d.cards<1||meaningful.length>4;
+              const row={slug,device,status:nav.status,attempt:nav.attempt,error:nav.error,failed,...d,consoleErrors:meaningful.slice(0,10)};results.push(row);console.log('REG '+JSON.stringify(row));
+              if(failed||slug==='army'||slug==='law'||slug==='uniforms')await page.screenshot({path:`out/${slug}-${device}.png`,fullPage:true}).catch(()=>{});
+              await ctx.close();await browser.close();await new Promise(r=>setTimeout(r,3500));
+            }
+            await new Promise(r=>setTimeout(r,5000));
+          }
+          const failures=results.filter(x=>x.failed);fs.writeFileSync('out/regression-results.json',JSON.stringify({theme,tested:results.length,passed:results.length-failures.length,failed:failures.length,failures,results},null,2));console.log(`REGRESSION ${results.length-failures.length}/${results.length} PASS; ${failures.length} FAIL`);if(failures.length)process.exitCode=2;
+          EOF
+          node regression.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep15-cross-store-regression-cert
+          path: out
+          retention-days: 7
