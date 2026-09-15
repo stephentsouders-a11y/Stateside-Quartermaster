@@ -1,0 +1,48 @@
+name: Fred Taylor official profile capture v2
+on:
+  push:
+    branches: [research/fred-taylor-video-capture]
+  workflow_dispatch:
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install playwright
+      - run: npx playwright install chromium --with-deps
+      - name: Capture DPAA page
+        run: |
+          mkdir -p official_profile_v2
+          cat > capture-dpaa.cjs <<'EOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          (async()=>{
+            const browser = await chromium.launch({headless:true});
+            const page = await browser.newPage({viewport:{width:1440,height:1800}});
+            try {
+              const response = await page.goto('https://dpaa-mil.sites.crmforce.mil/dpaaProfile?id=a0Jt0000000KYjOEAW',{waitUntil:'domcontentloaded',timeout:120000});
+              fs.writeFileSync('official_profile_v2/status.txt',String(response ? response.status() : 'NO_RESPONSE'));
+              await page.waitForTimeout(10000);
+              fs.writeFileSync('official_profile_v2/final_url.txt',page.url());
+              fs.writeFileSync('official_profile_v2/profile.txt',await page.locator('body').innerText().catch(()=>''));
+              fs.writeFileSync('official_profile_v2/profile.html',await page.content().catch(()=>''));
+              await page.screenshot({path:'official_profile_v2/profile.png',fullPage:true}).catch(()=>{});
+              const imgs = await page.locator('img').evaluateAll((els)=>els.map((e,i)=>({i,src:e.currentSrc||e.src,alt:e.alt||'',w:e.naturalWidth,h:e.naturalHeight}))).catch(()=>[]);
+              fs.writeFileSync('official_profile_v2/images.json',JSON.stringify(imgs,null,2));
+              for (const im of imgs) {
+                try { await page.locator('img').nth(im.i).screenshot({path:`official_profile_v2/image_${String(im.i).padStart(2,'0')}.png`}); } catch(e) {}
+              }
+            } catch (e) {
+              fs.writeFileSync('official_profile_v2/error.txt',String(e));
+              await page.screenshot({path:'official_profile_v2/error.png',fullPage:true}).catch(()=>{});
+            }
+            await browser.close();
+          })();
+          EOF
+          node capture-dpaa.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fred-taylor-official-profile-v2
+          path: official_profile_v2/
+          retention-days: 7
