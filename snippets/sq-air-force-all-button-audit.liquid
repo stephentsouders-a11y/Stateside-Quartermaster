@@ -1,0 +1,34 @@
+{% doc %}
+Keeps the U.S. Air Force root cards ordered and marks the server-rendered card set as audited without refetching every child collection. Exact counts and representative images are already supplied by sq-air-force-real-nav; avoiding duplicate child-page XHR prevents storefront request storms and Shopify rate limiting.
+{% enddoc %}
+
+{% liquid
+  assign sq_af_audit = false
+  if request.page_type == 'collection' and collection.handle == 'products-built-for-the-line-u-s-air-force'
+    assign sq_af_audit = true
+  endif
+%}
+
+{% if sq_af_audit %}
+<script data-sq-air-force-all-button-audit>
+(function(){
+  function label(card){var el=card.querySelector('.sq-line-series-categories__name,.sq-third-level__name');return el?String(el.textContent||'').trim():'U.S. Air Force';}
+  function sortAndMark(){
+    document.querySelectorAll('.sq-line-series-categories__grid').forEach(function(grid){
+      var cards=[].slice.call(grid.children).filter(function(card){return card.matches('.sq-line-series-categories__card');});
+      cards.sort(function(a,b){var an=label(a),bn=label(b);if(/^SHOP ALL/i.test(an))return -1;if(/^SHOP ALL/i.test(bn))return 1;return an.localeCompare(bn,undefined,{numeric:true,sensitivity:'base'});}).forEach(function(card){
+        grid.appendChild(card);
+        card.setAttribute('data-sq-air-force-route-verified','server');
+        var count=card.querySelector('.sq-line-series-categories__meta');
+        if(count){var n=parseInt(String(count.textContent||'').replace(/[^0-9]/g,''),10);if(Number.isFinite(n))card.setAttribute('data-sq-item-count',String(n));}
+        if(card.querySelector('.sq-line-series-categories__media img[src]'))card.setAttribute('data-sq-air-force-image-verified','server');
+      });
+      var root=grid.closest('.sq-line-series-categories');
+      if(root){root.setAttribute('data-sq-air-force-all-buttons-audited','true');root.setAttribute('data-sq-air-force-audited-button-count',String(cards.length));}
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sortAndMark,{once:true});else sortAndMark();
+  [250,700,1500].forEach(function(ms){setTimeout(sortAndMark,ms);});
+})();
+</script>
+{% endif %}
