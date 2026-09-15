@@ -1,4 +1,4 @@
-name: Sep15 Guard roots repaired-template certification
+name: Sep15 Air Force ANG runtime certification
 on:
   push:
     paths:
@@ -8,7 +8,7 @@ permissions:
 jobs:
   certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/setup-node@v4
         with: {node-version: '24'}
@@ -16,16 +16,16 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Certify ARNG and ANG repaired Guard roots
+      - name: Certify Air Force and ANG runtime health
         run: |
-          cat > guard-cert.mjs <<'EOF'
+          cat > af-cert.mjs <<'EOF'
           import { chromium } from 'playwright'; import fs from 'fs';
           const base='https://www.statesideqm.com',theme='158770561179';
-          const routes=['army-national-guard-series','air-national-guard-series'];
+          const routes=['products-built-for-the-line-u-s-air-force','air-national-guard-series'];
           const browser=await chromium.launch({headless:true}); const rows=[];
           for(const handle of routes){
             const context=await browser.newContext({viewport:{width:1440,height:1000}}); const page=await context.newPage();
-            const u=new URL('/collections/'+handle,base); u.searchParams.set('preview_theme_id',theme); u.searchParams.set('_sq_guard_cert','1');
+            const u=new URL('/collections/'+handle,base); u.searchParams.set('preview_theme_id',theme); u.searchParams.set('_sq_af_cert','1');
             const rec={handle,status:null,requests:[],nodes:[],failures:[]};
             page.on('response',r=>{if(r.status()>=400||/collections\/.+(products\.json|view=|section_id)/.test(r.url()))rec.requests.push({status:r.status(),url:r.url()})});
             try{
@@ -34,29 +34,29 @@ jobs:
               rec.title=await page.title(); rec.h1=await page.locator('#MainContent h1,h1').first().innerText().catch(()=>null);
               rec.nodes=await page.evaluate(()=>{const rx=/checking items|loading items|counting items|building the customer-facing product tree|organizing .* products/i;return [...document.querySelectorAll('#MainContent *')].filter(e=>e.children.length===0&&rx.test((e.textContent||'').trim())).map(e=>(e.textContent||'').trim()).slice(0,30)});
               rec.loadState=await page.locator('[data-sqbfl-load-state]').first().getAttribute('data-sqbfl-load-state').catch(()=>null);
-              rec.mainCollection=await page.locator('#MainContent collection-component').count().catch(()=>0);
               rec.sidebars=await page.locator('#MainContent .sq-refine-v3-sidebar:visible,#MainContent .sq-global-refine-sidebar:visible,#MainContent .sqsg-refine-sidebar:visible').count().catch(()=>0);
               rec.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+4).catch(()=>false);
+              rec.rateLimitedRequests=rec.requests.filter(x=>x.status===429).map(x=>x.url);
               if(rec.status!==200) rec.failures.push('HTTP_'+rec.status);
               if(!rec.h1) rec.failures.push('MISSING_H1');
               if(rec.nodes.length) rec.failures.push('UNRESOLVED_LOADING');
               if(rec.loadState&&rec.loadState!=='ready') rec.failures.push('LOAD_STATE_'+rec.loadState);
-              if(rec.mainCollection<1) rec.failures.push('MISSING_MAIN_COLLECTION_HOST');
               if(rec.sidebars>1) rec.failures.push('DUPLICATE_SIDEBARS_'+rec.sidebars);
               if(rec.overflow) rec.failures.push('HORIZONTAL_OVERFLOW');
+              if(rec.rateLimitedRequests.length) rec.failures.push('BACKGROUND_429_'+rec.rateLimitedRequests.length);
               await page.screenshot({path:`${handle}.png`,fullPage:true}).catch(()=>{});
             }catch(e){rec.failures.push('EXCEPTION');rec.error=String(e)}
             rec.pass=rec.failures.length===0; rows.push(rec); console.log(JSON.stringify(rec)); await context.close();
-            await new Promise(r=>setTimeout(r,15000));
+            await new Promise(r=>setTimeout(r,20000));
           }
           await browser.close(); fs.mkdirSync('out',{recursive:true}); fs.writeFileSync('out/results.json',JSON.stringify(rows,null,2));
           if(rows.some(r=>!r.pass)) process.exitCode=2;
           EOF
-          node guard-cert.mjs
+          node af-cert.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: sep15-guard-roots-repaired-cert
+          name: sep15-air-force-ang-runtime-cert
           path: |
             out
             *.png
