@@ -1,30 +1,13 @@
 /*
  * ------------------------------------------------------------
  * IMPORTANT: The contents of this file are auto-generated.
- *
- * This file may be updated by the Shopify admin theme editor
- * or related systems. Please exercise caution as any changes
- * made to this file may be overwritten.
  * ------------------------------------------------------------
  */
 {
   "sections": {
-    "sq_thin_line_loading_space": {
-      "type": "sq-thin-line-loading-space",
-      "settings": {}
-    },
-    "sq_stabrite_refine_root": {
-      "type": "sq-sta-brite-refine-root",
-      "settings": {}
-    },
-    "sq_thin_stabrite_subcategories": {
-      "type": "sq-thin-stabrite-subcategories",
-      "settings": {}
-    },
-    "sq_collection_manufacturers": {
-      "type": "vac-collection-manufacturers",
-      "settings": {}
-    },
+    "sq_thin_stabrite_subcategories":{"type":"sq-thin-stabrite-subcategories","settings":{}},
+    "sq_refine_restoration":{"type":"sq-refine-restoration-host","settings":{}},
+    "sq_collection_manufacturers":{"type":"vac-collection-manufacturers","settings":{}},
     "main": {
       "type":"main-collection",
       "blocks":{
@@ -34,11 +17,5 @@
       "settings":{"layout_type":"grid","product_card_size":"medium","mobile_product_card_size":"small","product_grid_width":"centered","full_width_on_mobile":true,"columns_gap_horizontal":16,"columns_gap_vertical":24,"padding-inline-start":0,"padding-inline-end":0,"background_color":"{{ settings.color_palette.background }}","padding-block-start":0,"padding-block-end":32}
     }
   },
-  "order": [
-    "sq_thin_line_loading_space",
-    "sq_stabrite_refine_root",
-    "sq_thin_stabrite_subcategories",
-    "sq_collection_manufacturers",
-    "main"
-  ]
+  "order":["sq_thin_stabrite_subcategories","sq_refine_restoration","sq_collection_manufacturers","main"]
 }
