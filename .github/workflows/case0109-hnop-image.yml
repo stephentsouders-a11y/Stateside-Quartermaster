@@ -1,0 +1,43 @@
+name: CASE 0109 HNop article image
+
+on:
+  push:
+    branches:
+      - research/browseract-case0109
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          npm install -g playwright
+          npx playwright install chromium --with-deps
+      - name: Capture source-identified Dinh HNop image
+        run: |
+          mkdir -p hnop
+          cat > /tmp/hnop.js <<'EOF'
+          const { chromium } = require('playwright');
+          const fs=require('fs');
+          (async()=>{
+            const b=await chromium.launch({headless:true});
+            const p=await b.newPage({viewport:{width:1400,height:1400}});
+            await p.goto('https://cand.com.vn/Phong-su-tu-lieu/Gap-lai-du-kich-dung-cam-tren-que-huong-Anh-hung-Nup-i223346/',{waitUntil:'networkidle',timeout:120000});
+            const imgs=await p.locator('img').evaluateAll(els=>els.map((e,i)=>({i,src:e.currentSrc||e.src,alt:e.alt||'',w:e.naturalWidth,h:e.naturalHeight})));
+            fs.writeFileSync('hnop/images.json',JSON.stringify(imgs,null,2));
+            for(const im of imgs){console.log(im.i,im.w,im.h,im.alt,im.src)}
+            for(const im of imgs.filter(x=>x.w>=300&&x.h>=200)){
+              try{await p.locator('img').nth(im.i).screenshot({path:`hnop/article_img_${String(im.i).padStart(2,'0')}.png`});}catch(e){}
+            }
+            await p.screenshot({path:'hnop/article_full.png',fullPage:true});
+            await b.close();
+          })();
+          EOF
+          NODE_PATH=$(npm root -g) node /tmp/hnop.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: case0109-hnop-image
+          path: hnop/
+          retention-days: 7
