@@ -1,5 +1,4 @@
-# Fresh post-patch run: manufacturer enumeration bypass + no-network Air Force root audit
-name: Sep15 Air Force repeated runtime verification
+name: Sep15 focused repair certification
 on:
   push:
     paths:
@@ -9,7 +8,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 55
     steps:
       - uses: actions/setup-node@v4
         with: {node-version: '24'}
@@ -17,46 +16,73 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Verify Air Force three times
+      - name: Verify repaired routes and Refine controls
         env:
           BASE: https://www.statesideqm.com
           THEME: '158770561179'
         run: |
           cat > verify.mjs <<'EOF'
           import { chromium } from 'playwright'; import fs from 'fs';
+          const tests=[
+            ['refine','/collections/accessories-gifts-collectibles'],
+            ['refine','/collections/uniforms'],
+            ['refine','/collections/tactical-gear'],
+            ['refine','/collections/k9-dog-gear'],
+            ['refine','/collections/outdoor-preparedness-gear'],
+            ['refine','/collections/sta-brite-insignia'],
+            ['refine','/collections/watches'],
+            ['refine','/collections/knives-axes-cutlery'],
+            ['ohio','/collections/state-guard-series-ohio'],
+            ['afg','/collections/armed-forces-gear'],
+            ['guard','/collections/army-national-guard-series'],
+            ['guard','/collections/air-national-guard-series']
+          ];
+          fs.mkdirSync('out/screens',{recursive:true});
           const browser=await chromium.launch({headless:true}); const rows=[];
-          for(let attempt=1;attempt<=3;attempt++){
-            const context=await browser.newContext({viewport:{width:1440,height:1000}}); const page=await context.newPage();
-            const rec={attempt,status:null,requests:[],failures:[]};
-            page.on('response',r=>{const u=r.url();if(r.status()>=400||/filter\.v\.availability=1|products\.json/.test(u))rec.requests.push({status:r.status(),url:u})});
-            const u=new URL('/collections/products-built-for-the-line-u-s-air-force',process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);u.searchParams.set('_sq_af_verify',String(attempt));
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          for(const [kind,path] of tests){
+            const context=await browser.newContext({viewport:{width:1440,height:1000}}); const page=await context.newPage(); page.setDefaultTimeout(20000); page.setDefaultNavigationTimeout(60000);
+            const rec={kind,path,failures:[],requests:[]};
+            page.on('response',r=>{try{let u=new URL(r.url());if(u.origin===new URL(process.env.BASE).origin&&(r.status()>=400||/products\.json/.test(u.pathname)))rec.requests.push({status:r.status(),url:u.pathname+u.search})}catch{}});
+            const u=new URL(path,process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);u.searchParams.set('_sq_focused',Date.now().toString(36));
             try{
-              const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000}); rec.status=r?.status()??null; await page.waitForTimeout(10000);
-              rec.title=await page.title(); rec.h1=await page.locator('#MainContent h1,h1').first().innerText().catch(()=>null);
-              rec.loadState=await page.locator('[data-sqbfl-load-state]').first().getAttribute('data-sqbfl-load-state').catch(()=>null);
-              rec.nodes=await page.evaluate(()=>{const rx=/checking items|loading items|counting items|building the customer-facing product tree|organizing .* products/i;return [...document.querySelectorAll('#MainContent *')].filter(e=>e.children.length===0&&rx.test((e.textContent||'').trim())).map(e=>(e.textContent||'').trim()).slice(0,30)});
-              rec.rate429=rec.requests.filter(x=>x.status===429).length;
-              rec.status5xx=rec.requests.filter(x=>x.status>=500).length;
-              rec.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+4).catch(()=>false);
-              if(rec.status!==200) rec.failures.push('HTTP_'+rec.status);
-              if(!rec.h1) rec.failures.push('MISSING_H1');
-              if(rec.loadState&&rec.loadState!=='ready') rec.failures.push('LOAD_STATE_'+rec.loadState);
-              if(rec.nodes.length) rec.failures.push('UNRESOLVED_LOADING');
-              if(rec.rate429) rec.failures.push('BACKGROUND_429_'+rec.rate429);
-              if(rec.overflow) rec.failures.push('HORIZONTAL_OVERFLOW');
-              await page.screenshot({path:`af-${attempt}.png`,fullPage:true}).catch(()=>{});
+              const response=await page.goto(u.toString(),{waitUntil:'domcontentloaded'}); rec.status=response?.status()??null; await page.waitForTimeout(6500); rec.finalPath=new URL(page.url()).pathname;
+              if(rec.status!==200)rec.failures.push('HTTP_'+rec.status);
+              rec.rate429=rec.requests.filter(x=>x.status===429).length; if(rec.rate429)rec.failures.push('RATE_429_'+rec.rate429);
+              if(kind==='refine'||kind==='ohio'){
+                const sel=kind==='ohio'?'.sqsg-refine-sidebar':'.sq-global-refine-sidebar';
+                rec.sidebars=await page.locator(sel+':visible').count(); if(rec.sidebars!==1)rec.failures.push('SIDEBAR_'+rec.sidebars);
+                rec.checkboxes=await page.locator(sel+' input[type="checkbox"]:visible').count(); if(rec.checkboxes<1)rec.failures.push('NO_CHECKBOXES');
+                rec.sidebarLinks=await page.locator(sel+' a').count(); if(rec.sidebarLinks!==0)rec.failures.push('SIDEBAR_TEXT_LINKS_'+rec.sidebarLinks);
+                rec.groups=await page.locator(sel+' summary').allInnerTexts().catch(()=>[]);
+                rec.labels=await page.locator(sel+' .sq-refine-restored-choice span').allInnerTexts().catch(()=>[]);
+                if(rec.checkboxes>0){
+                  await page.locator(sel+' input[type="checkbox"]:visible').first().check({force:true});
+                  await page.waitForFunction(()=>{const h=document.querySelector('.sq-refine-restored-products');return h&&!h.querySelector('.sq-refine-restored-loading')},{timeout:25000}).catch(()=>{});
+                  rec.filteredHost=await page.locator('.sq-refine-restored-products').count();
+                  rec.filteredProducts=await page.locator('.sq-refine-restored-product').count();
+                  rec.filteredText=await page.locator('.sq-refine-restored-products__top').innerText().catch(()=>null);
+                  if(!rec.filteredHost)rec.failures.push('FILTER_DID_NOT_RENDER');
+                  if(await page.locator('.sq-refine-restored-loading').count())rec.failures.push('FILTER_STUCK_LOADING');
+                }
+              } else if(kind==='afg'){
+                rec.loading=await page.evaluate(()=>{const rx=/checking items|loading items|counting items|building the customer-facing product tree|organizing .* products/i;return [...document.querySelectorAll('#MainContent *')].filter(e=>e.children.length===0&&rx.test((e.textContent||'').trim())).map(e=>(e.textContent||'').trim()).slice(0,20)});if(rec.loading.length)rec.failures.push('AFG_LOADING_'+rec.loading.length);
+              } else {
+                rec.h1=await page.locator('#MainContent h1,h1').first().innerText().catch(()=>null); if(!rec.h1)rec.failures.push('MISSING_H1');
+                if(path.includes('air-national-guard')&&rec.finalPath!==path)rec.failures.push('ANG_REDIRECT_'+rec.finalPath);
+                rec.loading=await page.evaluate(()=>{const rx=/checking items|loading items|building the customer-facing product tree|organizing .* products/i;return [...document.querySelectorAll('#MainContent *')].filter(e=>e.children.length===0&&rx.test((e.textContent||'').trim())).map(e=>(e.textContent||'').trim()).slice(0,20)});if(rec.loading.length)rec.failures.push('GUARD_LOADING_'+rec.loading.length);
+              }
+              rec.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+4);if(rec.overflow)rec.failures.push('OVERFLOW');
+              await page.screenshot({path:`out/screens/${path.split('/').pop()}.png`,fullPage:true}).catch(()=>{});
             }catch(e){rec.failures.push('EXCEPTION');rec.error=String(e)}
-            rec.pass=rec.failures.length===0; rows.push(rec); console.log(JSON.stringify(rec)); await context.close();
-            if(attempt<3) await new Promise(r=>setTimeout(r,18000));
+            rec.pass=rec.failures.length===0;rows.push(rec);console.log(JSON.stringify(rec));await context.close();await sleep(12000);
           }
-          await browser.close(); fs.mkdirSync('out',{recursive:true}); fs.writeFileSync('out/results.json',JSON.stringify(rows,null,2)); if(rows.some(r=>!r.pass)) process.exitCode=2;
+          await browser.close();fs.writeFileSync('out/results.json',JSON.stringify(rows,null,2));if(rows.some(r=>!r.pass))process.exitCode=2;
           EOF
           node verify.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: sep15-air-force-repeated-runtime-verification
-          path: |
-            out
-            af-*.png
+          name: sep15-focused-repair-certification
+          path: out
           retention-days: 7
