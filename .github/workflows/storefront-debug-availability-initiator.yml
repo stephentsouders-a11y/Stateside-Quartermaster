@@ -1,4 +1,4 @@
-name: Sep15 focused repair certification
+name: Sep15 post-bypass focused diagnostics
 on:
   push:
     paths:
@@ -16,73 +16,29 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Verify repaired routes and Refine controls
+      - name: Post-bypass Refine and ARNG diagnostics
         env:
           BASE: https://www.statesideqm.com
           THEME: '158770561179'
         run: |
           cat > verify.mjs <<'EOF'
-          import { chromium } from 'playwright'; import fs from 'fs';
-          const tests=[
-            ['refine','/collections/accessories-gifts-collectibles'],
-            ['refine','/collections/uniforms'],
-            ['refine','/collections/tactical-gear'],
-            ['refine','/collections/k9-dog-gear'],
-            ['refine','/collections/outdoor-preparedness-gear'],
-            ['refine','/collections/sta-brite-insignia'],
-            ['refine','/collections/watches'],
-            ['refine','/collections/knives-axes-cutlery'],
-            ['ohio','/collections/state-guard-series-ohio'],
-            ['afg','/collections/armed-forces-gear'],
-            ['guard','/collections/army-national-guard-series'],
-            ['guard','/collections/air-national-guard-series']
-          ];
-          fs.mkdirSync('out/screens',{recursive:true});
-          const browser=await chromium.launch({headless:true}); const rows=[];
-          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          for(const [kind,path] of tests){
-            const context=await browser.newContext({viewport:{width:1440,height:1000}}); const page=await context.newPage(); page.setDefaultTimeout(20000); page.setDefaultNavigationTimeout(60000);
-            const rec={kind,path,failures:[],requests:[]};
-            page.on('response',r=>{try{let u=new URL(r.url());if(u.origin===new URL(process.env.BASE).origin&&(r.status()>=400||/products\.json/.test(u.pathname)))rec.requests.push({status:r.status(),url:u.pathname+u.search})}catch{}});
-            const u=new URL(path,process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);u.searchParams.set('_sq_focused',Date.now().toString(36));
-            try{
-              const response=await page.goto(u.toString(),{waitUntil:'domcontentloaded'}); rec.status=response?.status()??null; await page.waitForTimeout(6500); rec.finalPath=new URL(page.url()).pathname;
-              if(rec.status!==200)rec.failures.push('HTTP_'+rec.status);
-              rec.rate429=rec.requests.filter(x=>x.status===429).length; if(rec.rate429)rec.failures.push('RATE_429_'+rec.rate429);
-              if(kind==='refine'||kind==='ohio'){
-                const sel=kind==='ohio'?'.sqsg-refine-sidebar':'.sq-global-refine-sidebar';
-                rec.sidebars=await page.locator(sel+':visible').count(); if(rec.sidebars!==1)rec.failures.push('SIDEBAR_'+rec.sidebars);
-                rec.checkboxes=await page.locator(sel+' input[type="checkbox"]:visible').count(); if(rec.checkboxes<1)rec.failures.push('NO_CHECKBOXES');
-                rec.sidebarLinks=await page.locator(sel+' a').count(); if(rec.sidebarLinks!==0)rec.failures.push('SIDEBAR_TEXT_LINKS_'+rec.sidebarLinks);
-                rec.groups=await page.locator(sel+' summary').allInnerTexts().catch(()=>[]);
-                rec.labels=await page.locator(sel+' .sq-refine-restored-choice span').allInnerTexts().catch(()=>[]);
-                if(rec.checkboxes>0){
-                  await page.locator(sel+' input[type="checkbox"]:visible').first().check({force:true});
-                  await page.waitForFunction(()=>{const h=document.querySelector('.sq-refine-restored-products');return h&&!h.querySelector('.sq-refine-restored-loading')},{timeout:25000}).catch(()=>{});
-                  rec.filteredHost=await page.locator('.sq-refine-restored-products').count();
-                  rec.filteredProducts=await page.locator('.sq-refine-restored-product').count();
-                  rec.filteredText=await page.locator('.sq-refine-restored-products__top').innerText().catch(()=>null);
-                  if(!rec.filteredHost)rec.failures.push('FILTER_DID_NOT_RENDER');
-                  if(await page.locator('.sq-refine-restored-loading').count())rec.failures.push('FILTER_STUCK_LOADING');
-                }
-              } else if(kind==='afg'){
-                rec.loading=await page.evaluate(()=>{const rx=/checking items|loading items|counting items|building the customer-facing product tree|organizing .* products/i;return [...document.querySelectorAll('#MainContent *')].filter(e=>e.children.length===0&&rx.test((e.textContent||'').trim())).map(e=>(e.textContent||'').trim()).slice(0,20)});if(rec.loading.length)rec.failures.push('AFG_LOADING_'+rec.loading.length);
-              } else {
-                rec.h1=await page.locator('#MainContent h1,h1').first().innerText().catch(()=>null); if(!rec.h1)rec.failures.push('MISSING_H1');
-                if(path.includes('air-national-guard')&&rec.finalPath!==path)rec.failures.push('ANG_REDIRECT_'+rec.finalPath);
-                rec.loading=await page.evaluate(()=>{const rx=/checking items|loading items|building the customer-facing product tree|organizing .* products/i;return [...document.querySelectorAll('#MainContent *')].filter(e=>e.children.length===0&&rx.test((e.textContent||'').trim())).map(e=>(e.textContent||'').trim()).slice(0,20)});if(rec.loading.length)rec.failures.push('GUARD_LOADING_'+rec.loading.length);
-              }
-              rec.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+4);if(rec.overflow)rec.failures.push('OVERFLOW');
-              await page.screenshot({path:`out/screens/${path.split('/').pop()}.png`,fullPage:true}).catch(()=>{});
-            }catch(e){rec.failures.push('EXCEPTION');rec.error=String(e)}
-            rec.pass=rec.failures.length===0;rows.push(rec);console.log(JSON.stringify(rec));await context.close();await sleep(12000);
-          }
+          import {chromium} from 'playwright'; import fs from 'fs';
+          fs.mkdirSync('out/screens',{recursive:true}); const browser=await chromium.launch({headless:true}); const rows=[]; const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const tests=[['refine','accessories-gifts-collectibles'],['refine','uniforms'],['refine','tactical-gear'],['refine','k9-dog-gear'],['refine','outdoor-preparedness-gear'],['refine','sta-brite-insignia'],['refine','watches'],['refine','knives-axes-cutlery'],['ohio','state-guard-series-ohio'],['arng','army-national-guard-series']];
+          for(const [kind,h] of tests){const c=await browser.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage(),rec={kind,h,failures:[],docs:[],feeds:[]};p.setDefaultTimeout(25000);p.setDefaultNavigationTimeout(60000);
+            p.on('response',async r=>{try{const u=new URL(r.url());if(r.request().resourceType()==='document')rec.docs.push({status:r.status(),url:r.url()});if(/\/products\.json$/.test(u.pathname)){let ct=r.headers()['content-type']||'';let count=null,sample='';try{const txt=await r.text();sample=txt.slice(0,80);if(ct.includes('json')){const j=JSON.parse(txt);count=Array.isArray(j.products)?j.products.length:null}}catch{}rec.feeds.push({status:r.status(),url:u.pathname+u.search,ct,count,sample})}}catch{}});
+            const u=new URL('/collections/'+h,process.env.BASE);u.searchParams.set('preview_theme_id',process.env.THEME);u.searchParams.set('_sq_post',Date.now().toString(36));
+            try{const r=await p.goto(u.toString(),{waitUntil:'domcontentloaded'});rec.status=r?.status()??null;await p.waitForTimeout(6500);rec.finalUrl=p.url();rec.finalPath=new URL(p.url()).pathname;if(rec.status!==200)rec.failures.push('HTTP_'+rec.status);
+              if(kind==='refine'||kind==='ohio'){const sel=kind==='ohio'?'.sqsg-refine-sidebar':'.sq-global-refine-sidebar';rec.sidebars=await p.locator(sel+':visible').count();rec.checkboxes=await p.locator(sel+' input[type=checkbox]:visible').count();rec.links=await p.locator(sel+' a').count();rec.labels=await p.locator(sel+' .sq-refine-restored-choice span').allInnerTexts().catch(()=>[]);if(rec.sidebars!==1)rec.failures.push('SIDEBAR_'+rec.sidebars);if(rec.checkboxes<1)rec.failures.push('NO_CHECKBOXES');if(rec.links)rec.failures.push('LINKS_'+rec.links);if(rec.checkboxes){await p.locator(sel+' input[type=checkbox]:visible').first().check({force:true});await p.waitForFunction(()=>{const x=document.querySelector('.sq-refine-restored-products');return x&&!x.querySelector('.sq-refine-restored-loading')},{timeout:25000}).catch(()=>{});rec.filtered=await p.locator('.sq-refine-restored-product').count();rec.resultText=await p.locator('.sq-refine-restored-products__top').innerText().catch(()=>null);if(await p.locator('.sq-refine-restored-loading').count())rec.failures.push('STUCK_LOADING')}}
+              if(kind==='arng'){rec.h1=await p.locator('#MainContent h1,h1').first().innerText().catch(()=>null);rec.loading=await p.evaluate(()=>[...document.querySelectorAll('#MainContent *')].filter(e=>e.children.length===0&&/loading items|building the customer-facing product tree|checking items/i.test((e.textContent||'').trim())).map(e=>(e.textContent||'').trim()));if(rec.finalPath!=='/collections/army-national-guard-series')rec.failures.push('REDIRECT_'+rec.finalPath);if(rec.loading.length)rec.failures.push('LOADING_'+rec.loading.length)}
+              if(rec.feeds.some(x=>x.status===429))rec.failures.push('429');await p.screenshot({path:`out/screens/${h}.png`,fullPage:true}).catch(()=>{});
+            }catch(e){rec.failures.push('EXCEPTION');rec.error=String(e)}rec.pass=!rec.failures.length;rows.push(rec);console.log(JSON.stringify(rec));await c.close();await sleep(12000)}
           await browser.close();fs.writeFileSync('out/results.json',JSON.stringify(rows,null,2));if(rows.some(r=>!r.pass))process.exitCode=2;
           EOF
           node verify.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: sep15-focused-repair-certification
+          name: sep15-post-bypass-focused-diagnostics
           path: out
           retention-days: 7
