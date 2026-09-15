@@ -1,0 +1,49 @@
+name: Project Delta 1965 gallery capture
+
+on:
+  push:
+    branches:
+      - research/fred-taylor-video-capture
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g playwright
+      - run: npx playwright install chromium --with-deps
+      - name: Capture source pages and 1965 archive image
+        run: |
+          mkdir -p delta1965
+          cat > /tmp/capture.js <<'EOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const page=await browser.newPage({viewport:{width:1440,height:1600}});
+            const urls=[
+              ['home','https://projectdelta-b52.com/new/index.html'],
+              ['operations','https://projectdelta-b52.com/new/operations_overview.html'],
+              ['history','https://projectdelta-b52.com/delta_history.html'],
+              ['story','https://projectdelta-b52.com/new/val_stories2.html'],
+              ['gallery','https://projectdelta-b52.com/new/master-gallery.html'],
+              ['photo1965','https://projectdelta-b52.com/1965/baker_1.jpg']
+            ];
+            for(const [name,url] of urls){
+              try{
+                await page.goto(url,{waitUntil:'networkidle',timeout:120000});
+                await page.waitForTimeout(1500);
+                await page.screenshot({path:`delta1965/${name}.png`,fullPage:name!=='photo1965'});
+                if(name!=='photo1965') fs.writeFileSync(`delta1965/${name}.txt`,await page.locator('body').innerText());
+              }catch(e){fs.writeFileSync(`delta1965/${name}_error.txt`,e.message)}
+            }
+            await browser.close();
+          })();
+          EOF
+          NODE_PATH=$(npm root -g) node /tmp/capture.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-delta-1965-gallery
+          path: delta1965/
+          retention-days: 7
