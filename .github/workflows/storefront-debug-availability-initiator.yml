@@ -1,3 +1,4 @@
+# Fresh post-patch run: manufacturer enumeration bypass + no-network Air Force root audit
 name: Sep15 Air Force repeated runtime verification
 on:
   push:
