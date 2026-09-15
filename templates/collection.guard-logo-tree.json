@@ -23,7 +23,6 @@
     "legacy_guard_categories": {"type":"vac-airng-subcategories","settings":{}},
     "guard_shop_all": {"type":"sq-guard-shop-all-link","settings":{}},
     "army_guard_router": {"type":"sq-army-guard-router","settings":{}},
-    "sq_collection_manufacturers": {"type":"vac-collection-manufacturers","settings":{}},
     "guard_product_control": {"type":"sq-guard-logo-main-control","settings":{}},
     "main": {
       "type":"main-collection",
@@ -34,5 +33,5 @@
       "settings":{"layout_type":"grid","product_card_size":"medium","mobile_product_card_size":"small","product_grid_width":"centered","full_width_on_mobile":true,"columns_gap_horizontal":16,"columns_gap_vertical":24,"padding-inline-start":0,"padding-inline-end":0,"background_color":"{{ settings.color_palette.background }}","padding-block-start":0,"padding-block-end":32}
     }
   },
-  "order": ["heading","ang_air_force_root","legacy_guard_categories","guard_shop_all","army_guard_router","sq_collection_manufacturers","guard_product_control","main"]
+  "order": ["heading","ang_air_force_root","legacy_guard_categories","guard_shop_all","army_guard_router","guard_product_control","main"]
 }
