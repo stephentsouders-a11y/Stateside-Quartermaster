@@ -1,4 +1,4 @@
-name: Sep15 ARNG repeated render diagnostic
+name: Sep15 Guard roots repaired-template certification
 on:
   push:
     paths:
@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 jobs:
-  diagnose:
+  certify:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -16,32 +16,48 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Retry ARNG current-draft rendering three times
+      - name: Certify ARNG and ANG repaired Guard roots
         run: |
-          cat > diag.mjs <<'EOF'
+          cat > guard-cert.mjs <<'EOF'
           import { chromium } from 'playwright'; import fs from 'fs';
-          const base='https://www.statesideqm.com',theme='158770561179',handle='army-national-guard-series';
+          const base='https://www.statesideqm.com',theme='158770561179';
+          const routes=['army-national-guard-series','air-national-guard-series'];
           const browser=await chromium.launch({headless:true}); const rows=[];
-          for(let attempt=1;attempt<=3;attempt++){
+          for(const handle of routes){
             const context=await browser.newContext({viewport:{width:1440,height:1000}}); const page=await context.newPage();
-            const u=new URL('/collections/'+handle,base); u.searchParams.set('preview_theme_id',theme); u.searchParams.set('_sq_attempt',String(attempt));
-            const rec={attempt,status:null,requests:[],nodes:[]};
+            const u=new URL('/collections/'+handle,base); u.searchParams.set('preview_theme_id',theme); u.searchParams.set('_sq_guard_cert','1');
+            const rec={handle,status:null,requests:[],nodes:[],failures:[]};
             page.on('response',r=>{if(r.status()>=400||/collections\/.+(products\.json|view=|section_id)/.test(r.url()))rec.requests.push({status:r.status(),url:r.url()})});
             try{
               const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:60000}); rec.status=r?.status()??null;
-              await page.waitForTimeout(9000); rec.title=await page.title(); rec.h1=await page.locator('#MainContent h1,h1').first().innerText().catch(()=>null);
+              await page.waitForTimeout(10000);
+              rec.title=await page.title(); rec.h1=await page.locator('#MainContent h1,h1').first().innerText().catch(()=>null);
               rec.nodes=await page.evaluate(()=>{const rx=/checking items|loading items|counting items|building the customer-facing product tree|organizing .* products/i;return [...document.querySelectorAll('#MainContent *')].filter(e=>e.children.length===0&&rx.test((e.textContent||'').trim())).map(e=>(e.textContent||'').trim()).slice(0,30)});
               rec.loadState=await page.locator('[data-sqbfl-load-state]').first().getAttribute('data-sqbfl-load-state').catch(()=>null);
-            }catch(e){rec.error=String(e)}
-            rows.push(rec); console.log(JSON.stringify(rec)); await context.close();
-            if(attempt<3) await new Promise(r=>setTimeout(r,15000));
+              rec.mainCollection=await page.locator('#MainContent collection-component').count().catch(()=>0);
+              rec.sidebars=await page.locator('#MainContent .sq-refine-v3-sidebar:visible,#MainContent .sq-global-refine-sidebar:visible,#MainContent .sqsg-refine-sidebar:visible').count().catch(()=>0);
+              rec.overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+4).catch(()=>false);
+              if(rec.status!==200) rec.failures.push('HTTP_'+rec.status);
+              if(!rec.h1) rec.failures.push('MISSING_H1');
+              if(rec.nodes.length) rec.failures.push('UNRESOLVED_LOADING');
+              if(rec.loadState&&rec.loadState!=='ready') rec.failures.push('LOAD_STATE_'+rec.loadState);
+              if(rec.mainCollection<1) rec.failures.push('MISSING_MAIN_COLLECTION_HOST');
+              if(rec.sidebars>1) rec.failures.push('DUPLICATE_SIDEBARS_'+rec.sidebars);
+              if(rec.overflow) rec.failures.push('HORIZONTAL_OVERFLOW');
+              await page.screenshot({path:`${handle}.png`,fullPage:true}).catch(()=>{});
+            }catch(e){rec.failures.push('EXCEPTION');rec.error=String(e)}
+            rec.pass=rec.failures.length===0; rows.push(rec); console.log(JSON.stringify(rec)); await context.close();
+            await new Promise(r=>setTimeout(r,15000));
           }
           await browser.close(); fs.mkdirSync('out',{recursive:true}); fs.writeFileSync('out/results.json',JSON.stringify(rows,null,2));
+          if(rows.some(r=>!r.pass)) process.exitCode=2;
           EOF
-          node diag.mjs
+          node guard-cert.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: sep15-arng-repeated-render
-          path: out
+          name: sep15-guard-roots-repaired-cert
+          path: |
+            out
+            *.png
           retention-days: 7
