@@ -1,0 +1,123 @@
+name: Sep15 final unpublished draft certification
+on:
+  push:
+    paths:
+      - '.github/workflows/sep15-final-draft-certification.yml'
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium test runtime
+        run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Certify unpublished Sep 15 draft
+        run: |
+          cat > gate.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const base='https://www.statesideqm.com';
+          const theme='158770561179';
+          const routes=[
+            ['state-guard-root','/collections/state-guard-series','root'],
+            ['state-guard-ohio','/collections/state-guard-series-ohio','ohio'],
+            ['state-guard-ohio-availability','/collections/state-guard-series-ohio?filter.v.availability=1','ohio'],
+            ['army','/collections/products-built-for-the-line-u-s-army','regression'],
+            ['arng','/collections/army-national-guard-series','regression'],
+            ['air-force','/collections/products-built-for-the-line-u-s-air-force','regression'],
+            ['ang','/collections/air-national-guard-series','regression'],
+            ['afg','/collections/armed-forces-gear','regression'],
+            ['thin-line','/collections/thin-line','regression'],
+            ['sta-brite','/collections/sta-brite-insignia','regression'],
+            ['law','/collections/law-enforcement-corrections','regression'],
+            ['fire-ems-sar','/collections/firefighting-ems-search-rescue','regression'],
+            ['rotc','/collections/rotc-series','regression'],
+            ['jrotc','/collections/jrotc-series','regression'],
+            ['msa','/collections/military-schools-academies','regression']
+          ];
+          fs.mkdirSync('out',{recursive:true});
+          const results=[];
+          for(const [slug,route,kind] of routes){
+            for(const [device,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
+              const browser=await chromium.launch({headless:true});
+              const context=await browser.newContext({viewport});
+              const page=await context.newPage();
+              page.setDefaultNavigationTimeout(60000);
+              const consoleErrors=[];
+              page.on('pageerror',e=>consoleErrors.push('pageerror:'+String(e)));
+              page.on('console',m=>{ if(m.type()==='error') consoleErrors.push('console:'+m.text()); });
+              const u=new URL(route,base); u.searchParams.set('preview_theme_id',theme);
+              let status=null,error=null;
+              try{
+                let response=await page.goto(u.toString(),{waitUntil:'domcontentloaded'}); status=response?.status()??null;
+                if(status===429){ await page.waitForTimeout(12000); response=await page.goto(u.toString(),{waitUntil:'domcontentloaded'}); status=response?.status()??null; }
+              }catch(e){ error=String(e); }
+              if(status===200&&!error) await page.waitForTimeout(6500);
+              const data=await page.evaluate(({kind})=>{
+                const m=document.querySelector('#MainContent');
+                const vis=e=>!!e&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden'&&e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0;
+                const text=(m?.innerText||'').replace(/\s+/g,' ').trim();
+                const sidebars=[...(m?.querySelectorAll('.sq-global-refine-sidebar,[aria-label="Refine Products"]')||[])].filter(vis);
+                const native=[...(m?.querySelectorAll('.facets-block-wrapper--horizontal,.facets-container-horizontal,theme-drawer#filters-drawer')||[])].filter(vis);
+                const cards=[...(m?.querySelectorAll('.sg-entity,.sq-ohio-product,.sq-subcategory-card,.sqbfl-card,.sq-afg-branch-card,.product-card,.product-grid__item,.sq-type-family-product')||[])].filter(vis);
+                const root=document.querySelector('[data-sq-state-guard-root]');
+                const promo=document.querySelector('[data-sq-state-guard-merch-feature]');
+                const chooser=[...document.querySelectorAll('h2')].find(x=>/choose your state or territory/i.test(x.textContent||''));
+                const grid=root?.querySelector('.sg-entity-grid');
+                const gridCols=grid?getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length:0;
+                const rootOrder=!!(promo&&chooser&&(promo.compareDocumentPosition(chooser)&Node.DOCUMENT_POSITION_FOLLOWING));
+                const orgs=['Ohio Military Reserve','Ohio Naval Militia','Ohio Cyber Reserve'];
+                const categories=['Uniforms','Insignia & Identification','Awards & Decorations','Headwear','Patches & Flags','Footwear & Uniform Accessories','Apparel & Merchandise','Equipment & Field Gear'];
+                const pageSizes=['50','100','250'].every(v=>[...(m?.querySelectorAll('input[name="sq_ohio_page_size"]')||[])].some(x=>x.value===v));
+                const availabilityLabels=[...document.querySelectorAll('summary,h2,h3,label,span')].filter(e=>vis(e)&&/^availability$/i.test((e.textContent||'').trim())).length;
+                const availabilityParam=new URL(location.href).searchParams.has('filter.v.availability')||new URL(location.href).searchParams.has('sq_oh_availability');
+                const spinner=/loading refinements|loading items|checking items|tree unavailable|building the customer-facing product tree/i.test(text);
+                const bad=/just a moment|something went wrong|internal server error|there was a problem/i.test(document.title+' '+text);
+                const broken=[...(m?.querySelectorAll('img')||[])].filter(x=>x.complete&&x.naturalWidth===0).length;
+                const overflow=document.documentElement.scrollWidth>document.documentElement.clientWidth+4;
+                const clickableLabels=[...(m?.querySelectorAll('.sq-ohio-refine-choice>span')||[])].filter(e=>getComputedStyle(e).pointerEvents!=='none').length;
+                return {kind,url:location.href,title:document.title,h1:m?.querySelector('h1')?.textContent?.trim()||'',textLen:text.length,sidebars:sidebars.length,nativeFacets:native.length,cards:cards.length,rootOrder,gridCols,orgsFound:orgs.filter(x=>text.includes(x)),categoriesFound:categories.filter(x=>text.includes(x)),pageSizes,availabilityLabels,availabilityParam,spinner,bad,broken,overflow,clickableLabels};
+              },{kind}).catch(e=>({kind,bad:true,evaluateError:String(e)}));
+              let interaction=null;
+              if(kind==='ohio'&&status===200&&!error&&!data.bad&&!data.spinner){
+                interaction=await page.evaluate(async()=>{
+                  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+                  const box=[...document.querySelectorAll('input[data-sq-ohio-group="organization"]')].find(x=>x.value==='Ohio Military Reserve');
+                  if(!box) return {available:false};
+                  const before=location.href; box.click(); await sleep(600); const after=location.href;
+                  history.back(); await sleep(700); const back=location.href;
+                  history.forward(); await sleep(700); const forward=location.href;
+                  return {available:true,before,after,back,forward,afterSet:new URL(after).searchParams.get('sq_oh_org')==='Ohio Military Reserve',backCleared:!new URL(back).searchParams.has('sq_oh_org'),forwardSet:new URL(forward).searchParams.get('sq_oh_org')==='Ohio Military Reserve'};
+                }).catch(e=>({available:false,error:String(e)}));
+              }
+              let fail=status!==200||!!error||data.bad||data.spinner||data.broken>0||data.overflow||data.textLen<80;
+              if(kind==='root') fail ||= data.sidebars!==0||!data.rootOrder||data.cards<20||(device==='desktop'&&data.gridCols!==4);
+              if(kind==='ohio') fail ||= data.sidebars!==1||data.nativeFacets!==0||data.orgsFound?.length!==3||data.categoriesFound?.length<5||!data.pageSizes||data.cards<1||data.availabilityParam||data.availabilityLabels>0||data.clickableLabels>0||!interaction?.available||!interaction.afterSet||!interaction.backCleared||!interaction.forwardSet;
+              const meaningfulErrors=consoleErrors.filter(x=>!/favicon|Failed to load resource.*404|ResizeObserver loop/i.test(x));
+              if(meaningfulErrors.length>3) fail=true;
+              const row={slug,device,status,error,failed:!!fail,consoleErrors:meaningfulErrors.slice(0,10),...data,interaction};
+              results.push(row); console.log('RESULT '+JSON.stringify(row));
+              await page.screenshot({path:`out/${slug}-${device}.png`,fullPage:true}).catch(()=>{});
+              await context.close(); await browser.close(); await new Promise(r=>setTimeout(r,1800));
+            }
+            await new Promise(r=>setTimeout(r,2200));
+          }
+          const failures=results.filter(x=>x.failed);
+          fs.writeFileSync('out/results.json',JSON.stringify({theme,tested:results.length,passed:results.length-failures.length,failed:failures.length,failures,results},null,2));
+          console.log(`FINAL CERT ${results.length-failures.length}/${results.length} PASS; ${failures.length} FAIL`);
+          if(failures.length) process.exitCode=2;
+          EOF
+          node gate.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep15-final-draft-certification
+          path: out
+          retention-days: 7
