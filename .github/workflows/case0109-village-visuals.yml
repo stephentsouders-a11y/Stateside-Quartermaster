@@ -22,6 +22,7 @@ jobs:
             'mo_hra_dap_modern_road.jpg': 'https://cdn.baogialai.com.vn/images/d5e98b706c8764fc665c0a4e8481036249bda584fcbc547e0f4e7abc71d0caa5675708fd83e9b26d98914cba87cb7939f352fd9b8feb47f39299ce213868364450d39b57d2e79d72a1b6dc2dd7866221/3-canh-quan-lang-mo-hra-dap.jpg',
             'mo_hra_dap_modern_communal_house.jpg': 'https://cdn.baogialai.com.vn/images/18a0651672861ca66357657ae76bf436e942ac4ebac969fc60339b0b143ca15542e05965fb5cb4b753e47a32d916fa0b53e7754609f07b1ad84becad61637d78f117f7b2eafc9d274189976c6cbbda32ba8b9c06aa21692991fd1ccd821f6227984b53c0a6fe4f1ca0c5a1d8b6bbb925/4-nha-rong-truyen-thong-cua-nguoi-ba-na-do-du-an-phuc-dung.jpg',
             'dinh_hnop_cand_2013.jpg': 'https://www.cand.com.vn/Uploaded_CANDONLINE/hakhong/3_dinh2780-450.jpg',
+            'project_delta_early_vc_prisoners.jpg': 'https://projectdelta-b52.com/images/vc_prisoner.jpg',
           }
           headers={'User-Agent':'Mozilla/5.0'}
           manifest=[]
