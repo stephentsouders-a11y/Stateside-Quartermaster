@@ -1,3 +1,4 @@
+# Sep 15 unpublished-draft verification trigger; no storefront/theme code change.
 name: Storefront Chromium click-video audit
 on:
   push:
