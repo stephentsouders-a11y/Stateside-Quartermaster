@@ -41,29 +41,48 @@ jobs:
           import fs from 'node:fs';
           const base='https://www.statesideqm.com', route=process.env.ROUTE, theme=process.env.THEME;
           if(/state-guard/i.test(route)) throw new Error('State Guard route forbidden');
-          fs.mkdirSync('evidence/screens',{recursive:true});fs.mkdirSync('evidence/videos',{recursive:true});
+          fs.mkdirSync('evidence/screens',{recursive:true});
+          fs.mkdirSync('evidence/videos',{recursive:true});
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          const browser=await chromium.launch({headless:true}); const results=[];
-          const visJS=`e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>1&&r.height>1}`;
+          const browser=await chromium.launch({headless:true});
+          const results=[];
           for(const [vp,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
-            const ctx=await browser.newContext({viewport,recordVideo:{dir:'evidence/videos',size:viewport}}); const page=await ctx.newPage(); page.setDefaultNavigationTimeout(60000);
-            const consoleErrors=[]; page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
-            await page.goto(`${base}/?preview_theme_id=${theme}`,{waitUntil:'domcontentloaded'}).catch(()=>null); await sleep(2500);
+            const ctx=await browser.newContext({viewport,recordVideo:{dir:'evidence/videos',size:viewport}});
+            const page=await ctx.newPage();
+            page.setDefaultNavigationTimeout(60000);
+            const consoleErrors=[];
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            await page.goto(`${base}/?preview_theme_id=${theme}`,{waitUntil:'domcontentloaded'}).catch(()=>null);
+            await sleep(2500);
             const rootUrl=`${base}${route}?preview_theme_id=${theme}&filter.v.availability=1`;
             let response=null;
             for(let a=0;a<5;a++){
-              response=await page.goto(rootUrl,{waitUntil:'domcontentloaded'}).catch(()=>null); await sleep(1500);
+              response=await page.goto(rootUrl,{waitUntil:'domcontentloaded'}).catch(()=>null);
+              await sleep(1500);
               const txt=(await page.locator('body').innerText().catch(()=>'' )).slice(0,3500);
               if(response?.status()===200&&!/Just a moment|Something went wrong/i.test(txt))break;
               await sleep(7000+a*5000);
             }
             async function waitReady(stage){
-              const timeline=[]; const deadline=Date.now()+120000;
+              const timeline=[];
+              const deadline=Date.now()+120000;
               while(Date.now()<deadline){
                 const s=await page.evaluate(()=>{
-                  const root=document.querySelector('[data-sqbfl-root],.sqbfl'), main=document.getElementById('MainContent');
+                  const root=document.querySelector('[data-sqbfl-root],.sqbfl');
+                  const main=document.getElementById('MainContent');
                   const vis=e=>!!(e&&e.getClientRects().length);
-                  return {exists:!!root,visible:vis(root),state:root?.getAttribute('data-sqbfl-load-state')||'',text:(root?.innerText||'').slice(0,800),cards:[...document.querySelectorAll('.sqbfl-card')].filter(vis).length,grid:[...main.querySelectorAll('collection-component,.product-grid-container,.product-grid')].filter(vis).length,fetchStable:document.documentElement.getAttribute('data-sq-bfl-fetch-stability')||'',owner:document.documentElement.getAttribute('data-sq-bfl-product-surface-owner')||'',recovery:document.documentElement.getAttribute('data-sq-bfl-recovery-status')||''});
+                  return {
+                    exists:!!root,
+                    visible:vis(root),
+                    state:root?.getAttribute('data-sqbfl-load-state')||'',
+                    text:(root?.innerText||'').slice(0,800),
+                    cards:[...document.querySelectorAll('.sqbfl-card')].filter(vis).length,
+                    grid:main?[...main.querySelectorAll('collection-component,.product-grid-container,.product-grid')].filter(vis).length:0,
+                    fetchStable:document.documentElement.getAttribute('data-sq-bfl-fetch-stability')||'',
+                    owner:document.documentElement.getAttribute('data-sq-bfl-product-surface-owner')||'',
+                    recovery:document.documentElement.getAttribute('data-sq-bfl-recovery-status')||''
+                  };
+                });
                 timeline.push({ms:Date.now(),...s});
                 if(s.exists&&s.visible&&s.state==='ready'&&!/Loading available items|Building the customer-facing product tree|Tree unavailable/i.test(s.text)&&s.cards>0&&s.grid===0)return {ok:true,state:s,timeline};
                 if(/Tree unavailable/i.test(s.text))return {ok:false,state:s,timeline,reason:'tree unavailable'};
@@ -73,14 +92,42 @@ jobs:
             }
             const rootReady=await waitReady('root');
             await page.screenshot({path:`evidence/screens/${vp}-${process.env.KEY}-root.png`,fullPage:true});
-            const rail=await page.evaluate(()=>{const r=document.querySelector('[data-sq-collection-rail]'),v=e=>!!(e&&e.getClientRects().length),g=n=>{const i=r?.querySelector(`[data-sq-context-${n}]`),l=r?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:i?i.hidden:null,visible:v(i),count:l?l.querySelectorAll('a[href]').length:0}};return{count:document.querySelectorAll('[data-sq-collection-rail]').length,categories:g('categories'),subcategories:g('subcategories'),types:g('types'),white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(v).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(v).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}});
+            const rail=await page.evaluate(()=>{
+              const r=document.querySelector('[data-sq-collection-rail]');
+              const v=e=>!!(e&&e.getClientRects().length);
+              const g=n=>{const i=r?.querySelector(`[data-sq-context-${n}]`),l=r?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:i?i.hidden:null,visible:v(i),count:l?l.querySelectorAll('a[href]').length:0}};
+              return {
+                count:document.querySelectorAll('[data-sq-collection-rail]').length,
+                categories:g('categories'),subcategories:g('subcategories'),types:g('types'),
+                white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(v).length,
+                native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(v).length,
+                overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4
+              };
+            });
             const clicks=[];
             async function clickStage(paramName,cardSelector,label){
-              const card=page.locator(cardSelector).first(); if(!(await card.count()))return {skipped:true,reason:`no ${label} card`};
-              const href=await card.getAttribute('href'); if(!href)return {skipped:true,reason:`no ${label} href`};
-              const before=page.url(); const res=await page.goto(new URL(href,before).toString(),{waitUntil:'domcontentloaded'}).catch(()=>null); const ready=await waitReady(label);
-              const snap=await page.evaluate((param)=>{const u=new URL(location.href),main=document.getElementById('MainContent'),v=e=>!!(e&&e.getClientRects().length),root=document.querySelector('[data-sqbfl-root],.sqbfl');return{url:location.href,param:u.searchParams.get(param),state:root?.getAttribute('data-sqbfl-load-state')||'',text:(root?.innerText||'').slice(0,500),cards:[...document.querySelectorAll('.sqbfl-card')].filter(v).length,grid:[...main.querySelectorAll('collection-component,.product-grid-container,.product-grid')].filter(v).length,white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(v).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(v).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}},paramName);
-              await page.screenshot({path:`evidence/screens/${vp}-${process.env.KEY}-${label}.png`,fullPage:true}); return {status:res?.status()||0,ready,snap};
+              const card=page.locator(cardSelector).first();
+              if(!(await card.count()))return {skipped:true,reason:`no ${label} card`};
+              const href=await card.getAttribute('href');
+              if(!href)return {skipped:true,reason:`no ${label} href`};
+              const res=await page.goto(new URL(href,page.url()).toString(),{waitUntil:'domcontentloaded'}).catch(()=>null);
+              const ready=await waitReady(label);
+              const snap=await page.evaluate((param)=>{
+                const u=new URL(location.href),main=document.getElementById('MainContent'),v=e=>!!(e&&e.getClientRects().length),root=document.querySelector('[data-sqbfl-root],.sqbfl');
+                return {
+                  url:location.href,
+                  param:u.searchParams.get(param),
+                  state:root?.getAttribute('data-sqbfl-load-state')||'',
+                  text:(root?.innerText||'').slice(0,500),
+                  cards:[...document.querySelectorAll('.sqbfl-card')].filter(v).length,
+                  grid:main?[...main.querySelectorAll('collection-component,.product-grid-container,.product-grid')].filter(v).length:0,
+                  white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(v).length,
+                  native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(v).length,
+                  overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4
+                };
+              },paramName);
+              await page.screenshot({path:`evidence/screens/${vp}-${process.env.KEY}-${label}.png`,fullPage:true});
+              return {status:res?.status()||0,ready,snap};
             }
             clicks.push(['category',await clickStage('sq_bfl_category','.sqbfl-card[href*="sq_bfl_category="]','category')]);
             if(clicks.at(-1)[1]?.ready?.ok)clicks.push(['subcategory',await clickStage('sq_bfl_subcategory','.sqbfl-card[href*="sq_bfl_subcategory="]','subcategory')]);
@@ -88,14 +135,18 @@ jobs:
             results.push({vp,label:process.env.LABEL,route,status:response?.status()||0,rootReady,rail,clicks,consoleErrors:consoleErrors.slice(-30)});
             await ctx.close();
           }
-          await browser.close(); fs.writeFileSync(`evidence/${process.env.KEY}.json`,JSON.stringify(results,null,2));
+          await browser.close();
+          fs.writeFileSync(`evidence/${process.env.KEY}.json`,JSON.stringify(results,null,2));
           const bad=[];
           for(const r of results){
             if(r.status!==200)bad.push(`${r.vp}: root HTTP ${r.status}`);
             if(!r.rootReady.ok)bad.push(`${r.vp}: root not ready (${r.rootReady.reason||''})`);
             if(r.rail.count!==1||r.rail.categories.count<1||r.rail.categories.hidden)bad.push(`${r.vp}: rail/category failure`);
             if(r.rail.white||r.rail.native||r.rail.overflow)bad.push(`${r.vp}: duplicate filter or overflow`);
-            for(const [name,c] of r.clicks){if(c.skipped){if(name==='category')bad.push(`${r.vp}: no category card`);continue}if(c.status!==200||!c.ready?.ok||!c.snap?.param||c.snap.grid||c.snap.white||c.snap.native||c.snap.overflow||/Loading available items|Building the customer-facing product tree|Tree unavailable/i.test(c.snap.text||''))bad.push(`${r.vp}: ${name} failed strict readiness`)}
+            for(const [name,c] of r.clicks){
+              if(c.skipped){if(name==='category')bad.push(`${r.vp}: no category card`);continue}
+              if(c.status!==200||!c.ready?.ok||!c.snap?.param||c.snap.grid||c.snap.white||c.snap.native||c.snap.overflow||/Loading available items|Building the customer-facing product tree|Tree unavailable/i.test(c.snap.text||''))bad.push(`${r.vp}: ${name} failed strict readiness`);
+            }
           }
           if(bad.length){console.error(bad.join('\n'));process.exit(2)}
           console.log(JSON.stringify(results.map(r=>({vp:r.vp,root:r.rootReady.state,categories:r.rail.categories.count,clicks:r.clicks.map(([n,c])=>[n,c.skipped?'skip':c.snap])})),null,2));
