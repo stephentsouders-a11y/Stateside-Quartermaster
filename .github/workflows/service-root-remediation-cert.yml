@@ -25,10 +25,9 @@ jobs:
           BASE_URL: https://www.statesideqm.com
           PREVIEW_THEME_ID: '158770561179'
         run: |
-          cat > /tmp/cert.mjs <<'EOF'
+          cat > cert.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'node:fs';
-          import path from 'node:path';
           const roots = [
             ['U.S. Army','/collections/products-built-for-the-line-u-s-army'],
             ['Army National Guard','/collections/army-national-guard-series'],
@@ -115,7 +114,7 @@ jobs:
           if(failures.length){console.error(failures.join('\n'));process.exit(2)}
           console.log(JSON.stringify(results.map(r=>({viewport:r.viewport,label:r.label,cats:r.categories.domCount,stage:r.stage,after:r.categoryClick})),null,2));
           EOF
-          node /tmp/cert.mjs
+          node cert.mjs
       - name: Upload certification artifacts
         if: always()
         uses: actions/upload-artifact@v4
