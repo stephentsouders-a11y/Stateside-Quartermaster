@@ -1,0 +1,136 @@
+name: Service Root Isolated Final Cert
+
+on:
+  push:
+    paths:
+      - '.github/workflows/service-root-isolated-final-cert.yml'
+  workflow_dispatch:
+
+jobs:
+  isolated-cert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Isolated low-request Chromium certification
+        env:
+          BASE_URL: https://www.statesideqm.com
+          PREVIEW_THEME_ID: '158770561179'
+        run: |
+          cat > isolated-cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          fs.mkdirSync('artifacts/screenshots',{recursive:true});
+          fs.mkdirSync('artifacts/videos',{recursive:true});
+          const targets=[
+            {key:'navy',label:'U.S. Navy',route:'/collections/products-built-for-the-line-u-s-navy'},
+            {key:'marines',label:'U.S. Marine Corps',route:'/collections/products-built-for-the-line-u-s-marine-corps'}
+          ];
+          if(targets.some(x=>/state-guard-series/i.test(x.route))) throw new Error('State Guard route forbidden');
+          const browser=await chromium.launch({headless:true});
+          const results=[];
+          async function snapshot(page){
+            return page.evaluate(()=>{
+              const rail=document.querySelector('[data-sq-collection-rail]');
+              const g=n=>{const item=rail?.querySelector(`[data-sq-context-${n}]`),list=rail?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:item?item.hidden:null,visible:!!(item&&item.getClientRects().length),domCount:list?list.querySelectorAll('a[href]').length:0,labels:list?[...list.querySelectorAll('a[href]')].map(a=>(a.textContent||'').replace(/\s+/g,' ').trim()).filter(Boolean):[]}};
+              return{
+                railCount:document.querySelectorAll('[data-sq-collection-rail]').length,
+                serverSeed:rail?.getAttribute('data-sq-service-root-seeded')||'',
+                categories:g('categories'),subcategories:g('subcategories'),types:g('types'),
+                whiteRefine:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(x=>x.getClientRects().length).length,
+                nativeFilters:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(x=>x.getClientRects().length).length,
+                overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+2
+              };
+            });
+          }
+          async function get200(page,url){
+            let response=null,body='';
+            for(let attempt=0;attempt<10;attempt++){
+              if(attempt) await page.waitForTimeout(12000+attempt*2500);
+              response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000}).catch(()=>null);
+              await page.waitForTimeout(4500);
+              body=(await page.locator('body').innerText().catch(()=>'' )).slice(0,5000);
+              if(response?.status()===200&&!/Just a moment|Something went wrong/i.test(body)) return response;
+              console.log(`retry ${attempt+1}: status=${response?.status()||0}`);
+            }
+            return response;
+          }
+          for(const target of targets){
+            const context=await browser.newContext({
+              viewport:{width:1440,height:1100},
+              recordVideo:{dir:'artifacts/videos',size:{width:1440,height:1100}},
+              userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36'
+            });
+            const page=await context.newPage();
+            const url=`${process.env.BASE_URL}${target.route}?preview_theme_id=${process.env.PREVIEW_THEME_ID}&filter.v.availability=1`;
+            const response=await get200(page,url);
+            const status=response?.status()||0;
+            const desktop=status===200?await snapshot(page):null;
+            if(desktop) await page.screenshot({path:`artifacts/screenshots/desktop-${target.key}-root.png`,fullPage:true});
+            await page.setViewportSize({width:390,height:844});
+            await page.waitForTimeout(1200);
+            const mobile=status===200?await snapshot(page):null;
+            if(mobile) await page.screenshot({path:`artifacts/screenshots/mobile-${target.key}-root.png`,fullPage:true});
+            let afterCategory=null;
+            if(status===200&&desktop?.categories.domCount){
+              await page.setViewportSize({width:1440,height:1100});
+              const href=await page.locator('[data-sq-context-categories-list] a[href]').first().getAttribute('href');
+              if(href){
+                const catResp=await get200(page,new URL(href,page.url()).toString());
+                const transient=[];
+                if(catResp?.status()===200){
+                  for(let i=0;i<16;i++){
+                    await page.waitForTimeout(250);
+                    transient.push(await page.evaluate(()=>({white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(x=>x.getClientRects().length).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(x=>x.getClientRects().length).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+2})));
+                  }
+                  const desktopAfter=await snapshot(page);
+                  await page.screenshot({path:`artifacts/screenshots/desktop-${target.key}-after-category.png`,fullPage:true});
+                  await page.setViewportSize({width:390,height:844});
+                  await page.waitForTimeout(1200);
+                  const mobileAfter=await snapshot(page);
+                  await page.screenshot({path:`artifacts/screenshots/mobile-${target.key}-after-category.png`,fullPage:true});
+                  afterCategory={status:catResp.status(),desktop:desktopAfter,mobile:mobileAfter,transient};
+                }else afterCategory={status:catResp?.status()||0};
+              }
+            }
+            results.push({target,status,desktop,mobile,afterCategory});
+            await context.close();
+            await new Promise(r=>setTimeout(r,45000));
+          }
+          await browser.close();
+          fs.writeFileSync('artifacts/isolated-final.json',JSON.stringify(results,null,2));
+          const failures=[];
+          for(const r of results){
+            if(r.status!==200){failures.push(`${r.target.label}: root HTTP ${r.status}`);continue;}
+            for(const [vp,s] of [['desktop',r.desktop],['mobile',r.mobile]]){
+              if(!s){failures.push(`${r.target.label} ${vp}: no snapshot`);continue;}
+              if(s.railCount!==1) failures.push(`${r.target.label} ${vp}: rail ${s.railCount}`);
+              if(s.serverSeed!=='true') failures.push(`${r.target.label} ${vp}: seed marker absent`);
+              if(s.categories.domCount<1||s.categories.hidden) failures.push(`${r.target.label} ${vp}: categories invalid`);
+              if(s.whiteRefine||s.nativeFilters||s.overflow) failures.push(`${r.target.label} ${vp}: duplicate/native/overflow`);
+            }
+            if(!r.afterCategory||r.afterCategory.status!==200) failures.push(`${r.target.label}: category navigation failed ${r.afterCategory?.status||0}`);
+            else {
+              for(const [vp,s] of [['desktop',r.afterCategory.desktop],['mobile',r.afterCategory.mobile]]) if(s&&(s.whiteRefine||s.nativeFilters||s.overflow)) failures.push(`${r.target.label} ${vp}: post-category duplicate/native/overflow`);
+              if(r.afterCategory.transient?.some(x=>x.white||x.native||x.overflow)) failures.push(`${r.target.label}: transient duplicate/native/overflow`);
+            }
+          }
+          if(failures.length){console.error(failures.join('\n'));process.exit(2)}
+          console.log(JSON.stringify(results,null,2));
+          EOF
+          node isolated-cert.mjs
+      - name: Upload isolated certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-root-isolated-final-cert
+          path: artifacts/
+          if-no-files-found: warn
