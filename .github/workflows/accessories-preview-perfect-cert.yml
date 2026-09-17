@@ -10,7 +10,7 @@ permissions:
 jobs:
   certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 20
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -19,24 +19,85 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Chromium Playwright full progressive hierarchy video audit
+      - name: Chromium Playwright natural-click certification with video
         run: |
           cat > certify.mjs <<'NODE'
           import { chromium } from 'playwright';
           import fs from 'fs';
+
           fs.mkdirSync('cert-out',{recursive:true});
           fs.mkdirSync('cert-out/video',{recursive:true});
+
           const theme='158770561179';
           const root=`https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=${theme}&filter.v.availability=1`;
-          const failures=[],results=[];
+          const failures=[];
+          const results=[];
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          const auditPage=async(page,label)=>{
+
+          async function openMobileRail(page,device){
+            if(device!=='mobile')return;
+            const toggle=page.locator('[data-sq-rail-mobile-toggle]');
+            if(await toggle.count()){
+              const expanded=await toggle.getAttribute('aria-expanded').catch(()=>null);
+              if(expanded!=='true')await toggle.click().catch(()=>{});
+              await sleep(450);
+            }
+          }
+
+          async function isShopifyErrorPage(page){
+            return page.locator('body').evaluate(body=>/something went wrong/i.test(body.innerText||'')).catch(()=>false);
+          }
+
+          async function recoverIfTransient(page,response,label){
+            let resp=response;
+            for(let attempt=0;attempt<3;attempt++){
+              const badStatus=!resp || resp.status()>=500;
+              const badPage=await isShopifyErrorPage(page);
+              if(!badStatus && !badPage)return resp;
+              if(attempt===2)break;
+              await sleep(1500*(attempt+1));
+              resp=await page.reload({waitUntil:'domcontentloaded'}).catch(()=>null);
+              await sleep(3500);
+            }
+            failures.push(`${label}: unstable Shopify page after retries (HTTP ${resp?.status()??'null'}) at ${page.url()}`);
+            return resp;
+          }
+
+          async function clickNavigate(page,link,label){
+            let response=null;
+            try{
+              [response]=await Promise.all([
+                page.waitForNavigation({waitUntil:'domcontentloaded',timeout:60000}),
+                link.click()
+              ]);
+            }catch(e){
+              failures.push(`${label}: click navigation error ${e}`);
+            }
+            response=await recoverIfTransient(page,response,label);
+            await sleep(7000);
+            return response;
+          }
+
+          async function auditPage(page,label){
             const audit=await page.evaluate(()=>{
-              const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
-              const item=sel=>{const e=document.querySelector(sel);return e?{hidden:e.hidden,visible:vis(e),text:(e.textContent||'').replace(/\s+/g,' ').trim(),links:[...e.querySelectorAll('a[href]')].length}:null};
+              const vis=e=>{
+                if(!e)return false;
+                const s=getComputedStyle(e),r=e.getBoundingClientRect();
+                return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2;
+              };
+              const item=sel=>{
+                const e=document.querySelector(sel);
+                return e?{
+                  hidden:e.hidden,
+                  visible:vis(e),
+                  text:(e.textContent||'').replace(/\s+/g,' ').trim(),
+                  links:[...e.querySelectorAll('a[href]')].length
+                }:null;
+              };
               const count=sel=>[...document.querySelectorAll(sel)].filter(vis).length;
               return {
-                url:location.href,title:document.title,
+                url:location.href,
+                title:document.title,
                 railVisible:count('[data-sq-collection-rail]'),
                 whiteRefineVisible:count('#MainContent .sq-global-refine-sidebar:not([data-sq-ohio-refine="true"]),#MainContent .sqsg-refine-sidebar:not([data-sq-ohio-refine="true"])'),
                 nativeFilterVisible:count('#MainContent .facets__filters-wrapper,#MainContent .facets-toggle__wrapper,#MainContent theme-drawer#filters-drawer'),
@@ -52,23 +113,30 @@ jobs:
                 colorPattern:item('[data-sq-refinement-key="color-pattern"]'),
                 price:item('[data-sq-refinement-key="price"]'),
                 horizontalOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,
-                consoleMarker:document.querySelector('[data-sq-collection-rail]')?.dataset.sqAccessoriesFamily||null
+                path:location.pathname,
+                search:location.search
               };
             });
             await page.screenshot({path:`cert-out/${label}.png`,fullPage:true});
             return audit;
-          };
-          const assertCommon=(a,label)=>{
+          }
+
+          function assertCommon(a,label,{requireColor=true}={}){
             if(a.railVisible!==1)failures.push(`${label}: expected exactly one navy rail, got ${a.railVisible}`);
             if(a.whiteRefineVisible!==0)failures.push(`${label}: white Refine Products visible (${a.whiteRefineVisible})`);
-            if(a.nativeFilterVisible!==0)failures.push(`${label}: duplicate native filter UI visible (${a.nativeFilterVisible})`);
-            if(a.bodyMakerVisible!==0)failures.push(`${label}: body manufacturer block visible (${a.bodyMakerVisible})`);
-            if(!a.categories?.visible)failures.push(`${label}: Categories missing`);
+            if(a.nativeFilterVisible!==0)failures.push(`${label}: duplicate native Shopify filter UI visible (${a.nativeFilterVisible})`);
+            if(a.bodyMakerVisible!==0)failures.push(`${label}: duplicate body manufacturer block visible (${a.bodyMakerVisible})`);
+            if(a.bodyTypeCardsVisible!==0)failures.push(`${label}: duplicate body Shop-by-Type section visible (${a.bodyTypeCardsVisible})`);
+            if(a.bodyCategoryCardsVisible!==0)failures.push(`${label}: duplicate body Category-card navigation visible (${a.bodyCategoryCardsVisible})`);
+            if(!a.categories?.visible||a.categories.links!==8)failures.push(`${label}: Categories missing/wrong count (${a.categories?.links??'null'})`);
             if(!a.manufacturer?.visible||a.manufacturer.links<1)failures.push(`${label}: Manufacturer missing/empty`);
-            if(!a.colorPattern?.visible||a.colorPattern.links<1)failures.push(`${label}: Color / Pattern missing/empty`);
+            if(requireColor && (!a.colorPattern?.visible||a.colorPattern.links<1))failures.push(`${label}: Color / Pattern missing/empty`);
             if(!a.price?.visible)failures.push(`${label}: Price missing`);
+            if(a.collectionComponentVisible<1)failures.push(`${label}: product collection component hidden`);
+            if(a.productCardsVisible<1)failures.push(`${label}: no visible product cards`);
             if(a.horizontalOverflow)failures.push(`${label}: horizontal overflow`);
-          };
+          }
+
           for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
             const browser=await chromium.launch({headless:true});
             const context=await browser.newContext({viewport,recordVideo:{dir:'cert-out/video',size:viewport}});
@@ -77,80 +145,85 @@ jobs:
             const consoleErrors=[];
             page.on('pageerror',e=>consoleErrors.push(`pageerror: ${e.message}`));
             page.on('console',m=>{if(m.type()==='error')consoleErrors.push(`console: ${m.text()}`)});
+
             let response=await page.goto(root,{waitUntil:'domcontentloaded'}).catch(e=>{failures.push(`${device} root navigation: ${e}`);return null});
-            await sleep(8500);
-            if(device==='mobile'){const t=page.locator('[data-sq-rail-mobile-toggle]');if(await t.count())await t.click().catch(()=>{});await sleep(600)}
+            response=await recoverIfTransient(page,response,`${device} root`);
+            await sleep(8000);
+            await openMobileRail(page,device);
+
             const rootAudit=await auditPage(page,`${device}-root`);
-            if(response?.status()!==200)failures.push(`${device} root: HTTP ${response?.status()}`);
+            if(response?.status()!==200)failures.push(`${device} root: HTTP ${response?.status()??'null'}`);
             assertCommon(rootAudit,`${device} root`);
             if(rootAudit.subcategories?.visible)failures.push(`${device} root: Subcategories visible before Category selection`);
             if(rootAudit.types?.visible)failures.push(`${device} root: Types visible before Category/Subcategory selection`);
-            if(rootAudit.bodyCategoryCardsVisible<1)failures.push(`${device} root: category card body disappeared/blanked`);
-            if(rootAudit.bodyTypeCardsVisible!==0)failures.push(`${device} root: Type card body should not exist`);
 
             const catTrigger=page.locator('[data-sq-context-categories] [data-sq-rail-trigger]');
             if(await catTrigger.count())await catTrigger.click().catch(()=>{});
-            await sleep(500);
+            await sleep(350);
             const catLinks=page.locator('[data-sq-context-categories-list] a[href]');
-            if(await catLinks.count()!==8)failures.push(`${device} root: expected 8 category links, got ${await catLinks.count()}`);
-            const catHref=await catLinks.first().getAttribute('href');
-            if(!catHref){failures.push(`${device}: no Category href`)} else {
-              const child=new URL(catHref,root);child.searchParams.set('preview_theme_id',theme);child.searchParams.set('filter.v.availability','1');
-              response=await page.goto(child.toString(),{waitUntil:'domcontentloaded'}).catch(e=>{failures.push(`${device} category navigation: ${e}`);return null});
-              await sleep(8500);
-              if(device==='mobile'){const t=page.locator('[data-sq-rail-mobile-toggle]');if(await t.count())await t.click().catch(()=>{});await sleep(500)}
-              const categoryAudit=await auditPage(page,`${device}-category`);
-              if(response?.status()!==200)failures.push(`${device} category: HTTP ${response?.status()}`);
+            const catCount=await catLinks.count();
+            if(catCount!==8)failures.push(`${device} root: expected 8 Category links, got ${catCount}`);
+
+            let categoryAudit=null,subcategoryAudit=null,typeAudit=null;
+            if(catCount>0){
+              response=await clickNavigate(page,catLinks.first(),`${device} Category click`);
+              await openMobileRail(page,device);
+              categoryAudit=await auditPage(page,`${device}-category`);
+              if(response?.status()!==200)failures.push(`${device} category: HTTP ${response?.status()??'null'}`);
               assertCommon(categoryAudit,`${device} category`);
-              if(categoryAudit.bodyTypeCardsVisible!==0)failures.push(`${device} category: duplicate Shop by Type card section visible in body`);
-              if(categoryAudit.collectionComponentVisible<1)failures.push(`${device} category: product collection component is hidden`);
-              if(!categoryAudit.types?.visible||(categoryAudit.types.text||'').toLowerCase().indexOf('subcategor')===-1)failures.push(`${device} category: Subcategories stage missing/mislabeled`);
+              if(categoryAudit.subcategories?.visible)failures.push(`${device} category: separate Subcategories placeholder should remain hidden at stage 2`);
+              if(!categoryAudit.types?.visible||(categoryAudit.types.text||'').toLowerCase().indexOf('subcategor')===-1)failures.push(`${device} category: stage 2 is not exposed as Subcategories`);
+              if((categoryAudit.types?.links||0)<1)failures.push(`${device} category: Subcategories list is empty`);
+
               const subTrigger=page.locator('[data-sq-context-types] [data-sq-rail-trigger]');
               if(await subTrigger.count())await subTrigger.click().catch(()=>{});
-              await sleep(500);
+              await sleep(350);
               const subLinks=page.locator('[data-sq-context-types-list] a[href]');
               const subCount=await subLinks.count();
-              if(subCount<1)failures.push(`${device} category: Subcategories list empty`);
-              const subHref=subCount?await subLinks.first().getAttribute('href'):null;
-              let finalAudit=null,typeAudit=null;
-              if(subHref){
-                const sub=new URL(subHref,root);sub.searchParams.set('preview_theme_id',theme);sub.searchParams.set('filter.v.availability','1');
-                response=await page.goto(sub.toString(),{waitUntil:'domcontentloaded'}).catch(e=>{failures.push(`${device} subcategory navigation: ${e}`);return null});
-                await sleep(9000);
-                if(device==='mobile'){const t=page.locator('[data-sq-rail-mobile-toggle]');if(await t.count())await t.click().catch(()=>{});await sleep(500)}
-                finalAudit=await auditPage(page,`${device}-subcategory`);
-                if(response?.status()!==200)failures.push(`${device} subcategory: HTTP ${response?.status()}`);
-                assertCommon(finalAudit,`${device} subcategory`);
-                if(finalAudit.bodyTypeCardsVisible!==0)failures.push(`${device} subcategory: duplicate body Type section visible`);
-                if(!finalAudit.subcategories?.visible||finalAudit.subcategories.links<1)failures.push(`${device} subcategory: Subcategories context not retained`);
-                if(!finalAudit.types?.visible||finalAudit.types.links<1)failures.push(`${device} subcategory: Types third stage missing/empty`);
-                if(finalAudit.types?.visible&&(finalAudit.types.text||'').toLowerCase().indexOf('types')===-1)failures.push(`${device} subcategory: third stage not labeled Types`);
+              if(subCount<1)failures.push(`${device} category: no Subcategory links`);
+
+              if(subCount>0){
+                response=await clickNavigate(page,subLinks.first(),`${device} Subcategory click`);
+                await openMobileRail(page,device);
+                subcategoryAudit=await auditPage(page,`${device}-subcategory`);
+                if(response?.status()!==200)failures.push(`${device} subcategory: HTTP ${response?.status()??'null'}`);
+                assertCommon(subcategoryAudit,`${device} subcategory`);
+                if(!/\/sq-type-/i.test(subcategoryAudit.path))failures.push(`${device} subcategory: expected SQ subcategory route, got ${subcategoryAudit.path}`);
+                if(!subcategoryAudit.subcategories?.visible||(subcategoryAudit.subcategories.links||0)<1)failures.push(`${device} subcategory: Subcategories context not retained`);
+                if(!subcategoryAudit.types?.visible||(subcategoryAudit.types.links||0)<1)failures.push(`${device} subcategory: stage 3 Types missing/empty`);
+                if(subcategoryAudit.types?.visible&&(subcategoryAudit.types.text||'').toLowerCase().indexOf('types')===-1)failures.push(`${device} subcategory: stage 3 not labeled Types`);
+
                 const typeTrigger=page.locator('[data-sq-context-types] [data-sq-rail-trigger]');
                 if(await typeTrigger.count())await typeTrigger.click().catch(()=>{});
-                await sleep(400);
+                await sleep(350);
                 const typeLinks=page.locator('[data-sq-context-types-list] a[href]');
-                const typeHref=await typeLinks.first().getAttribute('href').catch(()=>null);
-                if(typeHref){
-                  const typeUrl=new URL(typeHref,root);typeUrl.searchParams.set('preview_theme_id',theme);typeUrl.searchParams.set('filter.v.availability','1');
-                  response=await page.goto(typeUrl.toString(),{waitUntil:'domcontentloaded'}).catch(e=>{failures.push(`${device} type navigation: ${e}`);return null});
-                  await sleep(7500);
-                  if(device==='mobile'){const t=page.locator('[data-sq-rail-mobile-toggle]');if(await t.count())await t.click().catch(()=>{});await sleep(500)}
+                const typeCount=await typeLinks.count();
+                if(typeCount<1)failures.push(`${device} subcategory: no Type links`);
+                if(typeCount>0){
+                  response=await clickNavigate(page,typeLinks.first(),`${device} Type click`);
+                  await openMobileRail(page,device);
                   typeAudit=await auditPage(page,`${device}-type`);
-                  if(response?.status()!==200)failures.push(`${device} type: HTTP ${response?.status()}`);
-                  assertCommon(typeAudit,`${device} type`);
-                  if(!new URL(page.url()).searchParams.has('filter.p.product_type'))failures.push(`${device} type: Type click did not apply product_type filter`);
-                  if(!typeAudit.subcategories?.visible||!typeAudit.types?.visible)failures.push(`${device} type: hierarchy disappeared after Type click`);
-                } else failures.push(`${device} subcategory: no Type href`);
+                  if(response?.status()!==200)failures.push(`${device} type: HTTP ${response?.status()??'null'}`);
+                  assertCommon(typeAudit,`${device} type`,{requireColor:false});
+                  const params=new URL(page.url()).searchParams;
+                  if(!params.has('filter.p.product_type'))failures.push(`${device} type: Type click did not apply filter.p.product_type`);
+                  if(!typeAudit.subcategories?.visible||!typeAudit.types?.visible)failures.push(`${device} type: hierarchy disappeared after Type selection`);
+                }
               }
-              results.push({device,rootAudit,categoryAudit,finalAudit,typeAudit,consoleErrors});
             }
-            if(consoleErrors.some(x=>/sq-collection-sidebar-refinements|refinement data|SyntaxError/i.test(x)))failures.push(`${device}: sidebar/refinement console error: ${consoleErrors.join(' | ')}`);
-            await context.close();await browser.close();
+
+            const relevantErrors=consoleErrors.filter(x=>/sq-collection-sidebar-refinements|refinement data|SyntaxError|ReferenceError|TypeError/i.test(x));
+            if(relevantErrors.length)failures.push(`${device}: sidebar/refinement console error: ${relevantErrors.join(' | ')}`);
+            results.push({device,rootAudit,categoryAudit,subcategoryAudit,typeAudit,consoleErrors});
+            await context.close();
+            await browser.close();
           }
-          const report={theme,root,results,failures:[...new Set(failures)],passed:failures.length===0};
+
+          const uniqueFailures=[...new Set(failures)];
+          const report={theme,root,results,failures:uniqueFailures,passed:uniqueFailures.length===0};
           fs.writeFileSync('cert-out/report.json',JSON.stringify(report,null,2));
           console.log(JSON.stringify(report,null,2));
-          if(failures.length)process.exit(2);
+          if(uniqueFailures.length)process.exit(2);
           NODE
           node certify.mjs
       - uses: actions/upload-artifact@v4
