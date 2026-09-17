@@ -1,0 +1,45 @@
+name: ARNG Layout Chromium Certification
+on:
+  push:
+    paths: ['.github/workflows/arng-layout-cert.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    strategy:
+      fail-fast: false
+      matrix:
+        viewport: [desktop, mobile]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify ARNG sidebar plus body buttons
+        env:
+          VP: ${{ matrix.viewport }}
+        run: |
+          cat > cert.mjs <<'EOF'
+          import {chromium} from 'playwright';import fs from 'node:fs';
+          const vp=process.env.VP,viewport=vp==='desktop'?{width:1440,height:1000}:{width:390,height:844},base='https://www.statesideqm.com',route='/collections/army-national-guard-series',theme='158770561179',sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          if(/state-guard-series/i.test(route))throw new Error('State Guard forbidden');
+          fs.mkdirSync('evidence',{recursive:true});const b=await chromium.launch({headless:true}),c=await b.newContext({viewport,recordVideo:{dir:'evidence',size:viewport}}),p=await c.newPage();p.setDefaultNavigationTimeout(60000);
+          await p.goto(`${base}/?preview_theme_id=${theme}`,{waitUntil:'domcontentloaded'}).catch(()=>null);await sleep(1200);const u=new URL(route,base);u.searchParams.set('preview_theme_id',theme);u.searchParams.set('filter.v.availability','1');let resp=null;
+          for(const wait of [0,10000,20000,40000]){if(wait)await sleep(wait);resp=await p.goto(u.toString(),{waitUntil:'domcontentloaded'}).catch(()=>null);await sleep(2500);if(resp?.status()===200)break}
+          let snap=null;const timeline=[];for(let i=0;i<120;i++){snap=await p.evaluate(()=>{const vis=e=>!!(e&&e.getClientRects().length),root=[...document.querySelectorAll('[data-sqbfl-root],.sqbfl')].find(vis)||null,rail=[...document.querySelectorAll('[data-sq-collection-rail]')].filter(vis),cards=[...document.querySelectorAll('.sqbfl-card')].filter(vis);return{rail:rail.length,state:root?.getAttribute('data-sqbfl-load-state')||'',text:(root?.innerText||'').slice(0,800),cards:cards.length,white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(vis).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(vis).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,stability:document.documentElement.getAttribute('data-sq-bfl-fetch-stability')||'',owner:document.documentElement.getAttribute('data-sq-bfl-product-surface-owner')||''}});timeline.push(snap);if(snap.state==='ready'&&snap.cards>0&&!/Loading available items|Building the customer-facing product tree|Tree unavailable/i.test(snap.text))break;await sleep(1000)}
+          await p.screenshot({path:`evidence/${vp}-arng.png`,fullPage:true});fs.writeFileSync(`evidence/${vp}.json`,JSON.stringify({status:resp?.status()||0,snap,timeline},null,2));await c.close();await b.close();
+          const bad=[];if(resp?.status()!==200)bad.push(`HTTP ${resp?.status()||0}`);if(snap.rail!==1)bad.push(`rail ${snap.rail}`);if(snap.state!=='ready')bad.push(`state ${snap.state}`);if(snap.cards<1)bad.push('no visible body cards');if(/Loading available items|Building the customer-facing product tree|Tree unavailable/i.test(snap.text))bad.push('tree loading/unavailable');if(snap.white||snap.native)bad.push('duplicate filters');if(snap.overflow)bad.push('overflow');if(snap.stability!=='v3')bad.push(`fetch stability ${snap.stability}`);if(bad.length){console.error(bad.join('\n'));process.exit(2)}
+          console.log(JSON.stringify(snap,null,2));
+          EOF
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arng-${{ matrix.viewport }}
+          path: evidence/
+          retention-days: 14
