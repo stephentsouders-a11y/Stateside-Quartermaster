@@ -1,0 +1,100 @@
+name: Stateside Retail Rebuild Certification
+on:
+  push:
+    branches:
+      - rebuild/stateside-retail-sd-style
+    paths:
+      - '.github/workflows/stateside-retail-rebuild-cert.yml'
+      - 'sections/sq-retail-home.liquid'
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify unpublished rebuild
+        run: |
+          mkdir -p evidence
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          const theme = '158872600731';
+          const base = 'https://www.statesideqm.com';
+          const routes = [
+            {name:'home', path:'/'},
+            {name:'accessories', path:'/collections/accessories-gifts-collectibles?filter.v.availability=1'}
+          ];
+          (async()=>{
+            const browser = await chromium.launch({headless:true});
+            const results=[];
+            for (const vp of [
+              {name:'desktop', width:1440, height:1000},
+              {name:'mobile', width:390, height:844}
+            ]) {
+              const page = await browser.newPage({viewport:{width:vp.width,height:vp.height}});
+              for (const route of routes) {
+                const sep = route.path.includes('?') ? '&' : '?';
+                const url = base + route.path + sep + 'preview_theme_id=' + theme;
+                const res = await page.goto(url,{waitUntil:'domcontentloaded',timeout:120000});
+                await page.waitForTimeout(6000);
+                const data = await page.evaluate(() => {
+                  const visible = el => {
+                    if(!el) return false;
+                    const s=getComputedStyle(el), r=el.getBoundingClientRect();
+                    return s.display!=='none' && s.visibility!=='hidden' && Number(s.opacity)!==0 && r.width>2 && r.height>2;
+                  };
+                  const bodyButtons = [...document.querySelectorAll('#MainContent a')].filter(a => {
+                    const c=String(a.className||'');
+                    return visible(a) && /sq-(subcategory|third-level|afg|ps-root)|vac-(service|category|series)/i.test(c);
+                  });
+                  const productCards = [...document.querySelectorAll('product-card,.product-card,.product-grid__item,[data-product-id]')].filter(visible);
+                  const refine = [...document.querySelectorAll('.sq-global-refine-sidebar,[data-sq-refine-authority]')].filter(visible);
+                  const retailHome = document.querySelector('.sq-retail-home');
+                  return {
+                    title: document.title,
+                    url: location.href,
+                    bodyButtons: bodyButtons.length,
+                    bodyButtonSamples: bodyButtons.slice(0,8).map(a=>(a.textContent||'').replace(/\s+/g,' ').trim().slice(0,120)),
+                    productCards: productCards.length,
+                    refineVisible: refine.length,
+                    retailHome: !!retailHome,
+                    h1: document.querySelector('h1')?.textContent?.replace(/\s+/g,' ').trim() || '',
+                    scrollWidth: document.documentElement.scrollWidth,
+                    innerWidth: innerWidth
+                  };
+                });
+                data.status = res ? res.status() : null;
+                data.viewport = vp.name;
+                data.route = route.name;
+                results.push(data);
+                await page.screenshot({path:`evidence/${vp.name}-${route.name}.png`,fullPage:true});
+                if(data.status !== 200) throw new Error(`${vp.name} ${route.name}: HTTP ${data.status}`);
+                if(data.scrollWidth > data.innerWidth + 2) throw new Error(`${vp.name} ${route.name}: horizontal overflow`);
+                if(route.name === 'home' && !data.retailHome) throw new Error(`${vp.name} home: rebuilt homepage missing`);
+                if(route.name === 'accessories') {
+                  if(data.bodyButtons !== 0) throw new Error(`${vp.name} accessories: old body navigation buttons still visible: ${data.bodyButtons}`);
+                  if(data.productCards < 1) throw new Error(`${vp.name} accessories: product grid missing`);
+                }
+              }
+              await page.close();
+            }
+            fs.writeFileSync('evidence/results.json',JSON.stringify(results,null,2));
+            console.log(JSON.stringify(results,null,2));
+            await browser.close();
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stateside-retail-rebuild-cert
+          path: evidence/
+          retention-days: 14
