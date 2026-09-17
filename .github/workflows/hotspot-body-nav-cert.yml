@@ -1,0 +1,44 @@
+name: Hotspot Body Navigation Chromium Cert
+on:
+  push:
+    paths: ['.github/workflows/hotspot-body-nav-cert.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify hotspots
+        run: |
+          cat > cert.mjs <<'EOF'
+          import {chromium} from 'playwright';import fs from 'node:fs';
+          const base='https://www.statesideqm.com',theme='158770561179',routes=[['Army National Guard','/collections/army-national-guard-series'],['Firefighting EMS SAR','/collections/firefighting-ems-search-rescue'],['Law Enforcement Corrections','/collections/law-enforcement-corrections'],['Military Schools Academies','/collections/military-schools-academies'],['Logo Merch','/collections/stateside-quartermaster-logo-merch']];
+          if(routes.some(([,r])=>/state-guard-series/i.test(r)))throw new Error('State Guard forbidden');
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms)),browser=await chromium.launch({headless:true}),out=[];fs.mkdirSync('evidence',{recursive:true});
+          for(const [label,route] of routes){for(const [vp,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
+            const c=await browser.newContext({viewport}),p=await c.newPage();p.setDefaultNavigationTimeout(60000);await p.goto(`${base}/?preview_theme_id=${theme}`,{waitUntil:'domcontentloaded'}).catch(()=>null);await sleep(1200);
+            const u=new URL(route,base);u.searchParams.set('preview_theme_id',theme);u.searchParams.set('filter.v.availability','1');let resp=null;
+            for(const wait of [0,10000,20000]){if(wait)await sleep(wait);resp=await p.goto(u.toString(),{waitUntil:'domcontentloaded'}).catch(()=>null);await sleep(2500);if(resp?.status()===200)break}
+            let snap=null;const timeline=[];for(let i=0;i<90;i++){
+              snap=await p.evaluate(()=>{const v=e=>!!(e&&e.getClientRects().length),root=[...document.querySelectorAll('[data-sqbfl-root],.sqbfl')].find(v)||null,surfaces=[...document.querySelectorAll('[data-sqbfl-root],.sqbfl,.sqaca,.sq-subcategory-section,.sq-third-level,.sq-books-tree,[data-sq-afg-mode],.sq-line-series-categories,.sq-line-program-tree,.sq-ps-root,.sq-ts-match-section,.sq-ptype-browser,.sqsg-orgs')].filter(v),buttons=surfaces.flatMap(s=>[...s.querySelectorAll('a[href],button')]).filter(v).filter(e=>!e.closest('[data-sq-collection-rail]'));return{rail:[...document.querySelectorAll('[data-sq-collection-rail]')].filter(v).length,hasBfl:!!root,state:root?.getAttribute('data-sqbfl-load-state')||'',text:(root?.innerText||'').slice(0,600),surfaces:surfaces.length,buttons:buttons.length,white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(v).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(v).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,stability:document.documentElement.getAttribute('data-sq-bfl-fetch-stability')||''}});timeline.push(snap);
+              const ready=snap.hasBfl?snap.state==='ready'&&!/Loading available items|Building the customer-facing product tree|Tree unavailable/i.test(snap.text)&&snap.buttons>0:snap.surfaces>0&&snap.buttons>0;if(ready)break;await sleep(1000)
+            }
+            await p.screenshot({path:`evidence/${vp}-${label.toLowerCase().replace(/[^a-z0-9]+/g,'-')}.png`,fullPage:true});out.push({label,vp,status:resp?.status()||0,snap,timeline});await c.close();await sleep(4000)
+          }}
+          await browser.close();fs.writeFileSync('evidence/results.json',JSON.stringify(out,null,2));const bad=[];for(const r of out){if(r.status!==200)bad.push(`${r.vp} ${r.label} HTTP ${r.status}`);if(r.snap.rail!==1)bad.push(`${r.vp} ${r.label} rail ${r.snap.rail}`);if(r.snap.surfaces<1||r.snap.buttons<1)bad.push(`${r.vp} ${r.label} missing body navigation`);if(r.snap.hasBfl&&(r.snap.state!=='ready'||/Loading available items|Building the customer-facing product tree|Tree unavailable/i.test(r.snap.text)))bad.push(`${r.vp} ${r.label} BFL ${r.snap.state}`);if(r.snap.white||r.snap.native||r.snap.overflow)bad.push(`${r.vp} ${r.label} duplicate/overflow`)}if(bad.length){console.error(bad.join('\n'));process.exit(2)}
+          EOF
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hotspot-body-nav
+          path: evidence/
+          retention-days: 14
