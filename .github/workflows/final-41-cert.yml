@@ -36,12 +36,9 @@ jobs:
           const routes=all.filter((_,i)=>i%shards===shard),sleep=ms=>new Promise(r=>setTimeout(r,ms));
           fs.mkdirSync('evidence/screens',{recursive:true});fs.mkdirSync('evidence/videos',{recursive:true});
           const browser=await chromium.launch({headless:true}),results=[];
-
           const isBadBody=t=>/Just a moment|Something went wrong|Too Many Requests|429 Too Many Requests/i.test(t||'');
           async function loadRoute(page,url){
-            const attempts=[];
-            let resp=null;
-            const waits=[0,10000,20000,40000,60000];
+            const attempts=[];let resp=null;const waits=[0,10000,20000,40000,60000];
             for(let a=0;a<waits.length;a++){
               if(waits[a])await sleep(waits[a]);
               resp=await page.goto(url,{waitUntil:'domcontentloaded'}).catch(()=>null);
@@ -52,7 +49,14 @@ jobs:
             }
             return {resp,attempts};
           }
-
+          async function transientSample(page){
+            return page.evaluate(()=>({
+              white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(e=>e.getClientRects().length).length,
+              native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(e=>e.getClientRects().length).length,
+              overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,
+              bfl:[...document.querySelectorAll('[data-sqbfl-root],.sqbfl')].filter(e=>e.getClientRects().length).length
+            }));
+          }
           for(const [vp,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
             for(const [label,route] of routes){
               if(/state-guard-series/i.test(route))throw new Error(`Forbidden State Guard route reached: ${route}`);
@@ -67,7 +71,7 @@ jobs:
               await sleep(2500);
               const root=await page.evaluate(()=>{const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&+s.opacity!==0&&r.width>1&&r.height>1},visible=q=>[...document.querySelectorAll(q)].filter(vis),rails=[...document.querySelectorAll('[data-sq-collection-rail]')],rail=rails.find(vis)||rails[0]||null,grp=n=>{const i=rail?.querySelector(`[data-sq-context-${n}]`),l=rail?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:i?i.hidden:null,visible:vis(i),count:l?l.querySelectorAll('a[href]').length:0}};return{railCount:rails.length,railVisibleCount:rails.filter(vis).length,categories:grp('categories'),subcategories:grp('subcategories'),types:grp('types'),organizations:grp('organizations'),whiteRefine:visible('.sq-global-refine-sidebar,.sqsg-refine-sidebar').length,nativeFilters:visible('.facets__filters-wrapper,.facets-horizontal-remove,.facets--filters-title,.facets-toggle__wrapper,theme-drawer#filters-drawer').length,productGrid:visible('collection-component,.product-grid,.product-grid-container').length,bfl:visible('[data-sqbfl-root],.sqbfl').length,bodyNav:visible('.sq-subcategory-section,.sq-third-level,.sq-books-tree,.sq-afg-branch-section,.sq-line-series-categories,.sq-line-program-tree,.sq-ps-root,.sq-ts-match-section,.sq-child-safety-section,.sq-maker-browser,.vac-unified-maker-browser,.vac-merged-browser,.vac-firearm-browser,.vac-dive-browser,.vac-knives-browser,.vac-armor-browser').length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}});
               const safe=label.toLowerCase().replace(/[^a-z0-9]+/g,'-');await page.screenshot({path:`evidence/screens/${vp}-${safe}.png`,fullPage:true});
-              const samples=[];for(let i=0;i<8;i++){samples.push(await page.evaluate(()=>({white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(e=>e.getClientRects().length).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(e=>e.getClientRects().length).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,bfl:[...document.querySelectorAll('[data-sqbfl-root],.sqbfl')].filter(e=>e.getClientRects().length).length}));await sleep(250)}
+              const samples=[];for(let i=0;i<8;i++){samples.push(await transientSample(page));await sleep(250);}
               let click=null;
               if(route.startsWith('/collections/')){
                 const link=page.locator('[data-sq-context-categories-list] a[href]:visible,[data-sq-context-subcategories-list] a[href]:visible,[data-sq-context-types-list] a[href]:visible,[data-sq-context-organizations-list] a[href]:visible').first();
@@ -78,14 +82,13 @@ jobs:
                     const rr=await loadRoute(page,target);await sleep(2500);
                     click=await page.evaluate(()=>({url:location.href,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(e=>e.getClientRects().length).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(e=>e.getClientRects().length).length,bfl:[...document.querySelectorAll('[data-sqbfl-root],.sqbfl')].filter(e=>e.getClientRects().length).length,productGrid:[...document.querySelectorAll('collection-component,.product-grid,.product-grid-container')].filter(e=>e.getClientRects().length).length}));
                     click.status=rr.resp?.status()||0;click.attempts=rr.attempts;
-                    const clickSamples=[];for(let i=0;i<8;i++){clickSamples.push(await page.evaluate(()=>({white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(e=>e.getClientRects().length).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(e=>e.getClientRects().length).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}));await sleep(250)}click.samples=clickSamples;
+                    const clickSamples=[];for(let i=0;i<8;i++){clickSamples.push(await transientSample(page));await sleep(250);}click.samples=clickSamples;
                     await page.screenshot({path:`evidence/screens/${vp}-${safe}-after-first-hierarchy.png`,fullPage:true});
                   }
                 }
               }
               results.push({vp,label,route,status:resp?.status()||0,attempts:loaded.attempts,root,samples,click,consoleErrors:consoleErrors.slice(-30),failedRequests:failedRequests.slice(-30)});
-              await ctx.close();
-              await sleep(5000);
+              await ctx.close();await sleep(5000);
             }
           }
           await browser.close();fs.writeFileSync(`evidence/shard-${shard}.json`,JSON.stringify({shard,results},null,2));
