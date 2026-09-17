@@ -26,12 +26,27 @@ jobs:
         run: |
           mkdir -p accessories-ocr
           node - <<'EOF'
-          const {chromium}=require('playwright');const fs=require('fs');
-          const b=await chromium.launch({headless:true});const c=await b.newContext({viewport:{width:1440,height:1200}});const p=await c.newPage();
-          await p.goto('https://www.statesideqm.com/?preview_theme_id=158770561179',{waitUntil:'domcontentloaded',timeout:60000});await p.waitForTimeout(1000);
-          const r=await p.goto('https://www.statesideqm.com/collections/accessories-gifts-collectibles',{waitUntil:'domcontentloaded',timeout:60000});await p.waitForTimeout(8000);
-          const info=await p.evaluate(()=>{const rail=document.querySelector('[data-sq-collection-rail]');const visible=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&!e.hidden&&r.width>2&&r.height>2};const groups=[['Categories','[data-sq-context-categories]','[data-sq-context-categories-list]'],['Subcategories','[data-sq-context-subcategories]','[data-sq-context-subcategories-list]'],['Types','[data-sq-context-types]','[data-sq-context-types-list]']].map(([name,i,l])=>{const item=rail?.querySelector(i),list=rail?.querySelector(l);return{name,visible:visible(item),labels:[...(list?.querySelectorAll('.sq-collection-rail__link-label')||[])].map(x=>(x.textContent||'').trim()).filter(Boolean)}});return{status:r?.status?.()||null,title:document.title,h1:(document.querySelector('#MainContent h1')?.textContent||'').trim(),groups,sourceButtonCount:Number(rail?.dataset.sqSourceButtonCount||0),mirroredLinkCount:Number(rail?.dataset.sqMirroredLinkCount||0),visibleProductTitles:[...document.querySelectorAll('#MainContent a[href*="/products/"]')].filter(visible).map(a=>(a.textContent||'').replace(/\s+/g,' ').trim()).filter(Boolean).slice(0,30),bodyText:(document.body?.innerText||'').slice(0,30000)};});
-          fs.writeFileSync('accessories-ocr/dom.json',JSON.stringify(info,null,2));await p.screenshot({path:'accessories-ocr/accessories-current-draft.png',fullPage:true});await b.close();
+          const {chromium}=require('playwright');
+          const fs=require('fs');
+          (async()=>{
+            const b=await chromium.launch({headless:true});
+            const c=await b.newContext({viewport:{width:1440,height:1200}});
+            const p=await c.newPage();
+            await p.goto('https://www.statesideqm.com/?preview_theme_id=158770561179',{waitUntil:'domcontentloaded',timeout:60000});
+            await p.waitForTimeout(1000);
+            const r=await p.goto('https://www.statesideqm.com/collections/accessories-gifts-collectibles',{waitUntil:'domcontentloaded',timeout:60000});
+            await p.waitForTimeout(8000);
+            const status=r?r.status():null;
+            const info=await p.evaluate((status)=>{
+              const rail=document.querySelector('[data-sq-collection-rail]');
+              const visible=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&!e.hidden&&r.width>2&&r.height>2};
+              const groups=[['Categories','[data-sq-context-categories]','[data-sq-context-categories-list]'],['Subcategories','[data-sq-context-subcategories]','[data-sq-context-subcategories-list]'],['Types','[data-sq-context-types]','[data-sq-context-types-list]']].map(([name,i,l])=>{const item=rail?.querySelector(i),list=rail?.querySelector(l);return{name,visible:visible(item),labels:[...(list?.querySelectorAll('.sq-collection-rail__link-label')||[])].map(x=>(x.textContent||'').trim()).filter(Boolean)}});
+              return{status,title:document.title,h1:(document.querySelector('#MainContent h1')?.textContent||'').trim(),groups,sourceButtonCount:Number(rail?.dataset.sqSourceButtonCount||0),mirroredLinkCount:Number(rail?.dataset.sqMirroredLinkCount||0),visibleProductTitles:[...document.querySelectorAll('#MainContent a[href*="/products/"]')].filter(visible).map(a=>(a.textContent||'').replace(/\s+/g,' ').trim()).filter(Boolean).slice(0,30),bodyText:(document.body?.innerText||'').slice(0,30000)};
+            },status);
+            fs.writeFileSync('accessories-ocr/dom.json',JSON.stringify(info,null,2));
+            await p.screenshot({path:'accessories-ocr/accessories-current-draft.png',fullPage:true});
+            await b.close();
+          })().catch(err=>{console.error(err);process.exit(1)});
           EOF
       - name: OCR rendered screenshot
         run: |
