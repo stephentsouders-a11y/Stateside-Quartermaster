@@ -1,0 +1,62 @@
+name: Final 41 Route Chromium Certification
+on:
+  push:
+    paths: ['.github/workflows/final-41-cert.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify shard ${{ matrix.shard }}
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const base='https://www.statesideqm.com',theme='158770561179',shard=Number(process.env.SHARD),shards=8;
+          const all=[
+          ['Tactical Gear','/collections/tactical-gear'],['Uniforms','/collections/uniforms'],['Firearm Accessories','/collections/firearm-accessories'],['Body Armor & Ballistic Protection','/collections/body-armor-ballistic-protection'],['Apparel','/collections/apparel'],['Flags & Patriotic Decor','/collections/flags-patriotic-decor'],['Literature','/collections/literature'],['Outdoor & Preparedness Gear','/collections/outdoor-preparedness-gear'],['First Aid, Medical & IFAK','/collections/first-aid-medical-ifak'],['Flashlights & Lighting','/collections/flashlights-lighting'],['Knives, Axes & Cutlery','/collections/knives-axes-cutlery'],['Dive & Scuba','/collections/dive-scuba'],['Armed Forces Gear','/collections/armed-forces-gear'],['Morale Patches & Tactical ID','/collections/morale-patches-tactical-id'],['Footwear, Gloves & Eyewear','/collections/footwear-gloves-eyewear'],['Accessories, Gifts & Collectibles','/collections/accessories-gifts-collectibles'],['Safety, Rescue & Climbing','/collections/safety-rescue-climbing'],['Airsoft & Milsim','/collections/airsoft-milsim'],['K9 & Dog Gear','/collections/k9-dog-gear'],['Patriotic & American Heritage','/collections/patriotic-american-heritage'],['Art','/collections/art'],['Zippos, Lighters & Torches','/collections/zippos-lighters-torches'],['Watches','/collections/watches'],['Armored Vehicles','/pages/armored-vehicles-purchase-inquiry'],['Child Safety Shop','/collections/child-safety-shop'],['Thin Line','/collections/thin-line'],['Sta-Brite Insignia','/collections/sta-brite-insignia'],['Stateside Quartermaster Logo Merch','/collections/stateside-quartermaster-logo-merch'],['Army National Guard Series','/collections/army-national-guard-series'],['Air National Guard Series','/collections/air-national-guard-series'],['U.S. Army','/collections/products-built-for-the-line-u-s-army'],['U.S. Navy','/collections/products-built-for-the-line-u-s-navy'],['U.S. Air Force','/collections/products-built-for-the-line-u-s-air-force'],['U.S. Marine Corps','/collections/products-built-for-the-line-u-s-marine-corps'],['U.S. Coast Guard','/collections/products-built-for-the-line-u-s-coast-guard'],['U.S. Space Force','/collections/products-built-for-the-line-u-s-space-force'],['ROTC','/collections/rotc-series'],['JROTC','/collections/jrotc-series'],['Military Schools & Academies','/collections/military-schools-academies'],['Law Enforcement & Corrections','/collections/law-enforcement-corrections'],['Firefighting, EMS & Search & Rescue','/collections/firefighting-ems-search-rescue']];
+          if(all.length!==41||all.some(([,r])=>/state-guard-series/i.test(r)))throw new Error('41-route scope violated');
+          const routes=all.filter((_,i)=>i%shards===shard),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          fs.mkdirSync('evidence/screens',{recursive:true});fs.mkdirSync('evidence/videos',{recursive:true});
+          const browser=await chromium.launch({headless:true}),results=[];
+          for(const [vp,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
+            const ctx=await browser.newContext({viewport,recordVideo:{dir:'evidence/videos',size:viewport}}),page=await ctx.newPage();page.setDefaultNavigationTimeout(60000);
+            await page.goto(`${base}/?preview_theme_id=${theme}`,{waitUntil:'domcontentloaded'}).catch(()=>null);await sleep(1500);
+            for(const [label,route] of routes){
+              const u=new URL(route,base);u.searchParams.set('preview_theme_id',theme);if(route.startsWith('/collections/'))u.searchParams.set('filter.v.availability','1');
+              let resp=null;for(let a=0;a<4;a++){resp=await page.goto(u.toString(),{waitUntil:'domcontentloaded'}).catch(()=>null);await sleep(3500+a*1000);const t=(await page.locator('body').innerText().catch(()=>'' )).slice(0,3000);if(resp?.status()===200&&!/Just a moment|Something went wrong/i.test(t))break;await sleep(5000+a*3000)}
+              const root=await page.evaluate(()=>{const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&+s.opacity!==0&&r.width>1&&r.height>1},visible=q=>[...document.querySelectorAll(q)].filter(vis),rail=document.querySelector('[data-sq-collection-rail]'),grp=n=>{const i=rail?.querySelector(`[data-sq-context-${n}]`),l=rail?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:i?i.hidden:null,visible:vis(i),count:l?l.querySelectorAll('a[href]').length:0}};return{railCount:document.querySelectorAll('[data-sq-collection-rail]').length,railVisible:vis(rail),categories:grp('categories'),subcategories:grp('subcategories'),types:grp('types'),organizations:grp('organizations'),whiteRefine:visible('.sq-global-refine-sidebar,.sqsg-refine-sidebar').length,nativeFilters:visible('.facets__filters-wrapper,.facets-horizontal-remove,.facets--filters-title,.facets-toggle__wrapper,theme-drawer#filters-drawer').length,productGrid:visible('collection-component,.product-grid,.product-grid-container').length,bfl:visible('[data-sqbfl-root],.sqbfl').length,bodyNav:visible('.sq-subcategory-section,.sq-third-level,.sq-books-tree,.sq-afg-branch-section,.sq-line-series-categories,.sq-line-program-tree,.sq-ps-root,.sq-ts-match-section,.sq-child-safety-section,.sq-maker-browser,.vac-unified-maker-browser,.vac-merged-browser,.vac-firearm-browser,.vac-dive-browser,.vac-knives-browser,.vac-armor-browser').length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}});
+              const safe=label.toLowerCase().replace(/[^a-z0-9]+/g,'-');await page.screenshot({path:`evidence/screens/${vp}-${safe}.png`,fullPage:true});
+              const samples=[];for(let i=0;i<6;i++){await sleep(250);samples.push(await page.evaluate(()=>({white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(e=>e.getClientRects().length).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(e=>e.getClientRects().length).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4})))}
+              let click=null;if(route.startsWith('/collections/')){const link=page.locator('[data-sq-context-categories-list] a[href],[data-sq-context-subcategories-list] a[href],[data-sq-context-types-list] a[href],[data-sq-context-organizations-list] a[href]').first();if(await link.count()){const href=await link.getAttribute('href');if(href){const rr=await page.goto(new URL(href,page.url()).toString(),{waitUntil:'domcontentloaded'}).catch(()=>null);await sleep(3500);click=await page.evaluate(()=>({url:location.href,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(e=>e.getClientRects().length).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(e=>e.getClientRects().length).length,bfl:[...document.querySelectorAll('[data-sqbfl-root],.sqbfl')].filter(e=>e.getClientRects().length).length,productGrid:[...document.querySelectorAll('collection-component,.product-grid,.product-grid-container')].filter(e=>e.getClientRects().length).length}));click.status=rr?.status()||0;await page.screenshot({path:`evidence/screens/${vp}-${safe}-after-first-hierarchy.png`,fullPage:true})}}}
+              results.push({vp,label,route,status:resp?.status()||0,root,samples,click});
+            }
+            await ctx.close();
+          }
+          await browser.close();fs.writeFileSync(`evidence/shard-${shard}.json`,JSON.stringify({shard,results},null,2));
+          const bad=[];for(const r of results){if(r.status!==200)bad.push(`${r.vp} ${r.label}: HTTP ${r.status}`);if(r.route.startsWith('/collections/')&&r.root.railCount!==1)bad.push(`${r.vp} ${r.label}: rail ${r.root.railCount}`);if(r.root.whiteRefine)bad.push(`${r.vp} ${r.label}: white refine`);if(r.root.nativeFilters)bad.push(`${r.vp} ${r.label}: native filters`);if(r.root.overflow||r.samples.some(x=>x.overflow))bad.push(`${r.vp} ${r.label}: overflow`);if(r.click&&(r.click.status!==200||r.click.white||r.click.native||r.click.overflow))bad.push(`${r.vp} ${r.label}: hierarchy click failed/duplicate/overflow`)}
+          if(bad.length){console.error(bad.join('\n'));process.exit(2)}
+          EOF
+          node cert.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: final-41-cert-shard-${{ matrix.shard }}
+          path: evidence/
+          retention-days: 14
