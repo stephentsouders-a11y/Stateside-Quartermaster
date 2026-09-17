@@ -52,16 +52,23 @@ jobs:
             return {resp,attempts};
           }
           async function inspect(page){
-            return page.evaluate((surfaceSelector)=>{
-              const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>1&&r.height>1};
-              const visible=q=>[...document.querySelectorAll(q)].filter(vis);
-              const rails=visible('[data-sq-collection-rail]'),root=visible('[data-sqbfl-root],.sqbfl')[0]||null,surfaces=visible(surfaceSelector);
-              const buttons=surfaces.flatMap(s=>[...s.querySelectorAll('a[href],button')]).filter(vis).filter(e=>!e.closest('[data-sq-collection-rail]'));
-              const rail=rails[0]||null,group=n=>{const item=rail?.querySelector(`[data-sq-context-${n}]`),list=rail?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:item?item.hidden:null,visible:vis(item),count:list?list.querySelectorAll('a[href]').length:0}};
-              return {railCount:rails.length,categories:group('categories'),subcategories:group('subcategories'),types:group('types'),organizations:group('organizations'),surfaceCount:surfaces.length,buttonCount:buttons.length,hasBfl:!!root,bflState:root?.getAttribute('data-sqbfl-load-state')||'',bflText:(root?.innerText||'').slice(0,700),white:visible('.sq-global-refine-sidebar,.sqsg-refine-sidebar').length,native:visible('.facets__filters-wrapper,.facets-horizontal-remove,.facets--filters-title,.facets-toggle__wrapper,theme-drawer#filters-drawer').length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,mainText:(document.getElementById('MainContent')?.innerText||'').slice(0,1200),fetchStability:document.documentElement.getAttribute('data-sq-bfl-fetch-stability')||''};
-            },surfaceSelector);
+            for(let tries=0;tries<4;tries++){
+              try{
+                return await page.evaluate((surfaceSelector)=>{
+                  const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>1&&r.height>1};
+                  const visible=q=>[...document.querySelectorAll(q)].filter(vis);
+                  const rails=visible('[data-sq-collection-rail]'),root=visible('[data-sqbfl-root],.sqbfl')[0]||null,surfaces=visible(surfaceSelector);
+                  const buttons=surfaces.flatMap(s=>[...s.querySelectorAll('a[href],button')]).filter(vis).filter(e=>!e.closest('[data-sq-collection-rail],nav,[class*="breadcrumb"],[aria-label*="breadcrumb" i]'));
+                  const rail=rails[0]||null,group=n=>{const item=rail?.querySelector(`[data-sq-context-${n}]`),list=rail?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:item?item.hidden:null,visible:vis(item),count:list?list.querySelectorAll('a[href]').length:0}};
+                  return {railCount:rails.length,categories:group('categories'),subcategories:group('subcategories'),types:group('types'),organizations:group('organizations'),surfaceCount:surfaces.length,buttonCount:buttons.length,hasBfl:!!root,bflState:root?.getAttribute('data-sqbfl-load-state')||'',bflText:(root?.innerText||'').slice(0,700),white:visible('.sq-global-refine-sidebar,.sqsg-refine-sidebar').length,native:visible('.facets__filters-wrapper,.facets-horizontal-remove,.facets--filters-title,.facets-toggle__wrapper,theme-drawer#filters-drawer').length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,mainText:(document.getElementById('MainContent')?.innerText||'').slice(0,1200),fetchStability:document.documentElement.getAttribute('data-sq-bfl-fetch-stability')||'',owner:document.documentElement.getAttribute('data-sq-bfl-product-surface-owner')||''};
+                },surfaceSelector);
+              }catch(e){
+                if(!/Execution context was destroyed|navigation/i.test(String(e))||tries===3)throw e;
+                await page.waitForLoadState('domcontentloaded').catch(()=>null);await sleep(500);
+              }
+            }
           }
-          async function waitReady(page,isCollection){
+          async function waitRootReady(page,isCollection){
             if(!isCollection)return {ok:true,state:await inspect(page),timeline:[]};
             const timeline=[],deadline=Date.now()+120000;
             while(Date.now()<deadline){
@@ -74,7 +81,45 @@ jobs:
             }
             return {ok:false,state:timeline.at(-1)||{},timeline,reason:'navigation/product tree readiness timeout'};
           }
-          async function transient(page){const arr=[];for(let i=0;i<10;i++){arr.push(await inspect(page));await sleep(250)}return arr}
+          async function waitClickSettled(page){
+            const timeline=[],deadline=Date.now()+120000;
+            while(Date.now()<deadline){
+              const s=await inspect(page);timeline.push({ms:Date.now(),...s});
+              if(s.hasBfl){
+                if(s.bflState==='ready'&&!loadingRx.test(s.bflText))return {ok:true,state:s,timeline};
+                if(/Tree unavailable/i.test(s.bflText))return {ok:false,state:s,timeline,reason:'Tree unavailable'};
+              }else{
+                await sleep(1500);return {ok:true,state:await inspect(page),timeline};
+              }
+              await sleep(1000);
+            }
+            return {ok:false,state:timeline.at(-1)||{},timeline,reason:'clicked destination readiness timeout'};
+          }
+          async function transient(page){
+            const arr=[];
+            for(let i=0;i<10;i++){
+              try{arr.push(await inspect(page))}catch(e){arr.push({inspectionError:String(e)})}
+              await sleep(250);
+            }
+            return arr;
+          }
+          async function firstBodyHref(page){
+            return page.evaluate((surfaceSelector)=>{
+              const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>1&&r.height>1};
+              const surfaces=[...document.querySelectorAll(surfaceSelector)].filter(vis);
+              const anchors=surfaces.flatMap(s=>[...s.querySelectorAll('a[href]')]).filter(vis);
+              for(const a of anchors){
+                if(a.closest('[data-sq-collection-rail],nav,[class*="breadcrumb"],[aria-label*="breadcrumb" i]'))continue;
+                try{
+                  const u=new URL(a.getAttribute('href'),location.href),here=new URL(location.href);
+                  if(u.origin!==here.origin||u.pathname==='/'||/state-guard-series/i.test(u.pathname))continue;
+                  if(u.pathname===here.pathname&&u.search===here.search)continue;
+                  return a.getAttribute('href');
+                }catch(e){}
+              }
+              return null;
+            },surfaceSelector);
+          }
           for(const [vp,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
             for(const [label,route] of routes){
               if(/state-guard-series/i.test(route))throw new Error('State Guard reached');
@@ -82,22 +127,20 @@ jobs:
               const consoleErrors=[];page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
               await page.goto(`${base}/?preview_theme_id=${theme}`,{waitUntil:'domcontentloaded'}).catch(()=>null);await sleep(1200);
               const url=new URL(route,base);url.searchParams.set('preview_theme_id',theme);if(route.startsWith('/collections/'))url.searchParams.set('filter.v.availability','1');
-              const loaded=await load(page,url.toString()),ready=await waitReady(page,route.startsWith('/collections/')),root=await inspect(page),samples=await transient(page);
+              const loaded=await load(page,url.toString()),ready=await waitRootReady(page,route.startsWith('/collections/')),root=await inspect(page),samples=await transient(page);
+              const safe=label.toLowerCase().replace(/[^a-z0-9]+/g,'-');await page.screenshot({path:`evidence/screens/${vp}-${safe}-root.png`,fullPage:true});
               let click=null;
               if(route.startsWith('/collections/')){
-                const bodyLink=page.locator(`${surfaceSelector.split(',').map(s=>s+' a[href]:visible').join(',')}`).first();
-                if(await bodyLink.count()){
-                  const href=await bodyLink.getAttribute('href');
-                  if(href){
-                    const before=page.url(),target=new URL(href,before).toString();
-                    if(new URL(target).origin===base){
-                      const cLoad=await load(page,target),cReady=await waitReady(page,true),cSnap=await inspect(page),cSamples=await transient(page);
-                      click={href,target,status:cLoad.resp?.status()||0,attempts:cLoad.attempts,ready:cReady.ok,snap:cSnap,samples:cSamples};
-                    }
+                const href=await firstBodyHref(page);
+                if(href){
+                  const target=new URL(href,page.url());target.searchParams.set('preview_theme_id',theme);
+                  if(target.origin===base&&target.pathname!=='/'&&!/state-guard-series/i.test(target.pathname)){
+                    const cLoad=await load(page,target.toString()),cReady=await waitClickSettled(page),cSnap=await inspect(page),cSamples=await transient(page);
+                    click={href,target:target.toString(),status:cLoad.resp?.status()||0,attempts:cLoad.attempts,ready:cReady.ok,reason:cReady.reason||'',snap:cSnap,samples:cSamples};
+                    await page.screenshot({path:`evidence/screens/${vp}-${safe}-after-body-click.png`,fullPage:true});
                   }
                 }
               }
-              const safe=label.toLowerCase().replace(/[^a-z0-9]+/g,'-');await page.screenshot({path:`evidence/screens/${vp}-${safe}.png`,fullPage:true});
               results.push({vp,label,route,status:loaded.resp?.status()||0,attempts:loaded.attempts,ready,root,samples,click,consoleErrors:consoleErrors.slice(-30)});
               await ctx.close();await sleep(5000);
             }
@@ -111,14 +154,14 @@ jobs:
               if(!r.ready.ok)fail.push(`${r.vp} ${r.label}: ${r.ready.reason||'not ready'}`);
               if(r.root.surfaceCount<1||r.root.buttonCount<1)fail.push(`${r.vp} ${r.label}: missing visible body navigation/buttons`);
               if(r.root.hasBfl&&(r.root.bflState!=='ready'||loadingRx.test(r.root.bflText)))fail.push(`${r.vp} ${r.label}: BFL not ready`);
-              if(r.root.white||r.root.native||r.samples.some(x=>x.white||x.native))fail.push(`${r.vp} ${r.label}: duplicate filter UI`);
-              if(!r.click)fail.push(`${r.vp} ${r.label}: no clickable body navigation link`);
+              if(r.root.white||r.root.native||r.samples.some(x=>x.white||x.native||x.overflow))fail.push(`${r.vp} ${r.label}: duplicate filter UI or transient overflow`);
+              if(!r.click)fail.push(`${r.vp} ${r.label}: no valid clickable body navigation link`);
               else if(r.click.status!==200||!r.click.ready||r.click.snap.white||r.click.snap.native||r.click.snap.overflow||r.click.samples.some(x=>x.white||x.native||x.overflow)||(r.click.snap.hasBfl&&(r.click.snap.bflState!=='ready'||loadingRx.test(r.click.snap.bflText))))fail.push(`${r.vp} ${r.label}: body navigation click failed strict validation`);
-            } else if(r.label==='Armored Vehicles'&&r.root.railCount!==0)fail.push(`${r.vp} Armored Vehicles: collection rail visible on page route`);
-            if(r.root.overflow||r.samples.some(x=>x.overflow))fail.push(`${r.vp} ${r.label}: horizontal overflow`);
+            }else if(r.label==='Armored Vehicles'&&r.root.railCount!==0)fail.push(`${r.vp} Armored Vehicles: collection rail visible on page route`);
+            if(r.root.overflow)fail.push(`${r.vp} ${r.label}: horizontal overflow`);
           }
           if(fail.length){console.error(fail.join('\n'));process.exit(2)}
-          console.log(JSON.stringify(results.map(r=>({vp:r.vp,label:r.label,status:r.status,rail:r.root.railCount,surfaces:r.root.surfaceCount,buttons:r.root.buttonCount,bfl:r.root.hasBfl?`${r.root.bflState}/${r.root.fetchStability}`:'none',click:r.click&&r.click.status})),null,2));
+          console.log(JSON.stringify(results.map(r=>({vp:r.vp,label:r.label,status:r.status,rail:r.root.railCount,surfaces:r.root.surfaceCount,buttons:r.root.buttonCount,bfl:r.root.hasBfl?`${r.root.bflState}/${r.root.fetchStability}/${r.root.owner}`:'none',click:r.click&&{status:r.click.status,target:r.click.target}})),null,2));
           EOF
           node cert.mjs
       - uses: actions/upload-artifact@v4
