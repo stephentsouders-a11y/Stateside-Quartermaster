@@ -1,0 +1,26 @@
+name: Service Runtime Ready Diagnostic
+on:
+  push:
+    paths: ['.github/workflows/service-runtime-ready-diagnostic.yml']
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Wait for Army runtime to settle
+        run: |
+          cat > diag.mjs <<'EOF'
+          import{chromium}from'playwright';import fs from'node:fs';fs.mkdirSync('diag',{recursive:true});const sleep=ms=>new Promise(r=>setTimeout(r,ms)),b=await chromium.launch({headless:true}),c=await b.newContext({viewport:{width:1440,height:1000}}),p=await c.newPage(),u='https://www.statesideqm.com/collections/products-built-for-the-line-u-s-army?preview_theme_id=158770561179&filter.v.availability=1';let r=await p.goto(u,{waitUntil:'domcontentloaded',timeout:60000});const samples=[];for(let i=0;i<13;i++){if(i)await sleep(5000);samples.push(await p.evaluate(()=>{const main=document.getElementById('MainContent'),vis=e=>!!(e&&e.getClientRects().length),cards=[...document.querySelectorAll('.sqbfl-card')].filter(vis),root=[...document.querySelectorAll('[data-sqbfl-root],.sqbfl')].find(vis);return{sec:Math.round(performance.now()/1000),text:(root?.innerText||'').slice(0,600),cards:cards.length,loading:/Building the customer-facing product tree|Loading available items/i.test(root?.innerText||''),grid:[...main.querySelectorAll('collection-component,.product-grid,.product-grid-container')].filter(vis).length,recovery:document.documentElement.getAttribute('data-sq-bfl-recovery-status')||''}}));if(samples.at(-1).cards>0&&!samples.at(-1).loading)break}await p.screenshot({path:'diag/final.png',fullPage:true});fs.writeFileSync('diag/ready.json',JSON.stringify({http:r?.status()||0,samples},null,2));await c.close();await b.close();console.log(JSON.stringify(samples,null,2));if(!samples.some(x=>x.cards>0&&!x.loading))process.exit(2)
+          EOF
+          node diag.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: service-runtime-ready-diagnostic, path: diag/}
