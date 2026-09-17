@@ -9,6 +9,7 @@ jobs:
   certify:
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         include:
           - {key: army, label: U.S. Army, route: /collections/products-built-for-the-line-u-s-army}
@@ -20,7 +21,7 @@ jobs:
           - {key: coast-guard, label: U.S. Coast Guard, route: /collections/products-built-for-the-line-u-s-coast-guard}
           - {key: space-force, label: U.S. Space Force, route: /collections/products-built-for-the-line-u-s-space-force}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/setup-node@v4
         with: {node-version: '20'}
@@ -39,117 +40,188 @@ jobs:
           cat > cert.mjs <<'EOF'
           import { chromium } from 'playwright';
           import fs from 'node:fs';
-          const base='https://www.statesideqm.com', route=process.env.ROUTE, theme=process.env.THEME;
+
+          const base='https://www.statesideqm.com';
+          const route=process.env.ROUTE;
+          const theme=process.env.THEME;
           if(/state-guard/i.test(route)) throw new Error('State Guard route forbidden');
+
           fs.mkdirSync('evidence/screens',{recursive:true});
           fs.mkdirSync('evidence/videos',{recursive:true});
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
           const browser=await chromium.launch({headless:true});
           const results=[];
+
           for(const [vp,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
             const ctx=await browser.newContext({viewport,recordVideo:{dir:'evidence/videos',size:viewport}});
             const page=await ctx.newPage();
             page.setDefaultNavigationTimeout(60000);
             const consoleErrors=[];
+            const failedRequests=[];
             page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            page.on('requestfailed',r=>failedRequests.push({url:r.url(),error:r.failure()?.errorText||''}));
+
             await page.goto(`${base}/?preview_theme_id=${theme}`,{waitUntil:'domcontentloaded'}).catch(()=>null);
-            await sleep(2500);
+            await sleep(2000);
             const rootUrl=`${base}${route}?preview_theme_id=${theme}&filter.v.availability=1`;
             let response=null;
             for(let a=0;a<5;a++){
               response=await page.goto(rootUrl,{waitUntil:'domcontentloaded'}).catch(()=>null);
               await sleep(1500);
-              const txt=(await page.locator('body').innerText().catch(()=>'' )).slice(0,3500);
-              if(response?.status()===200&&!/Just a moment|Something went wrong/i.test(txt))break;
+              const txt=(await page.locator('body').innerText().catch(()=>'' )).slice(0,4000);
+              if(response?.status()===200&&!/Just a moment|Something went wrong|Too Many Requests/i.test(txt))break;
               await sleep(7000+a*5000);
             }
+
+            async function treeSnapshot(){
+              return page.evaluate(()=>{
+                const visible=e=>{
+                  if(!e||!e.getClientRects().length)return false;
+                  const s=getComputedStyle(e);
+                  return s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0';
+                };
+                const roots=[...document.querySelectorAll('[data-sqbfl-root],.sqbfl')];
+                const root=roots.find(r=>visible(r)&&r.getAttribute('data-sqbfl-load-state')==='ready')||roots.find(visible)||roots[0]||null;
+                const main=document.getElementById('MainContent');
+                return {
+                  rootCount:roots.length,
+                  visibleRootCount:roots.filter(visible).length,
+                  exists:!!root,
+                  visible:visible(root),
+                  state:root?.getAttribute('data-sqbfl-load-state')||'',
+                  text:(root?.innerText||'').slice(0,1200),
+                  cards:root?[...root.querySelectorAll('.sqbfl-card')].filter(visible).length:0,
+                  products:root?[...root.querySelectorAll('.sqbfl-product')].filter(visible).length:0,
+                  grids:root?[...root.querySelectorAll('.sqbfl-grid')].filter(visible).length:0,
+                  productGrids:root?[...root.querySelectorAll('.sqbfl-products')].filter(visible).length:0,
+                  genericGrid:main?[...main.querySelectorAll('collection-component,.product-grid-container,.product-grid')].filter(visible).length:0,
+                  recovery:document.documentElement.getAttribute('data-sq-bfl-recovery-status')||''
+                };
+              });
+            }
+
             async function waitReady(stage){
               const timeline=[];
               const deadline=Date.now()+120000;
               while(Date.now()<deadline){
-                const s=await page.evaluate(()=>{
-                  const root=document.querySelector('[data-sqbfl-root],.sqbfl');
-                  const main=document.getElementById('MainContent');
-                  const vis=e=>!!(e&&e.getClientRects().length);
-                  return {
-                    exists:!!root,
-                    visible:vis(root),
-                    state:root?.getAttribute('data-sqbfl-load-state')||'',
-                    text:(root?.innerText||'').slice(0,800),
-                    cards:[...document.querySelectorAll('.sqbfl-card')].filter(vis).length,
-                    grid:main?[...main.querySelectorAll('collection-component,.product-grid-container,.product-grid')].filter(vis).length:0,
-                    fetchStable:document.documentElement.getAttribute('data-sq-bfl-fetch-stability')||'',
-                    owner:document.documentElement.getAttribute('data-sq-bfl-product-surface-owner')||'',
-                    recovery:document.documentElement.getAttribute('data-sq-bfl-recovery-status')||''
-                  };
-                });
+                const s=await treeSnapshot();
                 timeline.push({ms:Date.now(),...s});
-                if(s.exists&&s.visible&&s.state==='ready'&&!/Loading available items|Building the customer-facing product tree|Tree unavailable/i.test(s.text)&&s.cards>0&&s.grid===0)return {ok:true,state:s,timeline};
-                if(/Tree unavailable/i.test(s.text))return {ok:false,state:s,timeline,reason:'tree unavailable'};
-                await sleep(2000);
+                const baseReady=s.exists&&s.visible&&s.state==='ready'&&!/Loading available items|Building the customer-facing product tree|Tree unavailable|Unable to load this series/i.test(s.text)&&s.genericGrid===0;
+                const contentReady=stage==='type'?s.products>0:s.cards>0;
+                if(baseReady&&contentReady)return {ok:true,state:s,timeline};
+                if(/Tree unavailable|Unable to load this series/i.test(s.text))return {ok:false,state:s,timeline,reason:'tree unavailable'};
+                await sleep(1500);
               }
               return {ok:false,state:timeline.at(-1)||{},timeline,reason:`${stage} readiness timeout`};
             }
+
             const rootReady=await waitReady('root');
             await page.screenshot({path:`evidence/screens/${vp}-${process.env.KEY}-root.png`,fullPage:true});
+
             const rail=await page.evaluate(()=>{
-              const r=document.querySelector('[data-sq-collection-rail]');
-              const v=e=>!!(e&&e.getClientRects().length);
-              const g=n=>{const i=r?.querySelector(`[data-sq-context-${n}]`),l=r?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:i?i.hidden:null,visible:v(i),count:l?l.querySelectorAll('a[href]').length:0}};
+              const v=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden');
+              const rails=[...document.querySelectorAll('[data-sq-collection-rail]')];
+              const r=rails.find(v)||rails[0]||null;
+              const g=n=>{
+                const i=r?.querySelector(`[data-sq-context-${n}]`),l=r?.querySelector(`[data-sq-context-${n}-list]`);
+                return {hidden:i?i.hidden:null,visible:v(i),count:l?l.querySelectorAll('a[href]').length:0};
+              };
               return {
-                count:document.querySelectorAll('[data-sq-collection-rail]').length,
+                count:rails.length,
+                visibleCount:rails.filter(v).length,
                 categories:g('categories'),subcategories:g('subcategories'),types:g('types'),
                 white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(v).length,
                 native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(v).length,
                 overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4
               };
             });
+
+            async function transientSamples(duration=1750){
+              const out=[];
+              const start=Date.now();
+              while(Date.now()-start<=duration){
+                const s=await treeSnapshot();
+                out.push({at:Date.now()-start,...s});
+                await sleep(250);
+              }
+              return out;
+            }
+
             const clicks=[];
-            async function clickStage(paramName,cardSelector,label){
-              const card=page.locator(cardSelector).first();
-              if(!(await card.count()))return {skipped:true,reason:`no ${label} card`};
+            async function clickStage(paramName,label,nextStage){
+              const selector=`[data-sqbfl-root]:visible .sqbfl-card[href*="${paramName}="], .sqbfl:visible .sqbfl-card[href*="${paramName}="]`;
+              const card=page.locator(selector).first();
+              if(!(await card.count()))return {skipped:true,reason:`no ${label} card`,before:await treeSnapshot()};
               const href=await card.getAttribute('href');
-              if(!href)return {skipped:true,reason:`no ${label} href`};
-              const res=await page.goto(new URL(href,page.url()).toString(),{waitUntil:'domcontentloaded'}).catch(()=>null);
-              const ready=await waitReady(label);
-              const snap=await page.evaluate((param)=>{
-                const u=new URL(location.href),main=document.getElementById('MainContent'),v=e=>!!(e&&e.getClientRects().length),root=document.querySelector('[data-sqbfl-root],.sqbfl');
+              const expected=href?new URL(href,page.url()).searchParams.get(paramName):'';
+              await card.scrollIntoViewIfNeeded();
+              await card.click();
+              const transient=await transientSamples();
+              await page.waitForFunction(({param,val})=>new URL(location.href).searchParams.get(param)===val,{param:paramName,val:expected},{timeout:10000}).catch(()=>null);
+              const ready=await waitReady(nextStage);
+              const snap=await treeSnapshot();
+              const url=await page.evaluate(()=>location.href);
+              const param=await page.evaluate(p=>new URL(location.href).searchParams.get(p),paramName);
+              const duplicate=await page.evaluate(()=>{
+                const v=e=>!!(e&&e.getClientRects().length&&getComputedStyle(e).display!=='none'&&getComputedStyle(e).visibility!=='hidden');
                 return {
-                  url:location.href,
-                  param:u.searchParams.get(param),
-                  state:root?.getAttribute('data-sqbfl-load-state')||'',
-                  text:(root?.innerText||'').slice(0,500),
-                  cards:[...document.querySelectorAll('.sqbfl-card')].filter(v).length,
-                  grid:main?[...main.querySelectorAll('collection-component,.product-grid-container,.product-grid')].filter(v).length:0,
                   white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(v).length,
                   native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(v).length,
                   overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4
                 };
-              },paramName);
+              });
               await page.screenshot({path:`evidence/screens/${vp}-${process.env.KEY}-${label}.png`,fullPage:true});
-              return {status:res?.status()||0,ready,snap};
+              return {href,expected,url,param,transient,ready,snap,...duplicate};
             }
-            clicks.push(['category',await clickStage('sq_bfl_category','.sqbfl-card[href*="sq_bfl_category="]','category')]);
-            if(clicks.at(-1)[1]?.ready?.ok)clicks.push(['subcategory',await clickStage('sq_bfl_subcategory','.sqbfl-card[href*="sq_bfl_subcategory="]','subcategory')]);
-            if(clicks.at(-1)[1]?.ready?.ok)clicks.push(['type',await clickStage('sq_bfl_type','.sqbfl-card[href*="sq_bfl_type="]','type')]);
-            results.push({vp,label:process.env.LABEL,route,status:response?.status()||0,rootReady,rail,clicks,consoleErrors:consoleErrors.slice(-30)});
+
+            const category=await clickStage('sq_bfl_category','category','category');
+            clicks.push(['category',category]);
+            if(category.ready?.ok){
+              const subcategory=await clickStage('sq_bfl_subcategory','subcategory','subcategory');
+              clicks.push(['subcategory',subcategory]);
+              if(subcategory.ready?.ok){
+                const type=await clickStage('sq_bfl_type','type','type');
+                clicks.push(['type',type]);
+              }
+            }
+
+            results.push({
+              vp,label:process.env.LABEL,route,status:response?.status()||0,
+              rootReady,rail,clicks,
+              consoleErrors:consoleErrors.slice(-40),
+              failedRequests:failedRequests.slice(-40)
+            });
             await ctx.close();
+            await sleep(3500);
           }
+
           await browser.close();
           fs.writeFileSync(`evidence/${process.env.KEY}.json`,JSON.stringify(results,null,2));
+
           const bad=[];
           for(const r of results){
             if(r.status!==200)bad.push(`${r.vp}: root HTTP ${r.status}`);
             if(!r.rootReady.ok)bad.push(`${r.vp}: root not ready (${r.rootReady.reason||''})`);
-            if(r.rail.count!==1||r.rail.categories.count<1||r.rail.categories.hidden)bad.push(`${r.vp}: rail/category failure`);
+            if(r.rootReady.state.visibleRootCount!==1)bad.push(`${r.vp}: expected one visible BFL root, got ${r.rootReady.state.visibleRootCount}`);
+            if(r.rail.visibleCount!==1||r.rail.categories.count<1||r.rail.categories.hidden)bad.push(`${r.vp}: rail/category failure`);
             if(r.rail.white||r.rail.native||r.rail.overflow)bad.push(`${r.vp}: duplicate filter or overflow`);
             for(const [name,c] of r.clicks){
-              if(c.skipped){if(name==='category')bad.push(`${r.vp}: no category card`);continue}
-              if(c.status!==200||!c.ready?.ok||!c.snap?.param||c.snap.grid||c.snap.white||c.snap.native||c.snap.overflow||/Loading available items|Building the customer-facing product tree|Tree unavailable/i.test(c.snap.text||''))bad.push(`${r.vp}: ${name} failed strict readiness`);
+              if(c.skipped){bad.push(`${r.vp}: ${name} unavailable (${c.reason})`);continue;}
+              if(!c.ready?.ok||!c.param||c.param!==c.expected||c.snap.genericGrid||c.white||c.native||c.overflow)bad.push(`${r.vp}: ${name} failed strict readiness`);
+              if(c.transient.some(s=>/Tree unavailable|Unable to load this series/i.test(s.text||'')))bad.push(`${r.vp}: ${name} transient tree failure`);
+              if(c.transient.some(s=>s.genericGrid>0))bad.push(`${r.vp}: ${name} transient generic grid flash`);
             }
+            const names=r.clicks.map(x=>x[0]);
+            if(!names.includes('category')||!names.includes('subcategory')||!names.includes('type'))bad.push(`${r.vp}: incomplete category/subcategory/type traversal`);
           }
+
           if(bad.length){console.error(bad.join('\n'));process.exit(2)}
-          console.log(JSON.stringify(results.map(r=>({vp:r.vp,root:r.rootReady.state,categories:r.rail.categories.count,clicks:r.clicks.map(([n,c])=>[n,c.skipped?'skip':c.snap])})),null,2));
+          console.log(JSON.stringify(results.map(r=>({
+            vp:r.vp,
+            root:r.rootReady.state,
+            categories:r.rail.categories.count,
+            clicks:r.clicks.map(([n,c])=>[n,c.skipped?'skip':{param:c.param,cards:c.snap.cards,products:c.snap.products,state:c.snap.state}])
+          })),null,2));
           EOF
           node cert.mjs
       - uses: actions/upload-artifact@v4
