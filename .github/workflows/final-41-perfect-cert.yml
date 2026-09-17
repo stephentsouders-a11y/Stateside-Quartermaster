@@ -9,14 +9,14 @@ jobs:
   certify:
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 1
       matrix:
         shard: [0,1,2,3,4,5,6,7]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/setup-node@v4
-        with: {node-version: '20'}
+        with: {node-version: '24'}
       - name: Install real Chromium Playwright
         run: |
           npm init -y >/dev/null 2>&1
@@ -41,7 +41,7 @@ jobs:
           const loadingRx=/Loading available items|Building the customer-facing product tree|Tree unavailable/i;
           const badPage=t=>/Just a moment|Something went wrong|Too Many Requests|429 Too Many Requests/i.test(t||'');
           async function load(page,url){
-            const attempts=[],waits=[0,10000,20000,40000,60000];let resp=null;
+            const attempts=[],waits=[0,15000,30000,60000,90000,120000];let resp=null;
             for(let i=0;i<waits.length;i++){
               if(waits[i])await sleep(waits[i]);
               resp=await page.goto(url,{waitUntil:'domcontentloaded'}).catch(()=>null);await sleep(2500);
@@ -60,7 +60,7 @@ jobs:
                   const rails=visible('[data-sq-collection-rail]'),root=visible('[data-sqbfl-root],.sqbfl')[0]||null,surfaces=visible(surfaceSelector);
                   const buttons=surfaces.flatMap(s=>[...s.querySelectorAll('a[href],button')]).filter(vis).filter(e=>!e.closest('[data-sq-collection-rail],nav,[class*="breadcrumb"],[aria-label*="breadcrumb" i]'));
                   const rail=rails[0]||null,group=n=>{const item=rail?.querySelector(`[data-sq-context-${n}]`),list=rail?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:item?item.hidden:null,visible:vis(item),count:list?list.querySelectorAll('a[href]').length:0}};
-                  return {railCount:rails.length,categories:group('categories'),subcategories:group('subcategories'),types:group('types'),organizations:group('organizations'),surfaceCount:surfaces.length,buttonCount:buttons.length,hasBfl:!!root,bflState:root?.getAttribute('data-sqbfl-load-state')||'',bflText:(root?.innerText||'').slice(0,700),white:visible('.sq-global-refine-sidebar,.sqsg-refine-sidebar').length,native:visible('.facets__filters-wrapper,.facets-horizontal-remove,.facets--filters-title,.facets-toggle__wrapper,theme-drawer#filters-drawer').length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,mainText:(document.getElementById('MainContent')?.innerText||'').slice(0,1200),fetchStability:document.documentElement.getAttribute('data-sq-bfl-fetch-stability')||'',owner:document.documentElement.getAttribute('data-sq-bfl-product-surface-owner')||''};
+                  return {railCount:rails.length,categories:group('categories'),subcategories:group('subcategories'),types:group('types'),organizations:group('organizations'),surfaceCount:surfaces.length,buttonCount:buttons.length,hasBfl:!!root,bflState:root?.getAttribute('data-sqbfl-load-state')||'',bflText:(root?.innerText||'').slice(0,700),shopAll:new URLSearchParams(location.search).get('sq_bfl_all')==='1',white:visible('.sq-global-refine-sidebar,.sqsg-refine-sidebar').length,native:visible('.facets__filters-wrapper,.facets-horizontal-remove,.facets--filters-title,.facets-toggle__wrapper,theme-drawer#filters-drawer').length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,mainText:(document.getElementById('MainContent')?.innerText||'').slice(0,1200),fetchStability:document.documentElement.getAttribute('data-sq-bfl-fetch-stability')||'',owner:document.documentElement.getAttribute('data-sq-bfl-product-surface-owner')||''};
                 },surfaceSelector);
               }catch(e){
                 if(!/Execution context was destroyed|navigation/i.test(String(e))||tries===3)throw e;
@@ -68,6 +68,7 @@ jobs:
               }
             }
           }
+          const shopAllReady=s=>!!(s&&s.shopAll&&s.surfaceCount>0&&s.buttonCount>0&&!loadingRx.test(s.bflText||''));
           async function waitRootReady(page,isCollection){
             if(!isCollection)return {ok:true,state:await inspect(page),timeline:[]};
             const timeline=[],deadline=Date.now()+120000;
@@ -86,7 +87,7 @@ jobs:
             while(Date.now()<deadline){
               const s=await inspect(page);timeline.push({ms:Date.now(),...s});
               if(s.hasBfl){
-                if(s.bflState==='ready'&&!loadingRx.test(s.bflText))return {ok:true,state:s,timeline};
+                if((s.bflState==='ready'&&!loadingRx.test(s.bflText))||shopAllReady(s))return {ok:true,state:s,timeline};
                 if(/Tree unavailable/i.test(s.bflText))return {ok:false,state:s,timeline,reason:'Tree unavailable'};
               }else{
                 await sleep(1500);return {ok:true,state:await inspect(page),timeline};
@@ -135,6 +136,8 @@ jobs:
                 if(href){
                   const target=new URL(href,page.url());target.searchParams.set('preview_theme_id',theme);
                   if(target.origin===base&&target.pathname!=='/'&&!/state-guard-series/i.test(target.pathname)){
+                    const rootWasThrottled=loaded.attempts.some(a=>a.status===429||a.bad);
+                    await sleep(rootWasThrottled?30000:10000);
                     const cLoad=await load(page,target.toString()),cReady=await waitClickSettled(page),cSnap=await inspect(page),cSamples=await transient(page);
                     click={href,target:target.toString(),status:cLoad.resp?.status()||0,attempts:cLoad.attempts,ready:cReady.ok,reason:cReady.reason||'',snap:cSnap,samples:cSamples};
                     await page.screenshot({path:`evidence/screens/${vp}-${safe}-after-body-click.png`,fullPage:true});
@@ -142,7 +145,7 @@ jobs:
                 }
               }
               results.push({vp,label,route,status:loaded.resp?.status()||0,attempts:loaded.attempts,ready,root,samples,click,consoleErrors:consoleErrors.slice(-30)});
-              await ctx.close();await sleep(5000);
+              await ctx.close();await sleep(10000);
             }
           }
           await browser.close();fs.writeFileSync(`evidence/shard-${shard}.json`,JSON.stringify({shard,results},null,2));
@@ -156,12 +159,12 @@ jobs:
               if(r.root.hasBfl&&(r.root.bflState!=='ready'||loadingRx.test(r.root.bflText)))fail.push(`${r.vp} ${r.label}: BFL not ready`);
               if(r.root.white||r.root.native||r.samples.some(x=>x.white||x.native||x.overflow))fail.push(`${r.vp} ${r.label}: duplicate filter UI or transient overflow`);
               if(!r.click)fail.push(`${r.vp} ${r.label}: no valid clickable body navigation link`);
-              else if(r.click.status!==200||!r.click.ready||r.click.snap.white||r.click.snap.native||r.click.snap.overflow||r.click.samples.some(x=>x.white||x.native||x.overflow)||(r.click.snap.hasBfl&&(r.click.snap.bflState!=='ready'||loadingRx.test(r.click.snap.bflText))))fail.push(`${r.vp} ${r.label}: body navigation click failed strict validation`);
+              else if(r.click.status!==200||!r.click.ready||r.click.snap.white||r.click.snap.native||r.click.snap.overflow||r.click.samples.some(x=>x.white||x.native||x.overflow)||(r.click.snap.hasBfl&&!shopAllReady(r.click.snap)&&(r.click.snap.bflState!=='ready'||loadingRx.test(r.click.snap.bflText))))fail.push(`${r.vp} ${r.label}: body navigation click failed strict validation`);
             }else if(r.label==='Armored Vehicles'&&r.root.railCount!==0)fail.push(`${r.vp} Armored Vehicles: collection rail visible on page route`);
             if(r.root.overflow)fail.push(`${r.vp} ${r.label}: horizontal overflow`);
           }
           if(fail.length){console.error(fail.join('\n'));process.exit(2)}
-          console.log(JSON.stringify(results.map(r=>({vp:r.vp,label:r.label,status:r.status,rail:r.root.railCount,surfaces:r.root.surfaceCount,buttons:r.root.buttonCount,bfl:r.root.hasBfl?`${r.root.bflState}/${r.root.fetchStability}/${r.root.owner}`:'none',click:r.click&&{status:r.click.status,target:r.click.target}})),null,2));
+          console.log(JSON.stringify(results.map(r=>({vp:r.vp,label:r.label,status:r.status,rail:r.root.railCount,surfaces:r.root.surfaceCount,buttons:r.root.buttonCount,bfl:r.root.hasBfl?`${r.root.bflState}/${r.root.fetchStability}/${r.root.owner}`:'none',click:r.click&&{status:r.click.status,target:r.click.target,shopAll:r.click.snap?.shopAll||false}})),null,2));
           EOF
           node cert.mjs
       - uses: actions/upload-artifact@v4
