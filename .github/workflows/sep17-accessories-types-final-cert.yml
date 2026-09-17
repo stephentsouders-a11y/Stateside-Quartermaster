@@ -1,0 +1,89 @@
+name: Sep17 Accessories Types final cert
+on:
+  push:
+    paths:
+      - '.github/workflows/sep17-accessories-types-final-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium and OCR
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr >/dev/null
+      - name: Certify repaired Accessories root
+        run: |
+          mkdir -p accessories-final
+          node - <<'EOF'
+          const {chromium}=require('playwright');const fs=require('fs');
+          (async()=>{
+            const childHandles=new Set(['challenge-coins-display-holders','collectibles-cards','drinkware-gifts','keychains-lanyards','personalized-displays-memorials','military-surplus-field-gear-collectibles','pins-buttons-small-insignia','sword-knife-display-cases','wallets-pocket-gifts']);
+            const b=await chromium.launch({headless:true});
+            const c=await b.newContext({viewport:{width:1440,height:1200}});
+            const p=await c.newPage();
+            await p.goto('https://www.statesideqm.com/?preview_theme_id=158770561179',{waitUntil:'domcontentloaded',timeout:60000});
+            await p.waitForTimeout(1600);
+            let r=await p.goto('https://www.statesideqm.com/collections/accessories-gifts-collectibles',{waitUntil:'domcontentloaded',timeout:60000});
+            if(r?.status()===429){await p.waitForTimeout(30000);r=await p.reload({waitUntil:'domcontentloaded',timeout:60000});}
+            await p.waitForTimeout(7500);
+            const snap=await p.evaluate(()=>{
+              const rail=document.querySelector('[data-sq-collection-rail]');
+              const visible=e=>{if(!e)return false;const s=getComputedStyle(e),q=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&!e.hidden&&q.width>2&&q.height>2};
+              const group=(name,item,list)=>{const i=rail?.querySelector(item),l=rail?.querySelector(list);return{name,visible:visible(i),hidden:i?.hidden??true,links:[...(l?.querySelectorAll('a[href]')||[])].map(a=>({label:(a.querySelector('.sq-collection-rail__link-label')?.textContent||a.textContent||'').replace(/\s+/g,' ').trim(),href:a.getAttribute('href')||''})).filter(x=>x.label&&x.href)}};
+              return{h1:(document.querySelector('#MainContent h1')?.textContent||'').trim(),groups:[group('Categories','[data-sq-context-categories]','[data-sq-context-categories-list]'),group('Subcategories','[data-sq-context-subcategories]','[data-sq-context-subcategories-list]'),group('Types','[data-sq-context-types]','[data-sq-context-types-list]')],visibleProducts:[...document.querySelectorAll('#MainContent a[href*="/products/"]')].filter(visible).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4};
+            });
+            const cats=snap.groups[0],subs=snap.groups[1],types=snap.groups[2];
+            const badTypeLinks=types.links.filter(x=>{try{const u=new URL(x.href,location.origin);const m=u.pathname.match(/^\/collections\/([^/]+)\/sq-type-/);return !m||!childHandles.has(m[1]);}catch(e){return true}});
+            const uniqueTypeUrls=new Set(types.links.map(x=>x.href));
+            const typeTrigger=p.locator('[data-sq-context-types] [data-sq-rail-trigger]').first();
+            await typeTrigger.click(); await p.waitForTimeout(650);
+            const open=await p.evaluate(()=>{const rail=document.querySelector('[data-sq-collection-rail]'),item=rail?.querySelector('[data-sq-context-types]'),fly=item?.querySelector('[data-sq-rail-flyout]'),main=document.getElementById('MainContent'),fr=fly?.getBoundingClientRect(),mr=main?.getBoundingClientRect();return{railClass:rail?.className||'',itemClass:item?.className||'',aria:item?.querySelector('[data-sq-rail-trigger]')?.getAttribute('aria-expanded'),flyWidth:fr?.width||0,flyRight:fr?.right||0,mainLeft:mr?.left||0,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}});
+            await p.screenshot({path:'accessories-final/root-types-open.png',fullPage:true});
+            await p.setViewportSize({width:390,height:844});await p.waitForTimeout(500);
+            const mobile=await p.evaluate(()=>({overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+3,railWidth:document.querySelector('[data-sq-collection-rail]')?.getBoundingClientRect().width||0,mainWidth:document.getElementById('MainContent')?.getBoundingClientRect().width||0}));
+            const result={httpStatus:r?.status()||null,snap,badTypeLinks,uniqueTypeUrlCount:uniqueTypeUrls.size,open,mobile};
+            fs.writeFileSync('accessories-final/result.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
+            const reasons=[];
+            if(result.httpStatus!==200)reasons.push('HTTP '+result.httpStatus);
+            if(cats.links.length!==9)reasons.push('Categories '+cats.links.length+' expected 9');
+            if(!cats.visible)reasons.push('Categories hidden');
+            if(subs.links.length!==0||subs.visible)reasons.push('fake Subcategories present');
+            if(!types.visible||types.links.length<20)reasons.push('Types missing/too few '+types.links.length);
+            if(badTypeLinks.length)reasons.push('invalid Type destinations '+badTypeLinks.length);
+            if(uniqueTypeUrls.size!==types.links.length)reasons.push('duplicate Type URLs');
+            if(!snap.visibleProducts)reasons.push('no visible products');
+            if(snap.overflow)reasons.push('desktop overflow before open');
+            if(open.aria!=='true'||!/is-open/.test(open.itemClass)||open.flyWidth<300)reasons.push('Types flyout did not open');
+            if(open.mainLeft<open.flyRight+20)reasons.push(`Types flyout overlaps content ${open.flyRight}/${open.mainLeft}`);
+            if(open.overflow)reasons.push('desktop overflow with Types open');
+            if(mobile.overflow||mobile.railWidth>392||mobile.mainWidth>392)reasons.push('mobile overflow');
+            console.log('ACCESSORIES_FINAL',reasons.length?'FAIL':'PASS',reasons.join('; '));
+            await b.close();if(reasons.length)process.exit(1);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          EOF
+      - name: OCR rendered page
+        if: always()
+        run: |
+          if [ -f accessories-final/root-types-open.png ]; then
+            tesseract accessories-final/root-types-open.png accessories-final/root-types-open-ocr --psm 6 2>accessories-final/tesseract-stderr.txt || true
+            echo '--- OCR MATCHES ---'
+            grep -Ei 'Categories|Types|Challenge|Keychains|Wallets|Display|Collectibles|Drinkware|Products' accessories-final/root-types-open-ocr.txt | head -120 || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accessories-final-cert
+          path: accessories-final/
+          if-no-files-found: warn
+          retention-days: 7
