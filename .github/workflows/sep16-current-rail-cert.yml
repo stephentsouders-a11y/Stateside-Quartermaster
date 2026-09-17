@@ -1,0 +1,44 @@
+name: Sep16 current collection rail cert
+on:
+  push:
+    paths:
+      - '.github/workflows/sep16-current-rail-cert.yml'
+      - '.github/scripts/current-collection-rail-cert.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify-current-rail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Run current collection rail certification
+        continue-on-error: true
+        run: node .github/scripts/current-collection-rail-cert.mjs
+      - name: Print certification summary
+        if: always()
+        run: |
+          node - <<'EOF'
+          const fs=require('fs');
+          if(!fs.existsSync('rail-cert/summary.json'))throw new Error('No summary generated');
+          const rows=JSON.parse(fs.readFileSync('rail-cert/summary.json','utf8'));
+          for(const r of rows)console.log(`${String(r.idx).padStart(2,'0')} ${r.outcome} ${r.name}${r.reasons.length?' :: '+r.reasons.join('; '):''}`);
+          console.log(`TOTAL=${rows.length} PASS=${rows.filter(r=>r.outcome==='PASS').length} FAIL=${rows.filter(r=>r.outcome==='FAIL').length}`);
+          if(rows.length!==42||rows.some(r=>r.outcome!=='PASS'))process.exit(1);
+          EOF
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep16-current-rail-results
+          path: rail-cert/
+          if-no-files-found: warn
+          retention-days: 7
