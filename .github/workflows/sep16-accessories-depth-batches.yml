@@ -1,0 +1,87 @@
+name: Sep16 Accessories depth batches
+on:
+  push:
+    paths:
+      - '.github/workflows/sep16-accessories-depth-batches.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  discover:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        batch:
+          - name: batch1
+            handles: 'challenge-coins-display-holders|Challenge Coins & Displays;collectibles-cards|Collectibles & Cards;drinkware-gifts|Drinkware'
+          - name: batch2
+            handles: 'keychains-lanyards|Keychains & Lanyards;personalized-displays-memorials|Memorial & Personalized Gifts;military-surplus-field-gear-collectibles|Military Surplus & Collectibles'
+          - name: batch3
+            handles: 'pins-buttons-small-insignia|Pins, Buttons & Small Insignia;sword-knife-display-cases|Sword & Knife Display Cases;wallets-pocket-gifts|Wallets & Pocket Gifts'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Discover child hierarchy
+        env:
+          BATCH_NAME: ${{ matrix.batch.name }}
+          CHILDREN: ${{ matrix.batch.handles }}
+        run: |
+          mkdir -p depth-results
+          node - <<'EOF'
+          const {chromium}=require('playwright');const fs=require('fs');
+          const children=process.env.CHILDREN.split(';').map(x=>{const p=x.split('|');return{handle:p[0],label:p.slice(1).join('|')}});
+          (async()=>{
+            const b=await chromium.launch({headless:true});
+            const c=await b.newContext({viewport:{width:1280,height:900}});
+            const p=await c.newPage();
+            await p.goto('https://www.statesideqm.com/?preview_theme_id=158770561179',{waitUntil:'domcontentloaded',timeout:60000});
+            await p.waitForTimeout(1800);
+            const out=[];
+            for(let i=0;i<children.length;i++){
+              const child=children[i];
+              if(i) await p.waitForTimeout(8000);
+              const url='https://www.statesideqm.com/collections/'+child.handle+'?filter.v.availability=1';
+              let r=await p.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+              if(r?.status()===429){await p.waitForTimeout(30000);r=await p.reload({waitUntil:'domcontentloaded',timeout:60000});}
+              await p.waitForTimeout(6500);
+              const data=await p.evaluate(()=>{
+                const clean=x=>(x?.textContent||'').replace(/\s+/g,' ').trim();
+                const visible=e=>{if(!e)return false;const s=getComputedStyle(e),q=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&!e.hidden&&q.width>2&&q.height>2};
+                const mapLinks=(sel)=>[...document.querySelectorAll(sel)].map(a=>({label:clean(a.querySelector('.sq-subcategory-name,.sq-third-level__name,.sq-ptype-browser__name,.vac-service-card__name,.vac-knives-browser__name,.vac-armor-browser__name,[class*="__name"],strong,h3,h4'))||clean(a),href:a.getAttribute('href')||''})).filter(x=>x.label&&x.href);
+                const rail=document.querySelector('[data-sq-collection-rail]');
+                const railGroup=(sel)=>[...(rail?.querySelector(sel)?.querySelectorAll('a[href]')||[])].map(a=>({label:clean(a.querySelector('.sq-collection-rail__link-label'))||clean(a),href:a.getAttribute('href')||''})).filter(x=>x.label&&x.href);
+                return{
+                  h1:clean(document.querySelector('#MainContent h1')),
+                  pageText:clean(document.body).slice(0,12000),
+                  visibleProductCount:[...document.querySelectorAll('#MainContent a[href*="/products/"]')].filter(visible).length,
+                  localSubcategories:mapLinks('.sq-subcategory-section a[href*="/collections/"],a.sq-subcategory-card[href*="/collections/"]'),
+                  localTypes:mapLinks('.sq-third-level__type[href],.sq-ptype-browser__card[href],.vac-service-card[href],.vac-knives-browser__button[href],.vac-armor-browser__card[href]'),
+                  railCategories:railGroup('[data-sq-context-categories-list]'),
+                  railSubcategories:railGroup('[data-sq-context-subcategories-list]'),
+                  railTypes:railGroup('[data-sq-context-types-list]')
+                };
+              });
+              out.push({child,httpStatus:r?.status()||null,url,data});
+              console.log('DEPTH_CHILD',JSON.stringify(out[out.length-1]));
+            }
+            fs.writeFileSync(`depth-results/${process.env.BATCH_NAME}.json`,JSON.stringify(out,null,2));
+            await b.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          EOF
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accessories-depth-${{ matrix.batch.name }}
+          path: depth-results/
+          if-no-files-found: warn
+          retention-days: 7
