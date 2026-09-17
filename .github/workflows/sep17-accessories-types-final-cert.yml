@@ -1,4 +1,5 @@
 name: Sep17 Accessories Types final cert
+# rerun: fixed-node-url-origin
 on:
   push:
     paths:
@@ -44,7 +45,7 @@ jobs:
               return{h1:(document.querySelector('#MainContent h1')?.textContent||'').trim(),groups:[group('Categories','[data-sq-context-categories]','[data-sq-context-categories-list]'),group('Subcategories','[data-sq-context-subcategories]','[data-sq-context-subcategories-list]'),group('Types','[data-sq-context-types]','[data-sq-context-types-list]')],visibleProducts:[...document.querySelectorAll('#MainContent a[href*="/products/"]')].filter(visible).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4};
             });
             const cats=snap.groups[0],subs=snap.groups[1],types=snap.groups[2];
-            const badTypeLinks=types.links.filter(x=>{try{const u=new URL(x.href,location.origin);const m=u.pathname.match(/^\/collections\/([^/]+)\/sq-type-/);return !m||!childHandles.has(m[1]);}catch(e){return true}});
+            const badTypeLinks=types.links.filter(x=>{try{const u=new URL(x.href,'https://www.statesideqm.com');const m=u.pathname.match(/^\/collections\/([^/]+)\/sq-type-/);return !m||!childHandles.has(m[1]);}catch(e){return true}});
             const uniqueTypeUrls=new Set(types.links.map(x=>x.href));
             const typeTrigger=p.locator('[data-sq-context-types] [data-sq-rail-trigger]').first();
             await typeTrigger.click(); await p.waitForTimeout(650);
