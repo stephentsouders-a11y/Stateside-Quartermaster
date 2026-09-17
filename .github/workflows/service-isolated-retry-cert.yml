@@ -1,0 +1,39 @@
+name: Isolated Navy Marine Chromium Certification
+on:
+  push:
+    paths: ['.github/workflows/service-isolated-retry-cert.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Certify Navy and Marines serially
+        run: |
+          cat > retry.mjs <<'EOF'
+          import {chromium} from 'playwright';import fs from 'node:fs';
+          const base='https://www.statesideqm.com',theme='158770561179',routes=[['navy','U.S. Navy','/collections/products-built-for-the-line-u-s-navy'],['marines','U.S. Marine Corps','/collections/products-built-for-the-line-u-s-marine-corps']],sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          if(routes.some(x=>/state-guard/i.test(x[2])))throw new Error('State Guard forbidden');fs.mkdirSync('evidence/screens',{recursive:true});fs.mkdirSync('evidence/videos',{recursive:true});
+          const b=await chromium.launch({headless:true}),out=[];
+          for(const [vp,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){const c=await b.newContext({viewport,recordVideo:{dir:'evidence/videos',size:viewport}}),p=await c.newPage();await p.goto(`${base}/?preview_theme_id=${theme}`,{waitUntil:'domcontentloaded'}).catch(()=>null);await sleep(5000);
+            for(const [key,label,route] of routes){let resp=null;const u=`${base}${route}?preview_theme_id=${theme}&filter.v.availability=1`;for(let a=0;a<8;a++){resp=await p.goto(u,{waitUntil:'domcontentloaded',timeout:60000}).catch(()=>null);await sleep(5000+a*1500);const t=(await p.locator('body').innerText().catch(()=>'' )).slice(0,3000);if(resp?.status()===200&&!/Just a moment|Something went wrong/i.test(t))break;await sleep(8000+a*5000)}
+              const root=await p.evaluate(()=>{const vis=e=>!!(e&&e.getClientRects().length),rail=document.querySelector('[data-sq-collection-rail]'),list=rail?.querySelector('[data-sq-context-categories-list]');return{rail:document.querySelectorAll('[data-sq-collection-rail]').length,seed:rail?.getAttribute('data-sq-service-root-seeded')||'',cats:list?list.querySelectorAll('a[href]').length:0,white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(vis).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(vis).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}});await p.screenshot({path:`evidence/screens/${vp}-${key}-root.png`,fullPage:true});
+              let click=null;if(root.cats){const href=await p.locator('[data-sq-context-categories-list] a[href]').first().getAttribute('href');const rr=await p.goto(new URL(href,p.url()).toString(),{waitUntil:'domcontentloaded',timeout:60000}).catch(()=>null);await sleep(5000);click=await p.evaluate(()=>({white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(e=>e.getClientRects().length).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(e=>e.getClientRects().length).length,bfl:[...document.querySelectorAll('[data-sqbfl-root],.sqbfl')].filter(e=>e.getClientRects().length).length,grid:[...document.querySelectorAll('collection-component,.product-grid,.product-grid-container')].filter(e=>e.getClientRects().length).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4}));click.status=rr?.status()||0;await p.screenshot({path:`evidence/screens/${vp}-${key}-after-category.png`,fullPage:true})}out.push({vp,key,label,status:resp?.status()||0,root,click});await sleep(8000)}await c.close()}
+          await b.close();fs.writeFileSync('evidence/results.json',JSON.stringify(out,null,2));const bad=out.filter(r=>r.status!==200||r.root.rail!==1||r.root.seed!=='true'||r.root.cats<1||r.root.white||r.root.native||r.root.overflow||(r.click&&(r.click.status!==200||r.click.white||r.click.native||r.click.overflow)));if(bad.length){console.error(JSON.stringify(bad,null,2));process.exit(2)}
+          EOF
+          node retry.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: navy-marines-isolated-cert
+          path: evidence/
+          retention-days: 14
