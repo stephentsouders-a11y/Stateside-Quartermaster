@@ -1,0 +1,116 @@
+name: CASE0109 Fetch Baker Gallery
+on:
+  push:
+    branches: [case0109-baker-fetch]
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright requests beautifulsoup4
+          python -m playwright install --with-deps chromium
+      - name: Acquire 1965 Baker gallery with Chromium Playwright
+        run: |
+          cat > /tmp/fetch_baker.py <<'PY'
+          import os,re,json,hashlib
+          from urllib.parse import urljoin
+          import requests
+          from playwright.sync_api import sync_playwright
+
+          PAGE='https://projectdelta-b52.com/new/master-gallery.html#1965-baker'
+          OUT='baker_1965'
+          os.makedirs(OUT,exist_ok=True)
+          found={}
+          captions={}
+
+          with sync_playwright() as p:
+              b=p.chromium.launch(headless=True)
+              page=b.new_page(viewport={'width':1600,'height':1200})
+              page.goto(PAGE,wait_until='domcontentloaded',timeout=120000)
+              page.wait_for_timeout(5000)
+              for sel in ["text=1965 — BAKER","text=1965 - BAKER","[href='#1965-baker']"]:
+                  try:
+                      loc=page.locator(sel)
+                      if loc.count():
+                          loc.first.click(timeout=3000)
+                          page.wait_for_timeout(2500)
+                          break
+                  except Exception:
+                      pass
+
+              # Collect image links and nearby text/caption context.
+              data=page.eval_on_selector_all('img, a', '''els => els.map(e => {
+                const attrs=[...e.attributes].reduce((o,a)=>(o[a.name]=a.value,o),{});
+                const p=e.closest('figure, .gallery-item, .photo, .item, li, div');
+                let cap='';
+                if (p) {
+                  const fc=p.querySelector('figcaption, .caption, .photo-caption, .gallery-caption');
+                  cap=(fc?fc.textContent:p.textContent||'').trim();
+                }
+                return {tag:e.tagName,src:e.src||'',href:e.href||'',alt:e.alt||'',title:e.title||'',text:(e.textContent||'').trim(),caption:cap,data:attrs};
+              })''')
+              for item in data:
+                  vals=[item.get('src',''),item.get('href','')]+list(item.get('data',{}).values())
+                  for v in vals:
+                      if not isinstance(v,str): continue
+                      m=re.search(r'([^/]*baker[_-]?(\d+)\.(?:jpe?g|png))',v,re.I)
+                      if m:
+                          num=int(m.group(2)); u=urljoin(page.url,v)
+                          rec={'url':u,'alt':item.get('alt',''),'title':item.get('title',''),'text':item.get('text',''),'caption':item.get('caption','')}
+                          found.setdefault(num,rec)
+                          # best available caption text
+                          for s in [rec['caption'],rec['alt'],rec['title'],rec['text']]:
+                              if s and len(s)>len(captions.get(num,'')) and 'baker_' not in s.lower(): captions[num]=s
+
+              # Additional pass over whole page text around baker filenames.
+              html=page.content()
+              open(f'{OUT}/master-gallery.html','w',encoding='utf-8').write(html)
+              page.screenshot(path=f'{OUT}/master-gallery-baker.png',full_page=True)
+              b.close()
+
+          base='https://projectdelta-b52.com/1965/baker_{}.jpg'
+          s=requests.Session(); s.headers.update({'User-Agent':'Mozilla/5.0'})
+          results=[]
+          for n in range(1,35):
+              candidates=[]
+              if n in found: candidates.append(found[n]['url'])
+              candidates.append(base.format(n))
+              ok=None; content=None
+              for u in dict.fromkeys(candidates):
+                  try:
+                      r=s.get(u,timeout=30)
+                      ctype=r.headers.get('content-type','')
+                      if r.status_code==200 and len(r.content)>1000 and ('image' in ctype or r.content[:3]==b'\xff\xd8\xff' or r.content[:8]==b'\x89PNG\r\n\x1a\n'):
+                          ok=u; content=r.content; break
+                  except Exception:
+                      pass
+              rec={'number':n,'url':ok,'dom':found.get(n),'caption':captions.get(n,''),'downloaded':bool(ok)}
+              if ok:
+                  ext='.png' if content[:8]==b'\x89PNG\r\n\x1a\n' else '.jpg'
+                  fn=f'{OUT}/baker_{n}{ext}'
+                  open(fn,'wb').write(content)
+                  rec.update({'file':fn,'bytes':len(content),'sha256':hashlib.sha256(content).hexdigest()})
+              results.append(rec)
+          open(f'{OUT}/manifest.json','w',encoding='utf-8').write(json.dumps(results,indent=2,ensure_ascii=False))
+          got=sum(r['downloaded'] for r in results)
+          print('downloaded',got,'of 34')
+          for r in results: print(r)
+          if got != 34:
+              raise SystemExit(f'Expected 34 images, got {got}')
+          PY
+          python /tmp/fetch_baker.py
+      - name: Upload Baker gallery artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: case0109-baker-1965-34photos
+          path: baker_1965/
+          if-no-files-found: error
