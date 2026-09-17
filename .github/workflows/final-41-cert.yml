@@ -1,3 +1,4 @@
+# Evidence generation: post Shopify fetch-scope fix 2026-09-17
 name: Final 41 Route Chromium Certification
 on:
   push:
