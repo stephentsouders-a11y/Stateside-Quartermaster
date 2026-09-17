@@ -49,7 +49,7 @@ jobs:
             }
             return {resp,attempts};
           }
-          const bodySurfaceSelector=['[data-sqbfl-root]','.sqbfl','.sq-subcategory-section','.sq-third-level','.sq-books-tree','[data-sq-afg-mode]','.sq-afg-branch-section','.sq-line-series-categories','.sq-line-program-tree','.sq-ps-root','.sq-ts-match-section','.sq-child-safety-section','.sq-maker-browser','.vac-unified-maker-browser','.vac-merged-browser','.vac-firearm-browser','.vac-dive-browser','.vac-knives-browser','.vac-armor-browser','.vac-gift-categories','.vac-guard-folders','.sq-ptype-browser','.sqsg-orgs'].join(',');
+          const bodySurfaceSelector=['[data-sqbfl-root]','.sqbfl','.sqaca','.sq-subcategory-section','.sq-third-level','.sq-books-tree','[data-sq-afg-mode]','.sq-afg-branch-section','.sq-line-series-categories','.sq-line-program-tree','.sq-ps-root','.sq-ts-match-section','.sq-child-safety-section','.sq-maker-browser','.vac-unified-maker-browser','.vac-merged-browser','.vac-firearm-browser','.vac-dive-browser','.vac-knives-browser','.vac-armor-browser','.vac-gift-categories','.vac-guard-folders','.sq-ptype-browser','.sqsg-orgs'].join(',');
           async function waitForReady(page,route){
             const timeline=[];const deadline=Date.now()+(serviceRoots.has(route)?120000:15000);
             while(Date.now()<deadline){
