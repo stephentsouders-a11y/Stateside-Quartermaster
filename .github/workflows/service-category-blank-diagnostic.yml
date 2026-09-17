@@ -1,0 +1,69 @@
+name: Service Category Blank Diagnostic
+
+on:
+  push:
+    paths:
+      - '.github/workflows/service-category-blank-diagnostic.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Diagnose Navy category state
+        env:
+          BASE_URL: https://www.statesideqm.com
+          PREVIEW_THEME_ID: '158770561179'
+        run: |
+          cat > diag.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          fs.mkdirSync('artifacts',{recursive:true});
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1100}});
+          const page=await context.newPage();
+          const root=`${process.env.BASE_URL}/collections/products-built-for-the-line-u-s-navy?preview_theme_id=${process.env.PREVIEW_THEME_ID}&filter.v.availability=1`;
+          let r=await page.goto(root,{waitUntil:'domcontentloaded',timeout:60000});
+          await page.waitForTimeout(5000);
+          const href=await page.locator('[data-sq-context-categories-list] a[href]').first().getAttribute('href');
+          const target=new URL(href,page.url()).toString();
+          r=await page.goto(target,{waitUntil:'domcontentloaded',timeout:60000});
+          await page.waitForTimeout(8000);
+          const data=await page.evaluate(()=>{
+            const main=document.getElementById('MainContent');
+            const info=(sel)=>[...document.querySelectorAll(sel)].map((x,i)=>({i,tag:x.tagName,cls:x.className,hidden:x.hidden,aria:x.getAttribute('aria-hidden'),style:x.getAttribute('style'),display:getComputedStyle(x).display,visibility:getComputedStyle(x).visibility,rect:{w:x.getBoundingClientRect().width,h:x.getBoundingClientRect().height},text:(x.textContent||'').replace(/\s+/g,' ').trim().slice(0,300)}));
+            return {
+              url:location.href,statusText:document.title,htmlClass:document.documentElement.className,
+              recoveryStatus:window.__sqBflRecoveryStatus||null,
+              unifiedFlag:window.__sqBflUnifiedTree,
+              mainText:(main?.innerText||'').replace(/\s+/g,' ').trim().slice(0,2000),
+              mainRect:main?{w:main.getBoundingClientRect().width,h:main.getBoundingClientRect().height}:null,
+              sqbfl:info('[data-sqbfl-root],.sqbfl'),
+              line:info('[data-sq-line-series-categories],.sq-line-series-categories'),
+              collection:info('collection-component'),
+              sub:info('.sq-subcategory-section'),
+              third:info('.sq-third-level'),
+              sections:main?[...main.children].map((x,i)=>({i,tag:x.tagName,id:x.id,cls:x.className,display:getComputedStyle(x).display,h:x.getBoundingClientRect().height,text:(x.textContent||'').replace(/\s+/g,' ').trim().slice(0,180)})):[]
+            };
+          });
+          fs.writeFileSync('artifacts/diag.json',JSON.stringify({http:r?.status()||0,target,data},null,2));
+          await page.screenshot({path:'artifacts/diag.png',fullPage:true});
+          console.log(JSON.stringify({http:r?.status()||0,target,data},null,2));
+          await context.close();await browser.close();
+          EOF
+          node diag.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: service-category-blank-diagnostic
+          path: artifacts/
