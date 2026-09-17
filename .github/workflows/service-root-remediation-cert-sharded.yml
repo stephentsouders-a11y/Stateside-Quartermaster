@@ -1,0 +1,149 @@
+name: Service Root Rail Remediation Cert Sharded
+
+on:
+  push:
+    paths:
+      - '.github/workflows/service-root-remediation-cert-sharded.yml'
+  workflow_dispatch:
+
+jobs:
+  chromium-service-root:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: army
+            label: U.S. Army
+            route: /collections/products-built-for-the-line-u-s-army
+          - key: arng
+            label: Army National Guard
+            route: /collections/army-national-guard-series
+          - key: air-force
+            label: U.S. Air Force
+            route: /collections/products-built-for-the-line-u-s-air-force
+          - key: ang
+            label: Air National Guard
+            route: /collections/air-national-guard-series
+          - key: navy
+            label: U.S. Navy
+            route: /collections/products-built-for-the-line-u-s-navy
+          - key: marines
+            label: U.S. Marine Corps
+            route: /collections/products-built-for-the-line-u-s-marine-corps
+          - key: coast-guard
+            label: U.S. Coast Guard
+            route: /collections/products-built-for-the-line-u-s-coast-guard
+          - key: space-force
+            label: U.S. Space Force
+            route: /collections/products-built-for-the-line-u-s-space-force
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Certify ${{ matrix.label }}
+        env:
+          BASE_URL: https://www.statesideqm.com
+          PREVIEW_THEME_ID: '158770561179'
+          ROUTE_KEY: ${{ matrix.key }}
+          ROUTE_LABEL: ${{ matrix.label }}
+          ROUTE_PATH: ${{ matrix.route }}
+        run: |
+          cat > cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          fs.mkdirSync('artifacts/screenshots',{recursive:true});
+          fs.mkdirSync('artifacts/videos',{recursive:true});
+          const route=process.env.ROUTE_PATH;
+          if(/state-guard-series/i.test(route)) throw new Error('State Guard route forbidden');
+          const results=[];
+          const browser=await chromium.launch({headless:true});
+          for(const [vpName,viewport] of [['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]]){
+            const context=await browser.newContext({viewport,recordVideo:{dir:'artifacts/videos',size:viewport}});
+            const page=await context.newPage();
+            const errors=[];
+            page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            await page.goto(`${process.env.BASE_URL}/?preview_theme_id=${process.env.PREVIEW_THEME_ID}`,{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForTimeout(1400);
+            const url=`${process.env.BASE_URL}${route}?preview_theme_id=${process.env.PREVIEW_THEME_ID}&filter.v.availability=1`;
+            let response=null;
+            for(let attempt=0;attempt<5;attempt++){
+              response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000}).catch(()=>null);
+              await page.waitForTimeout(3500+attempt*1000);
+              const body=(await page.locator('body').innerText().catch(()=>'' )).slice(0,5000);
+              if(response?.status()===200&&!/Just a moment|Something went wrong/i.test(body))break;
+              await page.waitForTimeout(4500+attempt*1500);
+            }
+            const root=await page.evaluate(()=>{
+              const rail=document.querySelector('[data-sq-collection-rail]');
+              const group=n=>{const item=rail?.querySelector(`[data-sq-context-${n}]`),list=rail?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:item?item.hidden:null,visible:!!(item&&item.getClientRects().length),domCount:list?list.querySelectorAll('a[href]').length:0,labels:list?[...list.querySelectorAll('a[href]')].map(a=>(a.textContent||'').replace(/\s+/g,' ').trim()).filter(Boolean):[]}};
+              const main=document.getElementById('MainContent');
+              return{
+                railCount:document.querySelectorAll('[data-sq-collection-rail]').length,
+                serverSeed:rail?.getAttribute('data-sq-service-root-seeded')||'',
+                categories:group('categories'),subcategories:group('subcategories'),types:group('types'),
+                whiteRefine:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(x=>x.getClientRects().length).length,
+                nativeFilters:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(x=>x.getClientRects().length).length,
+                bodyCategoryCards:main?main.querySelectorAll('[data-sq-line-category-card]').length:0,
+                bodyCategoryVisible:main?[...main.querySelectorAll('[data-sq-line-category-card]')].filter(x=>x.getClientRects().length).length:0,
+                productGridVisible:!!(main&&[...main.querySelectorAll('collection-component,.product-grid,#product-grid')].some(x=>x.getClientRects().length)),
+                overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+2
+              };
+            });
+            await page.screenshot({path:`artifacts/screenshots/${vpName}-${process.env.ROUTE_KEY}-root.png`,fullPage:true});
+            let afterCategory=null;
+            if(root.categories.domCount){
+              const first=page.locator('[data-sq-context-categories-list] a[href]').first();
+              const href=await first.getAttribute('href');
+              if(href){
+                await page.goto(new URL(href,page.url()).toString(),{waitUntil:'domcontentloaded',timeout:60000}).catch(()=>null);
+                const transient=[];
+                for(let i=0;i<16;i++){
+                  await page.waitForTimeout(250);
+                  transient.push(await page.evaluate(()=>({t:performance.now(),white:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(x=>x.getClientRects().length).length,native:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(x=>x.getClientRects().length).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+2})));
+                }
+                afterCategory=await page.evaluate(()=>{
+                  const rail=document.querySelector('[data-sq-collection-rail]');
+                  const group=n=>{const item=rail?.querySelector(`[data-sq-context-${n}]`),list=rail?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:item?item.hidden:null,visible:!!(item&&item.getClientRects().length),domCount:list?list.querySelectorAll('a[href]').length:0}};
+                  return{url:location.href,categories:group('categories'),subcategories:group('subcategories'),types:group('types'),overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+2};
+                });
+                afterCategory.transient=transient;
+                await page.screenshot({path:`artifacts/screenshots/${vpName}-${process.env.ROUTE_KEY}-after-category.png`,fullPage:true});
+              }
+            }
+            results.push({viewport:vpName,label:process.env.ROUTE_LABEL,route,status:response?.status()||0,errors:errors.slice(-20),root,afterCategory});
+            await context.close();
+          }
+          await browser.close();
+          fs.writeFileSync(`artifacts/${process.env.ROUTE_KEY}.json`,JSON.stringify(results,null,2));
+          const failures=[];
+          for(const r of results){
+            if(r.status!==200)failures.push(`${r.viewport}: HTTP ${r.status}`);
+            if(r.root.railCount!==1)failures.push(`${r.viewport}: rail ${r.root.railCount}`);
+            if(r.root.serverSeed!=='true')failures.push(`${r.viewport}: server service seed marker absent`);
+            if(r.root.categories.domCount<1)failures.push(`${r.viewport}: no root categories`);
+            if(r.root.categories.hidden)failures.push(`${r.viewport}: categories hidden`);
+            if(r.root.whiteRefine)failures.push(`${r.viewport}: duplicate white refine`);
+            if(r.root.nativeFilters)failures.push(`${r.viewport}: native filters visible`);
+            if(r.root.overflow)failures.push(`${r.viewport}: horizontal overflow`);
+            if(r.afterCategory?.overflow)failures.push(`${r.viewport}: overflow after category`);
+            if(r.afterCategory?.transient?.some(x=>x.white||x.native||x.overflow))failures.push(`${r.viewport}: transient duplicate/overflow after category`);
+          }
+          if(failures.length){console.error(failures.join('\n'));process.exit(2)}
+          console.log(JSON.stringify(results,null,2));
+          EOF
+          node cert.mjs
+      - name: Upload ${{ matrix.label }} evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-root-cert-${{ matrix.key }}
+          path: artifacts/
+          if-no-files-found: warn
