@@ -94,6 +94,7 @@ jobs:
                 bodyCategoryCards:main?main.querySelectorAll('[data-sq-line-category-card]').length:0,
                 bodyCategoryVisible:main?[...main.querySelectorAll('[data-sq-line-category-card]')].filter(x=>x.getClientRects().length).length:0,
                 productGridVisible:!!(main&&[...main.querySelectorAll('collection-component,.product-grid,#product-grid')].some(x=>x.getClientRects().length)),
+                bflVisible:!!(main&&[...main.querySelectorAll('[data-sqbfl-root],.sqbfl')].some(x=>x.getClientRects().length)),
                 overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+2
               };
             });
@@ -112,7 +113,8 @@ jobs:
                 afterCategory=await page.evaluate(()=>{
                   const rail=document.querySelector('[data-sq-collection-rail]');
                   const group=n=>{const item=rail?.querySelector(`[data-sq-context-${n}]`),list=rail?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:item?item.hidden:null,visible:!!(item&&item.getClientRects().length),domCount:list?list.querySelectorAll('a[href]').length:0}};
-                  return{url:location.href,categories:group('categories'),subcategories:group('subcategories'),types:group('types'),overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+2};
+                  const main=document.getElementById('MainContent');
+                  return{url:location.href,categories:group('categories'),subcategories:group('subcategories'),types:group('types'),productGridVisible:!!(main&&[...main.querySelectorAll('collection-component,.product-grid,#product-grid')].some(x=>x.getClientRects().length)),bflVisible:!!(main&&[...main.querySelectorAll('[data-sqbfl-root],.sqbfl')].some(x=>x.getClientRects().length)),overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+2};
                 });
                 afterCategory.transient=transient;
                 await page.screenshot({path:`artifacts/screenshots/${vpName}-${process.env.ROUTE_KEY}-after-category.png`,fullPage:true});
@@ -147,3 +149,4 @@ jobs:
           name: service-root-cert-${{ matrix.key }}
           path: artifacts/
           if-no-files-found: warn
+# rerun-after-product-surface-ownership-v1
