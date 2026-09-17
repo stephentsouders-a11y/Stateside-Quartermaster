@@ -1,0 +1,167 @@
+name: Accessories progressive cookie Chromium audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/accessories-progressive-cookie-video-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Record and certify Accessories hierarchy
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          fs.mkdirSync('audit-out/video',{recursive:true});
+          const THEME='158770561179';
+          const ORIGIN='https://www.statesideqm.com';
+          const PREVIEW=`${ORIGIN}/?preview_theme_id=${THEME}`;
+          const ROOT=`${ORIGIN}/collections/accessories-gifts-collectibles?filter.v.availability=1`;
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          const failures=[];
+          const results=[];
+
+          async function gotoReady(page,url,label){
+            let last=null;
+            for(let attempt=1;attempt<=4;attempt++){
+              try{last=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});}catch(e){last=null;}
+              await sleep(4500);
+              const status=last?.status()??null;
+              const title=await page.title().catch(()=> '');
+              const blocked=status===429||title.includes('Just a moment')||title.includes('Too Many Requests');
+              const errored=status===500||title==='Something went wrong';
+              if(status===200&&!blocked&&!errored)return last;
+              console.log(`${label} attempt ${attempt}: status=${status} title=${title}`);
+              await sleep(10000*attempt);
+            }
+            return last;
+          }
+
+          async function auditPage(page,label){
+            const a=await page.evaluate(()=>{
+              const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&!e.hidden&&r.width>2&&r.height>2};
+              const item=sel=>{const e=document.querySelector(sel);return e?{visible:vis(e),text:(e.textContent||'').replace(/\s+/g,' ').trim()}:null};
+              const rail=[...document.querySelectorAll('[data-sq-collection-rail]')].filter(vis);
+              const white=[...document.querySelectorAll('#MainContent .sq-global-refine-sidebar,#MainContent .sqsg-refine-sidebar')].filter(e=>vis(e)&&e.getAttribute('data-sq-ohio-refine')!=='true');
+              const native=[...document.querySelectorAll('#MainContent .facets__filters-wrapper,#MainContent .facets-toggle__wrapper,#MainContent theme-drawer#filters-drawer')].filter(vis);
+              const maker=[...document.querySelectorAll('#MainContent .sq-maker-browser,#MainContent .vac-unified-maker-browser,#MainContent .vac-merged-browser')].filter(vis);
+              const triggers=[...document.querySelectorAll('[data-sq-collection-rail] [data-sq-rail-trigger]')].filter(vis).map(e=>(e.textContent||'').replace(/\s+/g,' ').trim());
+              const products=[...document.querySelectorAll('#MainContent a[href*="/products/"]')].filter(vis).length;
+              const openFlyout=[...document.querySelectorAll('[data-sq-collection-rail] [data-sq-rail-flyout]')].find(vis);
+              const main=document.getElementById('MainContent');
+              const fr=openFlyout?.getBoundingClientRect(),mr=main?.getBoundingClientRect();
+              return {
+                url:location.href,title:document.title,
+                railVisible:rail.length,whiteRefineVisible:white.length,nativeFilterVisible:native.length,bodyMakerVisible:maker.length,
+                triggerTexts:triggers,
+                categories:item('[data-sq-context-categories]'),subcategories:item('[data-sq-context-subcategories]'),types:item('[data-sq-context-types]'),
+                manufacturer:item('[data-sq-refinement-key="manufacturer"]'),colorPattern:item('[data-sq-refinement-key="color-pattern"]'),price:item('[data-sq-refinement-key="price"]'),
+                visibleProducts:products,horizontalOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,
+                flyoutRight:fr?fr.right:null,mainLeft:mr?mr.left:null
+              };
+            });
+            await page.screenshot({path:`audit-out/${label}.png`,fullPage:true});
+            return a;
+          }
+
+          function common(a,label){
+            if(a.railVisible!==1)failures.push(`${label}: expected exactly one navy rail, got ${a.railVisible}`);
+            if(a.whiteRefineVisible!==0)failures.push(`${label}: white Refine Products sidebar visible (${a.whiteRefineVisible})`);
+            if(a.nativeFilterVisible!==0)failures.push(`${label}: duplicate native filter UI visible (${a.nativeFilterVisible})`);
+            if(a.bodyMakerVisible!==0)failures.push(`${label}: manufacturer block still in page body (${a.bodyMakerVisible})`);
+            if(a.visibleProducts<1)failures.push(`${label}: product grid not visible`);
+            if(a.horizontalOverflow)failures.push(`${label}: horizontal overflow`);
+          }
+
+          const browser=await chromium.launch({headless:true});
+          const bootstrap=await browser.newContext({viewport:{width:1440,height:1000}});
+          const bp=await bootstrap.newPage();
+          const preview=await gotoReady(bp,PREVIEW,'preview bootstrap');
+          if(preview?.status()!==200)failures.push(`preview bootstrap: HTTP ${preview?.status()}`);
+          await bootstrap.storageState({path:'audit-out/preview-state.json'});
+          await bootstrap.close();
+
+          for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
+            const context=await browser.newContext({viewport,storageState:'audit-out/preview-state.json',recordVideo:{dir:'audit-out/video',size:viewport}});
+            const page=await context.newPage();
+            const r=await gotoReady(page,ROOT,`${device} root`);
+            if(r?.status()!==200){failures.push(`${device} root: HTTP ${r?.status()}`);await context.close();continue;}
+            await sleep(4500);
+            if(device==='mobile'){
+              const mt=page.locator('[data-sq-rail-mobile-toggle]');if(await mt.count())await mt.click().catch(()=>{});await sleep(500);
+            }
+            let root=await auditPage(page,`${device}-01-root`);common(root,`${device} root`);
+            if(!root.categories?.visible)failures.push(`${device} root: Categories missing`);
+            if(root.subcategories?.visible)failures.push(`${device} root: Subcategories exposed before Category choice`);
+            if(root.types?.visible)failures.push(`${device} root: Types exposed before Category/Subcategory choices`);
+            if(!root.manufacturer?.visible)failures.push(`${device} root: Manufacturer not inside navy rail`);
+            if(!root.price?.visible)failures.push(`${device} root: Price not inside navy rail`);
+
+            const catTrigger=page.locator('[data-sq-context-categories] [data-sq-rail-trigger]');
+            if(await catTrigger.count())await catTrigger.click();
+            await sleep(900);
+            const catLinks=page.locator('[data-sq-context-categories-list] a[href]');
+            const catCount=await catLinks.count();
+            if(catCount<8)failures.push(`${device}: expected at least 8 Categories, got ${catCount}`);
+            const geom=await auditPage(page,`${device}-02-categories-open`);
+            if(device==='desktop'&&geom.flyoutRight!=null&&geom.mainLeft!=null&&geom.mainLeft<geom.flyoutRight+12)failures.push(`${device}: Categories flyout overlaps product content`);
+
+            const challenge=catLinks.filter({hasText:'Challenge Coins'}).first();
+            if(await challenge.count()){
+              await challenge.click();await page.waitForLoadState('domcontentloaded');await sleep(5000);
+            }else failures.push(`${device}: Challenge Coins category link missing`);
+            if(device==='mobile'){
+              const mt=page.locator('[data-sq-rail-mobile-toggle]');if(await mt.count())await mt.click().catch(()=>{});await sleep(400);
+            }
+            const child=await auditPage(page,`${device}-03-category-selected`);common(child,`${device} category-selected`);
+            if(!child.categories?.visible)failures.push(`${device} category-selected: Categories missing`);
+            if(!child.triggerTexts.some(x=>x.toLowerCase().includes('subcategor')))failures.push(`${device} category-selected: Subcategories stage missing`);
+            if(child.triggerTexts.some(x=>x.trim().toLowerCase()==='types'))failures.push(`${device} category-selected: Types exposed before Subcategory selection`);
+
+            const subTrigger=page.locator('[data-sq-collection-rail] [data-sq-rail-trigger]').filter({hasText:'Subcategories'}).first();
+            if(await subTrigger.count())await subTrigger.click();
+            await sleep(800);
+            const openSubLinks=page.locator('[data-sq-collection-rail] .sq-collection-rail__item.is-open [data-sq-rail-flyout] a[href]');
+            const subCount=await openSubLinks.count();
+            if(subCount<1)failures.push(`${device}: Subcategories has no links`);
+            if(subCount){await openSubLinks.first().click();await page.waitForLoadState('domcontentloaded');await sleep(5000);}
+            if(device==='mobile'){
+              const mt=page.locator('[data-sq-rail-mobile-toggle]');if(await mt.count())await mt.click().catch(()=>{});await sleep(400);
+            }
+            const final=await auditPage(page,`${device}-04-subcategory-selected`);common(final,`${device} subcategory-selected`);
+            if(!final.triggerTexts.some(x=>x.trim().toLowerCase()==='types'))failures.push(`${device} subcategory-selected: Types stage missing`);
+            const typeTrigger=page.locator('[data-sq-collection-rail] [data-sq-rail-trigger]').filter({hasText:/^Types/}).first();
+            if(await typeTrigger.count())await typeTrigger.click();
+            await sleep(700);
+            const typeLinks=page.locator('[data-sq-collection-rail] .sq-collection-rail__item.is-open [data-sq-rail-flyout] a[href]');
+            if(await typeLinks.count()<1)failures.push(`${device}: Types has no links after Subcategory selection`);
+            results.push({device,root,categorySelected:child,subcategorySelected:final,categoryCount:catCount,subcategoryCount:subCount,typeCount:await typeLinks.count()});
+            await context.close();
+            await sleep(8000);
+          }
+          await browser.close();
+          const report={theme:THEME,results,failures,passed:failures.length===0};
+          fs.writeFileSync('audit-out/report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          if(failures.length)process.exit(2);
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accessories-progressive-cookie-video-audit
+          path: audit-out/
+          retention-days: 7
