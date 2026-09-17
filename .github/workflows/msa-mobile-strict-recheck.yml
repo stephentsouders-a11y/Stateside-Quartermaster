@@ -1,0 +1,56 @@
+name: MSA Strict Chromium Recheck
+on:
+  push:
+    paths: ['.github/workflows/msa-mobile-strict-recheck.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  msa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Strict MSA desktop and mobile certification
+        run: |
+          cat > msa.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const base='https://www.statesideqm.com',theme='158770561179',route='/collections/military-schools-academies';
+          if(/state-guard-series/i.test(route))throw new Error('State Guard forbidden');
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          fs.mkdirSync('evidence/screens',{recursive:true});
+          const browser=await chromium.launch({headless:true}),results=[];
+          const badBody=t=>/Just a moment|Something went wrong|Too Many Requests|429 Too Many Requests/i.test(t||'');
+          async function load(page,url){let resp=null;const attempts=[];for(const wait of [0,10000,20000,40000]){if(wait)await sleep(wait);resp=await page.goto(url,{waitUntil:'domcontentloaded'}).catch(()=>null);await sleep(3500);const body=(await page.locator('body').innerText().catch(()=>'' )).slice(0,5000);attempts.push({status:resp?.status()||0,badBody:badBody(body)});if(resp?.status()===200&&!badBody(body))return{resp,attempts}}return{resp,attempts}}
+          async function inspect(page){return page.evaluate(()=>{const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&+s.opacity!==0&&r.width>1&&r.height>1},rail=[...document.querySelectorAll('[data-sq-collection-rail]')].find(vis)||document.querySelector('[data-sq-collection-rail]'),grp=n=>{const i=rail?.querySelector(`[data-sq-context-${n}]`),l=rail?.querySelector(`[data-sq-context-${n}-list]`);return{hidden:i?i.hidden:null,visible:vis(i),count:l?l.querySelectorAll('a[href]').length:0,firstHref:l?.querySelector('a[href]')?.getAttribute('href')||null}};return{railCount:document.querySelectorAll('[data-sq-collection-rail]').length,railVisibleCount:[...document.querySelectorAll('[data-sq-collection-rail]')].filter(vis).length,categories:grp('categories'),subcategories:grp('subcategories'),types:grp('types'),organizations:grp('organizations'),whiteRefine:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(vis).length,nativeFilters:[...document.querySelectorAll('.facets__filters-wrapper,.facets-horizontal-remove,.facets--filters-title,.facets-toggle__wrapper,theme-drawer#filters-drawer')].filter(vis).length,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,msaFallback:rail?.getAttribute('data-sq-msa-mobile-rail-fallback')||null}})}
+          const hrefOf=s=>s.categories.firstHref||s.subcategories.firstHref||s.types.firstHref||s.organizations.firstHref||null;
+          for(const [vp,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
+            const ctx=await browser.newContext({viewport}),page=await ctx.newPage();page.setDefaultNavigationTimeout(60000);
+            await page.goto(`${base}/?preview_theme_id=${theme}`,{waitUntil:'domcontentloaded'}).catch(()=>null);await sleep(1200);
+            const u=new URL(route,base);u.searchParams.set('preview_theme_id',theme);u.searchParams.set('filter.v.availability','1');
+            const rootLoad=await load(page,u.toString());await sleep(4500);let state=await inspect(page);const root=state;await page.screenshot({path:`evidence/screens/${vp}-msa-root.png`,fullPage:true});
+            const traversal=[];
+            for(let depth=0;depth<3;depth++){
+              const href=hrefOf(state);if(!href)break;const target=new URL(href,page.url());target.searchParams.set('preview_theme_id',theme);target.searchParams.set('filter.v.availability','1');if(/state-guard-series/i.test(target.pathname))throw new Error('State Guard hierarchy target forbidden');
+              const loaded=await load(page,target.toString());await sleep(4500);state=await inspect(page);traversal.push({depth:depth+1,status:loaded.resp?.status()||0,target:page.url(),state});await page.screenshot({path:`evidence/screens/${vp}-msa-depth-${depth+1}.png`,fullPage:true});
+            }
+            results.push({vp,status:rootLoad.resp?.status()||0,root,traversal});await ctx.close();
+          }
+          await browser.close();fs.writeFileSync('evidence/msa.json',JSON.stringify(results,null,2));
+          const bad=[];for(const r of results){const total=r.root.categories.count+r.root.subcategories.count+r.root.types.count+r.root.organizations.count;if(r.status!==200)bad.push(`${r.vp}: HTTP ${r.status}`);if(r.root.railCount!==1||r.root.railVisibleCount!==1)bad.push(`${r.vp}: rail ${r.root.railCount}/${r.root.railVisibleCount}`);if(total===0)bad.push(`${r.vp}: empty hierarchy`);if(r.traversal.length===0)bad.push(`${r.vp}: no traversal`);if(r.root.whiteRefine||r.root.nativeFilters||r.root.overflow)bad.push(`${r.vp}: duplicate filter or overflow`);for(const t of r.traversal){if(t.status!==200||t.state.whiteRefine||t.state.nativeFilters||t.state.overflow)bad.push(`${r.vp}: depth ${t.depth} failed`)}}
+          if(bad.length){console.error([...new Set(bad)].join('\n'));process.exit(2)}console.log(JSON.stringify(results,null,2));
+          EOF
+          node msa.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: msa-strict-recheck
+          path: evidence/
+          retention-days: 14
