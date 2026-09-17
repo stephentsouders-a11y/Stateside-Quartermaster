@@ -10,7 +10,7 @@ permissions:
 jobs:
   certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -19,9 +19,9 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install playwright@1.55.0 >/dev/null 2>&1
           npx playwright install --with-deps chromium >/dev/null 2>&1
-      - name: Chromium Playwright video audit of unpublished Accessories draft
+      - name: Chromium Playwright full progressive hierarchy video audit
         run: |
-          cat > certify.mjs <<'EOF'
+          cat > certify.mjs <<'NODE'
           import { chromium } from 'playwright';
           import fs from 'fs';
           fs.mkdirSync('cert-out',{recursive:true});
@@ -30,95 +30,128 @@ jobs:
           const root=`https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=${theme}&filter.v.availability=1`;
           const failures=[],results=[];
           const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-          const vis=async (page,sel)=>page.locator(sel).evaluateAll(els=>els.filter(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2}).length);
           const auditPage=async(page,label)=>{
             const audit=await page.evaluate(()=>{
-              const isVisible=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
-              const rail=[...document.querySelectorAll('[data-sq-collection-rail]')].filter(isVisible);
-              const white=[...document.querySelectorAll('#MainContent .sq-global-refine-sidebar,#MainContent .sqsg-refine-sidebar')].filter(e=>isVisible(e)&&e.getAttribute('data-sq-ohio-refine')!=='true');
-              const native=[...document.querySelectorAll('#MainContent .facets__filters-wrapper,#MainContent .facets-toggle__wrapper,#MainContent theme-drawer#filters-drawer')].filter(isVisible);
-              const maker=[...document.querySelectorAll('#MainContent .sq-maker-browser,#MainContent .vac-unified-maker-browser,#MainContent .vac-merged-browser')].filter(isVisible);
-              const visibleItems=[...document.querySelectorAll('[data-sq-collection-rail] > *')];
-              const item=(sel)=>{const e=document.querySelector(sel);return e?{hidden:e.hidden,visible:isVisible(e),text:(e.textContent||'').replace(/\s+/g,' ').trim()}:null};
+              const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
+              const item=sel=>{const e=document.querySelector(sel);return e?{hidden:e.hidden,visible:vis(e),text:(e.textContent||'').replace(/\s+/g,' ').trim(),links:[...e.querySelectorAll('a[href]')].length}:null};
+              const count=sel=>[...document.querySelectorAll(sel)].filter(vis).length;
               return {
-                url:location.href,
-                title:document.title,
-                railVisible:rail.length,
-                whiteRefineVisible:white.length,
-                nativeFilterVisible:native.length,
-                bodyMakerVisible:maker.length,
+                url:location.href,title:document.title,
+                railVisible:count('[data-sq-collection-rail]'),
+                whiteRefineVisible:count('#MainContent .sq-global-refine-sidebar:not([data-sq-ohio-refine="true"]),#MainContent .sqsg-refine-sidebar:not([data-sq-ohio-refine="true"])'),
+                nativeFilterVisible:count('#MainContent .facets__filters-wrapper,#MainContent .facets-toggle__wrapper,#MainContent theme-drawer#filters-drawer'),
+                bodyMakerVisible:count('#MainContent .sq-maker-browser,#MainContent .vac-unified-maker-browser,#MainContent .vac-merged-browser'),
+                bodyTypeCardsVisible:count('#MainContent .sq-third-level'),
+                bodyCategoryCardsVisible:count('#MainContent .sq-subcategory-section .sq-subcategory-card'),
+                collectionComponentVisible:count('#MainContent collection-component'),
+                productCardsVisible:count('#MainContent #ResultsList .product-card,#MainContent .product-grid .product-card'),
                 categories:item('[data-sq-context-categories]'),
                 subcategories:item('[data-sq-context-subcategories]'),
                 types:item('[data-sq-context-types]'),
                 manufacturer:item('[data-sq-refinement-key="manufacturer"]'),
                 colorPattern:item('[data-sq-refinement-key="color-pattern"]'),
                 price:item('[data-sq-refinement-key="price"]'),
-                horizontalOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4
+                horizontalOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,
+                consoleMarker:document.querySelector('[data-sq-collection-rail]')?.dataset.sqAccessoriesFamily||null
               };
             });
             await page.screenshot({path:`cert-out/${label}.png`,fullPage:true});
             return audit;
+          };
+          const assertCommon=(a,label)=>{
+            if(a.railVisible!==1)failures.push(`${label}: expected exactly one navy rail, got ${a.railVisible}`);
+            if(a.whiteRefineVisible!==0)failures.push(`${label}: white Refine Products visible (${a.whiteRefineVisible})`);
+            if(a.nativeFilterVisible!==0)failures.push(`${label}: duplicate native filter UI visible (${a.nativeFilterVisible})`);
+            if(a.bodyMakerVisible!==0)failures.push(`${label}: body manufacturer block visible (${a.bodyMakerVisible})`);
+            if(!a.categories?.visible)failures.push(`${label}: Categories missing`);
+            if(!a.manufacturer?.visible||a.manufacturer.links<1)failures.push(`${label}: Manufacturer missing/empty`);
+            if(!a.colorPattern?.visible||a.colorPattern.links<1)failures.push(`${label}: Color / Pattern missing/empty`);
+            if(!a.price?.visible)failures.push(`${label}: Price missing`);
+            if(a.horizontalOverflow)failures.push(`${label}: horizontal overflow`);
           };
           for(const [device,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]){
             const browser=await chromium.launch({headless:true});
             const context=await browser.newContext({viewport,recordVideo:{dir:'cert-out/video',size:viewport}});
             const page=await context.newPage();
             page.setDefaultNavigationTimeout(60000);
-            let response=null,navError=null;
-            try{response=await page.goto(root,{waitUntil:'domcontentloaded'});}catch(e){navError=String(e)}
-            await sleep(7000);
-            if(device==='mobile'){
-              const toggle=page.locator('[data-sq-rail-mobile-toggle]');
-              if(await toggle.count())await toggle.click().catch(()=>{});
-              await sleep(700);
-            }
+            const consoleErrors=[];
+            page.on('pageerror',e=>consoleErrors.push(`pageerror: ${e.message}`));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(`console: ${m.text()}`)});
+            let response=await page.goto(root,{waitUntil:'domcontentloaded'}).catch(e=>{failures.push(`${device} root navigation: ${e}`);return null});
+            await sleep(8500);
+            if(device==='mobile'){const t=page.locator('[data-sq-rail-mobile-toggle]');if(await t.count())await t.click().catch(()=>{});await sleep(600)}
             const rootAudit=await auditPage(page,`${device}-root`);
             if(response?.status()!==200)failures.push(`${device} root: HTTP ${response?.status()}`);
-            if(navError)failures.push(`${device} root: navigation ${navError}`);
-            if(rootAudit.railVisible!==1)failures.push(`${device} root: expected one navy rail, got ${rootAudit.railVisible}`);
-            if(rootAudit.whiteRefineVisible!==0)failures.push(`${device} root: white Refine Products sidebar still visible (${rootAudit.whiteRefineVisible})`);
-            if(rootAudit.nativeFilterVisible!==0)failures.push(`${device} root: native filter UI still visible (${rootAudit.nativeFilterVisible})`);
-            if(rootAudit.bodyMakerVisible!==0)failures.push(`${device} root: body manufacturer block still visible (${rootAudit.bodyMakerVisible})`);
-            if(!rootAudit.categories?.visible)failures.push(`${device} root: Categories is not visible`);
-            if(rootAudit.subcategories?.visible)failures.push(`${device} root: Subcategories must not be visible before category selection`);
-            if(rootAudit.types?.visible)failures.push(`${device} root: Types must not be visible before category/subcategory selection`);
-            if(!rootAudit.manufacturer?.visible)failures.push(`${device} root: Manufacturer refinement missing from navy rail`);
-            if(!rootAudit.price?.visible)failures.push(`${device} root: Price refinement missing from navy rail`);
-            if(rootAudit.horizontalOverflow)failures.push(`${device} root: horizontal overflow`);
+            assertCommon(rootAudit,`${device} root`);
+            if(rootAudit.subcategories?.visible)failures.push(`${device} root: Subcategories visible before Category selection`);
+            if(rootAudit.types?.visible)failures.push(`${device} root: Types visible before Category/Subcategory selection`);
+            if(rootAudit.bodyCategoryCardsVisible<1)failures.push(`${device} root: category card body disappeared/blanked`);
+            if(rootAudit.bodyTypeCardsVisible!==0)failures.push(`${device} root: Type card body should not exist`);
 
-            const categories=page.locator('[data-sq-context-categories] [data-sq-rail-trigger]');
-            if(await categories.count())await categories.click().catch(()=>{});
-            await sleep(900);
+            const catTrigger=page.locator('[data-sq-context-categories] [data-sq-rail-trigger]');
+            if(await catTrigger.count())await catTrigger.click().catch(()=>{});
+            await sleep(500);
             const catLinks=page.locator('[data-sq-context-categories-list] a[href]');
-            const catCount=await catLinks.count();
-            if(catCount<1)failures.push(`${device}: Categories flyout has no links`);
-            let childAudit=null;
-            if(catCount){
-              const href=await catLinks.first().getAttribute('href');
-              const child=new URL(href,root);child.searchParams.set('preview_theme_id',theme);child.searchParams.set('filter.v.availability','1');
-              await page.goto(child.toString(),{waitUntil:'domcontentloaded'}).catch(e=>failures.push(`${device} child navigation: ${e}`));
-              await sleep(7000);
-              if(device==='mobile'){
-                const toggle=page.locator('[data-sq-rail-mobile-toggle]');if(await toggle.count())await toggle.click().catch(()=>{});await sleep(500);
+            if(await catLinks.count()!==8)failures.push(`${device} root: expected 8 category links, got ${await catLinks.count()}`);
+            const catHref=await catLinks.first().getAttribute('href');
+            if(!catHref){failures.push(`${device}: no Category href`)} else {
+              const child=new URL(catHref,root);child.searchParams.set('preview_theme_id',theme);child.searchParams.set('filter.v.availability','1');
+              response=await page.goto(child.toString(),{waitUntil:'domcontentloaded'}).catch(e=>{failures.push(`${device} category navigation: ${e}`);return null});
+              await sleep(8500);
+              if(device==='mobile'){const t=page.locator('[data-sq-rail-mobile-toggle]');if(await t.count())await t.click().catch(()=>{});await sleep(500)}
+              const categoryAudit=await auditPage(page,`${device}-category`);
+              if(response?.status()!==200)failures.push(`${device} category: HTTP ${response?.status()}`);
+              assertCommon(categoryAudit,`${device} category`);
+              if(categoryAudit.bodyTypeCardsVisible!==0)failures.push(`${device} category: duplicate Shop by Type card section visible in body`);
+              if(categoryAudit.collectionComponentVisible<1)failures.push(`${device} category: product collection component is hidden`);
+              if(!categoryAudit.types?.visible||(categoryAudit.types.text||'').toLowerCase().indexOf('subcategor')===-1)failures.push(`${device} category: Subcategories stage missing/mislabeled`);
+              const subTrigger=page.locator('[data-sq-context-types] [data-sq-rail-trigger]');
+              if(await subTrigger.count())await subTrigger.click().catch(()=>{});
+              await sleep(500);
+              const subLinks=page.locator('[data-sq-context-types-list] a[href]');
+              const subCount=await subLinks.count();
+              if(subCount<1)failures.push(`${device} category: Subcategories list empty`);
+              const subHref=subCount?await subLinks.first().getAttribute('href'):null;
+              let finalAudit=null,typeAudit=null;
+              if(subHref){
+                const sub=new URL(subHref,root);sub.searchParams.set('preview_theme_id',theme);sub.searchParams.set('filter.v.availability','1');
+                response=await page.goto(sub.toString(),{waitUntil:'domcontentloaded'}).catch(e=>{failures.push(`${device} subcategory navigation: ${e}`);return null});
+                await sleep(9000);
+                if(device==='mobile'){const t=page.locator('[data-sq-rail-mobile-toggle]');if(await t.count())await t.click().catch(()=>{});await sleep(500)}
+                finalAudit=await auditPage(page,`${device}-subcategory`);
+                if(response?.status()!==200)failures.push(`${device} subcategory: HTTP ${response?.status()}`);
+                assertCommon(finalAudit,`${device} subcategory`);
+                if(finalAudit.bodyTypeCardsVisible!==0)failures.push(`${device} subcategory: duplicate body Type section visible`);
+                if(!finalAudit.subcategories?.visible||finalAudit.subcategories.links<1)failures.push(`${device} subcategory: Subcategories context not retained`);
+                if(!finalAudit.types?.visible||finalAudit.types.links<1)failures.push(`${device} subcategory: Types third stage missing/empty`);
+                if(finalAudit.types?.visible&&(finalAudit.types.text||'').toLowerCase().indexOf('types')===-1)failures.push(`${device} subcategory: third stage not labeled Types`);
+                const typeTrigger=page.locator('[data-sq-context-types] [data-sq-rail-trigger]');
+                if(await typeTrigger.count())await typeTrigger.click().catch(()=>{});
+                await sleep(400);
+                const typeLinks=page.locator('[data-sq-context-types-list] a[href]');
+                const typeHref=await typeLinks.first().getAttribute('href').catch(()=>null);
+                if(typeHref){
+                  const typeUrl=new URL(typeHref,root);typeUrl.searchParams.set('preview_theme_id',theme);typeUrl.searchParams.set('filter.v.availability','1');
+                  response=await page.goto(typeUrl.toString(),{waitUntil:'domcontentloaded'}).catch(e=>{failures.push(`${device} type navigation: ${e}`);return null});
+                  await sleep(7500);
+                  if(device==='mobile'){const t=page.locator('[data-sq-rail-mobile-toggle]');if(await t.count())await t.click().catch(()=>{});await sleep(500)}
+                  typeAudit=await auditPage(page,`${device}-type`);
+                  if(response?.status()!==200)failures.push(`${device} type: HTTP ${response?.status()}`);
+                  assertCommon(typeAudit,`${device} type`);
+                  if(!new URL(page.url()).searchParams.has('filter.p.product_type'))failures.push(`${device} type: Type click did not apply product_type filter`);
+                  if(!typeAudit.subcategories?.visible||!typeAudit.types?.visible)failures.push(`${device} type: hierarchy disappeared after Type click`);
+                } else failures.push(`${device} subcategory: no Type href`);
               }
-              childAudit=await auditPage(page,`${device}-category`);
-              if(childAudit.railVisible!==1)failures.push(`${device} child: expected one navy rail`);
-              if(childAudit.whiteRefineVisible!==0)failures.push(`${device} child: white Refine Products sidebar visible`);
-              if(childAudit.nativeFilterVisible!==0)failures.push(`${device} child: native filter UI visible`);
-              if(!childAudit.categories?.visible)failures.push(`${device} child: Categories disappeared`);
-              if(!childAudit.types?.visible)failures.push(`${device} child: Subcategory stage is not exposed after category selection`);
-              const typeText=(childAudit.types?.text||'').toLowerCase();
-              if(childAudit.types?.visible && !typeText.includes('subcategor'))failures.push(`${device} child: second stage is not labeled Subcategories`);
+              results.push({device,rootAudit,categoryAudit,finalAudit,typeAudit,consoleErrors});
             }
-            results.push({device,status:response?.status()??null,rootAudit,childAudit});
-            await context.close();
-            await browser.close();
+            if(consoleErrors.some(x=>/sq-collection-sidebar-refinements|refinement data|SyntaxError/i.test(x)))failures.push(`${device}: sidebar/refinement console error: ${consoleErrors.join(' | ')}`);
+            await context.close();await browser.close();
           }
-          const report={theme,root,results,failures,passed:failures.length===0};
+          const report={theme,root,results,failures:[...new Set(failures)],passed:failures.length===0};
           fs.writeFileSync('cert-out/report.json',JSON.stringify(report,null,2));
           console.log(JSON.stringify(report,null,2));
           if(failures.length)process.exit(2);
-          EOF
+          NODE
           node certify.mjs
       - uses: actions/upload-artifact@v4
         if: always()
