@@ -1,0 +1,115 @@
+name: Other 41 structure audit
+on:
+  push:
+    paths:
+      - '.github/workflows/other-41-structure-audit.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Chromium audit 41 destinations
+        run: |
+          cat > audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          const base='https://www.statesideqm.com';
+          const theme='158770561179';
+          const routes=[
+            ['Tactical Gear','/collections/tactical-gear'],
+            ['Uniforms','/collections/uniforms'],
+            ['Firearm Accessories','/collections/firearm-accessories'],
+            ['Body Armor & Ballistic Protection','/collections/body-armor-ballistic-protection'],
+            ['Apparel','/collections/apparel'],
+            ['Flags & Patriotic Decor','/collections/flags-patriotic-decor'],
+            ['Literature','/collections/literature'],
+            ['Outdoor & Preparedness Gear','/collections/outdoor-preparedness-gear'],
+            ['First Aid, Medical & IFAK','/collections/first-aid-medical-ifak'],
+            ['Flashlights & Lighting','/collections/flashlights-lighting'],
+            ['Knives, Axes & Cutlery','/collections/knives-axes-cutlery'],
+            ['Dive & Scuba','/collections/dive-scuba'],
+            ['Armed Forces Gear','/collections/armed-forces-gear'],
+            ['Morale Patches & Tactical ID','/collections/morale-patches-tactical-id'],
+            ['Footwear, Gloves & Eyewear','/collections/footwear-gloves-eyewear'],
+            ['Accessories, Gifts & Collectibles','/collections/accessories-gifts-collectibles'],
+            ['Safety, Rescue & Climbing','/collections/safety-rescue-climbing'],
+            ['Airsoft & Milsim','/collections/airsoft-milsim'],
+            ['K9 & Dog Gear','/collections/k9-dog-gear'],
+            ['Patriotic & American Heritage','/collections/patriotic-american-heritage'],
+            ['Art','/collections/art'],
+            ['Zippos, Lighters & Torches','/collections/zippos-lighters-torches'],
+            ['Watches','/collections/watches'],
+            ['Armored Vehicles','/pages/armored-vehicles-purchase-inquiry'],
+            ['Child Safety Shop','/collections/child-safety-shop'],
+            ['Thin Line','/collections/thin-line'],
+            ['Sta-Brite Insignia','/collections/sta-brite-insignia'],
+            ['Stateside Quartermaster Logo Merch','/collections/stateside-quartermaster-logo-merch'],
+            ['Army National Guard Series','/collections/army-national-guard-series'],
+            ['Air National Guard Series','/collections/air-national-guard-series'],
+            ['U.S. Army','/collections/products-built-for-the-line-u-s-army'],
+            ['U.S. Navy','/collections/products-built-for-the-line-u-s-navy'],
+            ['U.S. Air Force','/collections/products-built-for-the-line-u-s-air-force'],
+            ['U.S. Marine Corps','/collections/products-built-for-the-line-u-s-marine-corps'],
+            ['U.S. Coast Guard','/collections/products-built-for-the-line-u-s-coast-guard'],
+            ['U.S. Space Force','/collections/products-built-for-the-line-u-s-space-force'],
+            ['ROTC','/collections/rotc-series'],
+            ['JROTC','/collections/jrotc-series'],
+            ['Military Schools & Academies','/collections/military-schools-academies'],
+            ['Law Enforcement & Corrections','/collections/law-enforcement-corrections'],
+            ['Firefighting, EMS & Search & Rescue','/collections/firefighting-ems-search-rescue']
+          ];
+          if(routes.length!==41) throw new Error('Expected 41 routes');
+          if(routes.some(x=>x[1].includes('state-guard-series'))) throw new Error('State Guard route must remain excluded');
+          const browser=await chromium.launch({headless:true});
+          const results=[];
+          for(let i=0;i<routes.length;i++){
+            const [label,route]=routes[i];
+            const ctx=await browser.newContext({viewport:{width:1440,height:1000}});
+            const page=await ctx.newPage();
+            const errors=[]; page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            const u=new URL(route,base);u.searchParams.set('preview_theme_id',theme);if(route.startsWith('/collections/'))u.searchParams.set('filter.v.availability','1');
+            let status=null,loadError=null;
+            try{const r=await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:35000});status=r?.status()??null;await page.waitForTimeout(4000)}catch(e){loadError=String(e)}
+            const state=await page.evaluate(()=>{
+              const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>1&&r.height>1};
+              const visible=q=>[...document.querySelectorAll(q)].filter(vis);
+              const txt=e=>(e?.innerText||e?.textContent||'').replace(/\s+/g,' ').trim();
+              const rail=visible('[data-sq-collection-rail]');
+              const groups={};
+              for(const k of ['categories','subcategories','types','organizations']){const item=document.querySelector('[data-sq-context-'+k+']');groups[k]={visible:vis(item),links:item?visible('a[href]').filter(a=>item.contains(a)).slice(0,20).map(a=>({label:txt(a),href:a.getAttribute('href')})):[]}}
+              const bodySelectors=['.sq-subcategory-section','.sq-third-level','.sq-books-tree','.sq-afg-branch-grid','.sq-maker-browser','.vac-unified-maker-browser','.vac-merged-browser','.sqbfl-grid','.sg-entity-grid','.sqaca-grid','.sq-type-family-grid'];
+              return {
+                title:document.title,path:location.pathname,
+                railCount:rail.length,groups,
+                whiteRefine:visible('.sq-global-refine-sidebar,.sqsg-refine-sidebar').length,
+                nativeFilters:visible('.facets__filters-wrapper,.facets-horizontal-remove,.facets--filters-title,.facets-toggle__wrapper,theme-drawer#filters-drawer').length,
+                productGridVisible:visible('collection-component,.product-grid,.product-grid-container').length,
+                productCards:visible('.product-card,.product-grid__item,.card-product').length,
+                bodyNav:bodySelectors.flatMap(q=>visible(q).map(e=>({selector:q,text:txt(e).slice(0,220)}))),
+                candidateLinks:visible('#MainContent a[href*="/collections/"]').slice(0,60).map(a=>({label:txt(a).slice(0,100),href:a.getAttribute('href')})),
+                overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,
+                bodyText:txt(document.querySelector('#MainContent')).slice(0,500)
+              };
+            }).catch(()=>({}));
+            results.push({index:i+1,label,route,status,loadError,consoleErrors:errors.slice(0,20),...state});
+            console.log(`${i+1}/41 ${label} status=${status} rail=${state.railCount} cats=${state.groups?.categories?.links?.length||0} sub=${state.groups?.subcategories?.links?.length||0} types=${state.groups?.types?.links?.length||0}`);
+            await ctx.close();
+          }
+          await browser.close();
+          fs.writeFileSync('other-41-audit.json',JSON.stringify({theme,excluded:'/collections/state-guard-series',count:results.length,results},null,2));
+          EOF
+          node audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: other-41-structure-audit
+          path: other-41-audit.json
+          retention-days: 7
