@@ -1,0 +1,125 @@
+name: Service Root Rail Remediation Cert
+
+on:
+  push:
+    paths:
+      - '.github/workflows/service-root-remediation-cert.yml'
+  workflow_dispatch:
+
+jobs:
+  chromium-cert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Audit service roots desktop and mobile
+        env:
+          BASE_URL: https://www.statesideqm.com
+          PREVIEW_THEME_ID: '158770561179'
+        run: |
+          cat > /tmp/cert.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const roots = [
+            ['U.S. Army','/collections/products-built-for-the-line-u-s-army'],
+            ['Army National Guard','/collections/army-national-guard-series'],
+            ['U.S. Air Force','/collections/products-built-for-the-line-u-s-air-force'],
+            ['Air National Guard','/collections/air-national-guard-series'],
+            ['U.S. Navy','/collections/products-built-for-the-line-u-s-navy'],
+            ['U.S. Marine Corps','/collections/products-built-for-the-line-u-s-marine-corps'],
+            ['U.S. Coast Guard','/collections/products-built-for-the-line-u-s-coast-guard'],
+            ['U.S. Space Force','/collections/products-built-for-the-line-u-s-space-force']
+          ];
+          if (roots.some(([,r]) => /state-guard-series/i.test(r))) throw new Error('State Guard route forbidden');
+          fs.mkdirSync('artifacts/screenshots',{recursive:true});
+          fs.mkdirSync('artifacts/videos',{recursive:true});
+          const browser = await chromium.launch({headless:true});
+          const results=[];
+          const viewports=[['desktop',{width:1440,height:1100}],['mobile',{width:390,height:844}]];
+          for (const [vpName,viewport] of viewports) {
+            const context = await browser.newContext({viewport,recordVideo:{dir:'artifacts/videos',size:viewport}});
+            const page = await context.newPage();
+            await page.goto(`${process.env.BASE_URL}/?preview_theme_id=${process.env.PREVIEW_THEME_ID}`,{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForTimeout(1200);
+            for (const [label,route] of roots) {
+              const url=`${process.env.BASE_URL}${route}?preview_theme_id=${process.env.PREVIEW_THEME_ID}&filter.v.availability=1`;
+              let response=null;
+              for(let attempt=0;attempt<4;attempt++){
+                response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000}).catch(()=>null);
+                await page.waitForTimeout(5000+attempt*1500);
+                const body=(await page.locator('body').innerText().catch(()=>'' )).slice(0,4000);
+                if(response?.status()===200 && !/Just a moment|Something went wrong/i.test(body)) break;
+              }
+              const status=response?.status()||0;
+              const snapshot=await page.evaluate(() => {
+                const rail=document.querySelector('[data-sq-collection-rail]');
+                const group=(name)=>{
+                  const item=rail?.querySelector(`[data-sq-context-${name}]`);
+                  const list=rail?.querySelector(`[data-sq-context-${name}-list]`);
+                  return {exists:!!item,hidden:item?item.hidden:null,visible:!!(item&&item.getClientRects().length),domCount:list?list.querySelectorAll('a[href]').length:0,labels:list?[...list.querySelectorAll('a[href]')].slice(0,30).map(a=>(a.textContent||'').replace(/\s+/g,' ').trim()):[]};
+                };
+                const main=document.getElementById('MainContent');
+                const bodySel=['.sqbfl','.sq-line-series-categories','.sq-line-program-tree','.sq-third-level','.sq-subcategory-section'];
+                return {
+                  railCount:document.querySelectorAll('[data-sq-collection-rail]').length,
+                  remediation:rail?.getAttribute('data-sq-non-state-guard-remediation')||'',
+                  stage:rail?.getAttribute('data-sq-pbtl-progress-stage')||'',
+                  categories:group('categories'),subcategories:group('subcategories'),types:group('types'),
+                  whiteRefine:[...document.querySelectorAll('.sq-global-refine-sidebar,.sqsg-refine-sidebar')].filter(x=>x.getClientRects().length).length,
+                  nativeFilters:[...document.querySelectorAll('.facets__filters-wrapper,theme-drawer#filters-drawer')].filter(x=>x.getClientRects().length).length,
+                  bodyNav:bodySel.map(s=>({s,count:main?main.querySelectorAll(s).length:0,visible:main?[...main.querySelectorAll(s)].filter(x=>x.getClientRects().length).length:0})),
+                  overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+2
+                };
+              });
+              const safe=label.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+              await page.screenshot({path:`artifacts/screenshots/${vpName}-${safe}-root.png`,fullPage:true});
+              let categoryClick=null;
+              if(snapshot.categories.domCount>0){
+                const first=page.locator('[data-sq-context-categories-list] a[href]').first();
+                const href=await first.getAttribute('href');
+                if(href){
+                  await page.goto(new URL(href,page.url()).toString(),{waitUntil:'domcontentloaded',timeout:60000}).catch(()=>null);
+                  await page.waitForTimeout(5000);
+                  categoryClick=await page.evaluate(()=>{
+                    const rail=document.querySelector('[data-sq-collection-rail]');
+                    function g(n){const i=rail?.querySelector(`[data-sq-context-${n}]`),l=rail?.querySelector(`[data-sq-context-${n}-list]`);return {hidden:i?i.hidden:null,visible:!!(i&&i.getClientRects().length),domCount:l?l.querySelectorAll('a[href]').length:0};}
+                    return {url:location.href,stage:rail?.getAttribute('data-sq-pbtl-progress-stage')||'',categories:g('categories'),subcategories:g('subcategories'),types:g('types')};
+                  });
+                  await page.screenshot({path:`artifacts/screenshots/${vpName}-${safe}-after-category.png`,fullPage:true});
+                }
+              }
+              results.push({viewport:vpName,label,route,status,...snapshot,categoryClick});
+            }
+            await context.close();
+          }
+          await browser.close();
+          fs.writeFileSync('artifacts/service-root-cert.json',JSON.stringify(results,null,2));
+          const failures=[];
+          for(const r of results){
+            if(r.status!==200) failures.push(`${r.viewport} ${r.label}: HTTP ${r.status}`);
+            if(r.railCount!==1) failures.push(`${r.viewport} ${r.label}: rail ${r.railCount}`);
+            if(r.categories.domCount<1) failures.push(`${r.viewport} ${r.label}: no root categories`);
+            if(r.whiteRefine) failures.push(`${r.viewport} ${r.label}: duplicate white refine ${r.whiteRefine}`);
+            if(r.nativeFilters) failures.push(`${r.viewport} ${r.label}: native filters visible ${r.nativeFilters}`);
+            if(r.overflow) failures.push(`${r.viewport} ${r.label}: horizontal overflow`);
+          }
+          if(failures.length){console.error(failures.join('\n'));process.exit(2)}
+          console.log(JSON.stringify(results.map(r=>({viewport:r.viewport,label:r.label,cats:r.categories.domCount,stage:r.stage,after:r.categoryClick})),null,2));
+          EOF
+          node /tmp/cert.mjs
+      - name: Upload certification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-root-remediation-cert
+          path: artifacts/
+          if-no-files-found: warn
