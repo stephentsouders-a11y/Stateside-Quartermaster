@@ -1,0 +1,103 @@
+name: Accessories Chromium source capture
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/accessories-source-capture.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Capture rendered HTML, loaded sidebar assets, and transition trace
+        run: |
+          cat > capture.mjs <<'NODE'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+          import path from 'path';
+
+          fs.mkdirSync('capture-out/assets',{recursive:true});
+          fs.mkdirSync('capture-out/screens',{recursive:true});
+
+          const theme='158770561179';
+          const root=`https://www.statesideqm.com/collections/accessories-gifts-collectibles?preview_theme_id=${theme}&filter.v.availability=1`;
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1000}});
+          const page=await context.newPage();
+          page.setDefaultNavigationTimeout(60000);
+          await page.goto(root,{waitUntil:'domcontentloaded'});
+          await page.waitForTimeout(8000);
+          fs.writeFileSync('capture-out/root.html',await page.content());
+          await page.screenshot({path:'capture-out/screens/root.png',fullPage:true});
+
+          async function captureAssets(label){
+            const urls=await page.evaluate(()=>performance.getEntriesByType('resource').map(e=>e.name).filter(u=>/sq-(collection-sidebar|third-level|department-subcategories|refine)/i.test(u)));
+            fs.writeFileSync(`capture-out/${label}-resource-urls.json`,JSON.stringify(urls,null,2));
+            for(const [i,u] of [...new Set(urls)].entries()){
+              try{
+                const r=await context.request.get(u,{timeout:30000});
+                if(!r.ok())continue;
+                const text=await r.text();
+                const base=(new URL(u).pathname.split('/').pop()||`asset-${i}`).replace(/[^a-zA-Z0-9._-]/g,'_');
+                fs.writeFileSync(`capture-out/assets/${label}-${i}-${base}.txt`,text);
+              }catch{}
+            }
+          }
+          await captureAssets('root');
+
+          const catTrigger=page.locator('[data-sq-context-categories] [data-sq-rail-trigger]');
+          if(await catTrigger.count())await catTrigger.click().catch(()=>{});
+          await page.waitForTimeout(200);
+          const first=page.locator('[data-sq-context-categories-list] a[href]').first();
+          const href=await first.getAttribute('href');
+          const trace=[];
+          let navResponse=null;
+          [navResponse]=await Promise.all([
+            page.waitForNavigation({waitUntil:'domcontentloaded',timeout:60000}),
+            first.click()
+          ]);
+          const t0=Date.now();
+          for(let i=0;i<24;i++){
+            const snap=await page.evaluate(()=>{
+              const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
+              const count=sel=>[...document.querySelectorAll(sel)].filter(vis).length;
+              const text=sel=>document.querySelector(sel)?.textContent?.replace(/\s+/g,' ').trim()||'';
+              return {
+                url:location.href,
+                readyState:document.readyState,
+                bodyTypeCardsVisible:count('#MainContent .sq-third-level'),
+                bodyCategoryCardsVisible:count('#MainContent .sq-subcategory-section .sq-subcategory-card'),
+                railVisible:count('[data-sq-collection-rail]'),
+                whiteRefineVisible:count('#MainContent .sq-global-refine-sidebar,#MainContent .sqsg-refine-sidebar'),
+                subcategoriesText:text('[data-sq-context-subcategories], [data-sq-context-types]'),
+                productCardsVisible:count('#MainContent #ResultsList .product-card,#MainContent .product-grid .product-card')
+              };
+            });
+            trace.push({ms:Date.now()-t0,...snap});
+            if(i===0||i===4||i===8||i===12||i===20)await page.screenshot({path:`capture-out/screens/category-${i}.png`,fullPage:true});
+            await page.waitForTimeout(250);
+          }
+          fs.writeFileSync('capture-out/transition-trace.json',JSON.stringify({href,status:navResponse?.status()??null,trace},null,2));
+          fs.writeFileSync('capture-out/category.html',await page.content());
+          await captureAssets('category');
+
+          await context.close();
+          await browser.close();
+          NODE
+          node capture.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accessories-chromium-source-capture
+          path: capture-out
+          retention-days: 7
