@@ -1,0 +1,79 @@
+name: Sep16 Accessories post-fix Chromium cert
+on:
+  push:
+    paths:
+      - '.github/workflows/sep16-accessories-postfix-cert.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  accessories-postfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Verify Accessories rail after Shopify CSS fix
+        run: |
+          mkdir -p accessories-postfix
+          node - <<'EOF'
+          const {chromium}=require('playwright'); const fs=require('fs');
+          (async()=>{
+            const b=await chromium.launch({headless:true});
+            const c=await b.newContext({viewport:{width:1440,height:1200}});
+            const p=await c.newPage();
+            await p.goto('https://www.statesideqm.com/?preview_theme_id=158770561179',{waitUntil:'domcontentloaded',timeout:60000});
+            await p.waitForTimeout(1200);
+            let r=await p.goto('https://www.statesideqm.com/collections/accessories-gifts-collectibles',{waitUntil:'domcontentloaded',timeout:60000});
+            if(r && r.status()===429){await p.waitForTimeout(30000);r=await p.reload({waitUntil:'domcontentloaded',timeout:60000});}
+            await p.waitForTimeout(7000);
+            const before=await p.evaluate(()=>{
+              const rail=document.querySelector('[data-sq-collection-rail]');
+              const main=document.getElementById('MainContent');
+              const rect=e=>e?e.getBoundingClientRect():null;
+              const group=(name,itemSel,listSel)=>{const item=rail?.querySelector(itemSel),list=rail?.querySelector(listSel);return{name,hidden:item?.hidden??true,count:list?.querySelectorAll('li').length||0,labels:[...(list?.querySelectorAll('.sq-collection-rail__link-label')||[])].map(x=>(x.textContent||'').trim()).filter(Boolean)}};
+              return{status:document.title,rail:rect(rail),main:rect(main),overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,groups:[group('Categories','[data-sq-context-categories]','[data-sq-context-categories-list]'),group('Subcategories','[data-sq-context-subcategories]','[data-sq-context-subcategories-list]'),group('Types','[data-sq-context-types]','[data-sq-context-types-list]')]};
+            });
+            const trigger=p.locator('[data-sq-context-categories] [data-sq-rail-trigger]').first();
+            await trigger.click();
+            await p.waitForTimeout(600);
+            const open=await p.evaluate(()=>{
+              const rail=document.querySelector('[data-sq-collection-rail]');
+              const item=rail?.querySelector('[data-sq-context-categories]');
+              const fly=item?.querySelector('[data-sq-rail-flyout]');
+              const main=document.getElementById('MainContent');
+              const rr=rail?.getBoundingClientRect(),fr=fly?.getBoundingClientRect(),mr=main?.getBoundingClientRect();
+              return{railClass:rail?.className||'',itemClass:item?.className||'',aria:item?.querySelector('[data-sq-rail-trigger]')?.getAttribute('aria-expanded'),railRight:rr?.right||0,flyLeft:fr?.left||0,flyRight:fr?.right||0,flyWidth:fr?.width||0,mainLeft:mr?.left||0,mainWidth:mr?.width||0,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4};
+            });
+            await p.screenshot({path:'accessories-postfix/open.png',fullPage:true});
+            await p.setViewportSize({width:390,height:844}); await p.waitForTimeout(500);
+            const mobile=await p.evaluate(()=>{const rail=document.querySelector('[data-sq-collection-rail]'),main=document.getElementById('MainContent');const rr=rail?.getBoundingClientRect(),mr=main?.getBoundingClientRect();return{railWidth:rr?.width||0,mainWidth:mr?.width||0,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+3}});
+            const result={httpStatus:r?.status()||null,before,open,mobile};
+            fs.writeFileSync('accessories-postfix/result.json',JSON.stringify(result,null,2));
+            console.log(JSON.stringify(result,null,2));
+            const reasons=[];
+            if(result.httpStatus!==200) reasons.push('HTTP '+result.httpStatus);
+            if(before.groups[0].count!==9) reasons.push('Categories count '+before.groups[0].count+' expected 9');
+            if(open.aria!=='true'||!/is-open/.test(open.itemClass)||open.flyWidth<300) reasons.push('Categories flyout did not open');
+            if(open.mainLeft<open.flyRight+20) reasons.push(`flyout overlaps content flyRight=${open.flyRight} mainLeft=${open.mainLeft}`);
+            if(open.overflow) reasons.push('desktop horizontal overflow');
+            if(mobile.overflow||mobile.railWidth>392||mobile.mainWidth>392) reasons.push('mobile overflow/width');
+            console.log('POSTFIX_RESULT',reasons.length?'FAIL':'PASS',reasons.join('; '));
+            await b.close();
+            if(reasons.length) process.exit(1);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          EOF
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep16-accessories-postfix
+          path: accessories-postfix/
+          if-no-files-found: warn
+          retention-days: 7
