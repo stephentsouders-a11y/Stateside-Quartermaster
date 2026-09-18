@@ -1,0 +1,34 @@
+{% doc %}
+Preserves the original Custom Unit Gear page design and adds Custom Shop root context to its existing collection links.
+{% enddoc %}
+<script>
+(function(){
+  if(window.__sqCustomShopRootLinks)return;
+  window.__sqCustomShopRootLinks=true;
+  var root='custom-personalized-products';
+  var handles={
+    'custom-personalized-products':1,
+    'custom-patches':1,
+    'custom-apparel':1,
+    'personalized-displays-memorials':1,
+    'custom-nameplates-tags-uniform-id':1,
+    'custom-flags-guidons':1,
+    'special-order-personalized-gear':1
+  };
+  function wire(){
+    var page=document.querySelector('.custom-unit-gear-page');
+    if(!page)return;
+    page.querySelectorAll('a.custom-unit-card[href*="/collections/"]').forEach(function(a){
+      var u;
+      try{u=new URL(a.href,location.origin)}catch(e){return}
+      var bits=u.pathname.replace(/^\/+|\/+$/g,'').split('/');
+      var handle=bits[0]==='collections'?(bits[1]||''):'';
+      if(!handles[handle])return;
+      u.searchParams.set('sq_root',root);
+      a.href=u.pathname+'?'+u.searchParams.toString()+u.hash;
+      a.dataset.sqCustomShopLink='true';
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wire,{once:true});else wire();
+})();
+</script>
