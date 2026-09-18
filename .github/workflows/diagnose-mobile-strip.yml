@@ -1,0 +1,41 @@
+name: Diagnose Mobile Menu Strip
+on:
+  push:
+    branches:
+      - rebuild/stateside-retail-sd-style
+    paths:
+      - '.github/workflows/diagnose-mobile-strip.yml'
+  workflow_dispatch:
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Inspect strip
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:390,height:844}});
+          await page.goto('https://www.statesideqm.com/?preview_theme_id=158872600731&sq_strip_diag=1',{waitUntil:'domcontentloaded',timeout:120000});
+          await page.waitForTimeout(4000);
+          const data=await page.evaluate(()=>{
+            const box=e=>{if(!e)return null;const r=e.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}};
+            const stack=document.elementsFromPoint(195,180).map(e=>({tag:e.tagName,id:e.id||'',cls:String(e.className||''),text:(e.textContent||'').replace(/\s+/g,' ').trim().slice(0,220),box:box(e)}));
+            const hero=document.querySelector('.sq-sd-hero');
+            const between=[...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return r.y>=145&&r.y<215&&r.height>5&&r.width>100}).slice(0,50).map(e=>({tag:e.tagName,id:e.id||'',cls:String(e.className||''),text:(e.textContent||'').replace(/\s+/g,' ').trim().slice(0,220),box:box(e)}));
+            return {hero:box(hero),stack,between};
+          });
+          console.log('DIAGNOSTIC_START');
+          console.log(JSON.stringify(data,null,2));
+          console.log('DIAGNOSTIC_END');
+          await browser.close();
+          NODE
