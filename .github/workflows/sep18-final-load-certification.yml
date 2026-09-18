@@ -1,0 +1,81 @@
+name: Sep18 final current draft load certification
+on:
+  push:
+    paths:
+      - '.github/workflows/sep18-final-load-certification.yml'
+      - '.github/scripts/sep18-final-load-discover.mjs'
+      - '.github/scripts/sep18-final-load-route.mjs'
+      - '.github/scripts/sep18-final-load-aggregate.mjs'
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+      home_count: ${{ steps.discover.outputs.home_count }}
+      sg_count: ${{ steps.discover.outputs.sg_count }}
+      total: ${{ steps.discover.outputs.total }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - id: discover
+        run: node .github/scripts/sep18-final-load-discover.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sep18-final-load-discovery-${{ github.run_id }}
+          path: sep18-final-load-discovery/
+          retention-days: 14
+  audit:
+    needs: discover
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KEY: ${{ matrix.key }}
+      LABEL: ${{ matrix.label }}
+      ROUTE: ${{ matrix.route }}
+      GROUP: ${{ matrix.group }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - run: node .github/scripts/sep18-final-load-route.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep18-final-load-${{ matrix.key }}-${{ github.run_id }}
+          path: sep18-final-load-${{ matrix.key }}/
+          if-no-files-found: warn
+          retention-days: 14
+  aggregate:
+    needs: [discover, audit]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sep18-final-load-*-${{ github.run_id }}
+          path: sep18-final-load-combined
+      - run: node .github/scripts/sep18-final-load-aggregate.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep18-final-load-certification-${{ github.run_id }}
+          path: sep18-final-load-final/
+          retention-days: 14
