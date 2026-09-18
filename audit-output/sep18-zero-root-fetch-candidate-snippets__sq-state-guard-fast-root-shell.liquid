@@ -1,0 +1,27 @@
+{% if request.page_type == 'collection' %}
+{% if collection.handle contains 'state-guard-series-' or collection.handle == 'new-jersey-state-guard-naval-militia' %}
+<script data-sq-state-guard-fast-root-shell-v1>
+(function(){
+if(window.__sqStateGuardFastRootShellV1)return;window.__sqStateGuardFastRootShellV1=true;
+var q=new URLSearchParams(location.search);if(q.get('sg_org')||q.get('sg_category')||q.get('sg_type')||q.get('sg_component'))return;
+var root=document.querySelector('[data-sqsg]');if(!root)return;
+var DEF=[
+ ['Insignia & Identification','insignia','https://www.statesideqm.com/cdn/shop/collections/770G2_8b5b699b-6341-400c-ae92-9d78ec2cd49b.jpg?v=1786982149&width=700',true],
+ ['Tactical Gear & Body Armor','tactical','https://cdn.shopify.com/s/files/1/0774/4602/1275/files/amap-iii-assault-pack-agilite.jpg?v=1786243615',true],
+ ['Uniforms','uniforms','https://cdn.shopify.com/s/files/1/0774/4602/1275/files/state-guard-uniforms-category-card.png?v=1788567573',false],
+ ['Patches & Flags','patches','https://cdn.shopify.com/s/files/1/0774/4602/1275/files/16THMP-Len_jpg_e59d3e9b-3b20-4aef-88ea-67ca7b846446.png?v=1786239588',false],
+ ['Awards & Decorations','awards','https://cdn.shopify.com/s/files/1/0774/4602/1275/files/1155-RIBBON.jpg?v=1786239708',false]
+];
+function n(x){return String(x||'').trim().toLowerCase().replace(/\s+/g,' ')}
+function esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function pv(){return new URL(location.href).searchParams.get('preview_theme_id')||''}
+function href(cat,avail){var u=new URL(location.pathname,location.origin);if(avail)u.searchParams.set('filter.v.availability','1');u.searchParams.set('sg_category',cat);if(pv())u.searchParams.set('preview_theme_id',pv());return u.pathname+'?'+u.searchParams.toString()}
+function find(grid,label){return [].slice.call(grid.querySelectorAll('a.sqsg-card')).find(function(a){var s=a.querySelector('strong');return s&&n(s.textContent)===n(label)})}
+function make(d){var a=document.createElement('a');a.className='sqsg-card';a.href=href(d[1],d[3]);a.dataset.sqFastRootShell='true';a.innerHTML='<span class="sqsg-media"><img src="'+esc(d[2])+'" alt="'+esc(d[0])+'" loading="eager" decoding="async" style="object-fit:contain;object-position:center;background:#fff"></span><span class="sqsg-copy"><strong>'+esc(d[0])+'</strong><small>Browse items</small><b>→</b></span>';return a}
+function ensure(){var view=root.querySelector('[data-sqsg-view]');if(!view)return false;var grid=view.querySelector('.sqsg-grid');if(!grid){view.innerHTML='<div class="sqsg-grid" data-sq-fast-root-grid="true"></div>';grid=view.querySelector('.sqsg-grid')}if(!grid)return false;DEF.forEach(function(d){var a=find(grid,d[0]);if(!a){a=make(d);grid.appendChild(a)}else{var sm=a.querySelector('small'),v=String(sm&&sm.textContent||'').trim().toLowerCase();if(sm&&(v==='checking items…'||v==='checking items...'||v==='loading items…'||v==='loading items...'))sm.textContent='Browse items'}});DEF.forEach(function(d,i){var a=find(grid,d[0]);if(a)grid.insertBefore(a,grid.children[i]||null)});view.dataset.sqFastRootShell='ready';return true}
+var tries=0,t=setInterval(function(){tries++;if(ensure()||tries>100)clearInterval(t)},50);
+[120,300,600,1000,1600,2400].forEach(function(ms){setTimeout(ensure,ms)});
+var view=root.querySelector('[data-sqsg-view]')||root;var queued=false;new MutationObserver(function(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;ensure()})}).observe(view,{childList:true,subtree:true,characterData:true});
+})();
+</script>
+{% endif %}{% endif %}
