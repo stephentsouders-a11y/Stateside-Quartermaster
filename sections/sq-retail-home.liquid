@@ -1,104 +1,126 @@
-<section class="sq-retail-home" aria-label="Stateside Quartermaster storefront">
-  <div class="sq-retail-hero">
-    <div class="sq-retail-shell sq-retail-hero__grid">
-      <div class="sq-retail-hero__copy">
-        <p class="sq-retail-eyebrow">Made for the Mission</p>
-        <h1>Stateside Quartermaster</h1>
-        <p>Uniforms, insignia, tactical equipment, apparel, field gear and service-specific products for the military, State Guard, cadet programs and public safety.</p>
-        <div class="sq-retail-actions">
-          <a href="/collections/all">Shop all products</a>
-          <a href="/pages/custom-unit-gear">Custom unit gear</a>
+{% assign sq_update_one = collections['sta-brite-insignia'] %}
+{% assign sq_update_two = collections['state-guard-series'] %}
+{% assign sq_tactical = collections['tactical-gear'] %}
+{% assign sq_uniforms = collections['uniforms'] %}
+{% assign sq_outdoor = collections['outdoor-preparedness-gear'] %}
+{% assign sq_literature = collections['literature'] %}
+{% assign sq_gifts = collections['accessories-gifts-collectibles'] %}
+
+<section class="sq-sd-home">
+  <a class="sq-sd-hero" href="/collections/uniforms?filter.v.availability=1">
+    <span class="sq-sd-hero__media">
+      {% if sq_uniforms.image != blank %}
+        {{ sq_uniforms.image | image_url: width: 2200 | image_tag: widths: '800,1200,1600,2200', sizes: '(min-width: 750px) calc(100vw - 240px), 100vw', loading: 'eager', fetchpriority: 'high', alt: sq_uniforms.title }}
+      {% else %}
+        <img src="https://cdn.shopify.com/s/files/1/0774/4602/1275/files/custom-shop-soldiers-uniform-green-final.png?v=1787807110" alt="Stateside Quartermaster uniforms" width="1600" height="900" loading="eager" fetchpriority="high">
+      {% endif %}
+    </span>
+    <span class="sq-sd-hero__shade"></span>
+    <span class="sq-sd-hero__copy">
+      <strong>Uniforms &amp;<br>Mission Gear</strong>
+      <span>Military, State Guard &amp; Public Safety</span>
+      <b>SHOP UNIFORMS</b>
+    </span>
+  </a>
+
+  {% if sq_update_one != blank and sq_update_one.products_count > 0 %}
+    <section class="sq-sd-collection sq-sd-collection--first">
+      <div class="sq-sd-content">
+        <h2>Uniform Insignia &amp; Identification</h2>
+        <div class="sq-sd-products sq-sd-products--four">
+          {% for product in sq_update_one.products limit: 4 %}
+            <article class="sq-sd-card">
+              <a class="sq-sd-card__image" href="{{ product.url }}">{% if product.featured_image != blank %}{{ product.featured_image | image_url: width: 520 | image_tag: widths: '158,240,360,520', sizes: '(min-width: 750px) 158px, 43vw', loading: 'lazy', alt: product.title }}{% endif %}</a>
+              <a class="sq-sd-card__title" href="{{ product.url }}">{{ product.title }}</a>
+              <span>{{ product.price | money }}</span>
+            </article>
+          {% endfor %}
         </div>
       </div>
-      <div class="sq-retail-hero__mark" aria-hidden="true">
-        <img src="https://cdn.shopify.com/s/files/1/0774/4602/1275/files/stateside-quartermaster-minuteman-full.png?v=1786036359" alt="" width="1024" height="1536" loading="eager">
-      </div>
-    </div>
-  </div>
-
-  <div class="sq-retail-shell sq-retail-block">
-    <div class="sq-retail-heading">
-      <div><p class="sq-retail-eyebrow">Shop by component</p><h2>Products Built for the Line</h2></div>
-      <a href="/collections/all">View all products</a>
-    </div>
-    {% capture sq_component_data %}
-    /collections/products-built-for-the-line-u-s-army|U.S. Army||
-    /collections/products-built-for-the-line-u-s-navy|U.S. Navy||
-    /collections/products-built-for-the-line-u-s-air-force|U.S. Air Force||
-    /collections/products-built-for-the-line-u-s-marine-corps|U.S. Marine Corps||
-    /collections/products-built-for-the-line-u-s-coast-guard|U.S. Coast Guard||
-    /collections/products-built-for-the-line-u-s-space-force|U.S. Space Force||
-    /collections/army-national-guard-series|Army National Guard||
-    /collections/air-national-guard-series|Air National Guard||
-    /collections/state-guard-series|State Guard||
-    /collections/rotc-series|ROTC||
-    /collections/jrotc-series|JROTC||
-    /collections/military-schools-academies|Military Schools & Academies||
-    /collections/law-enforcement-corrections|Law Enforcement & Corrections||
-    /collections/firefighting-ems-search-rescue|Firefighting, EMS & Search & Rescue||
-    /collections/stateside-quartermaster-logo-merch|Stateside QM Logo Merchandise||
-    {% endcapture %}
-    {% assign sq_components = sq_component_data | strip | split: '||' %}
-    <div class="sq-retail-linkgrid sq-retail-linkgrid--components">
-      {% for row in sq_components %}
-        {% assign r = row | strip %}
-        {% if r != blank %}
-          {% assign p = r | split: '|' %}
-          <a href="{{ p[0] }}?filter.v.availability=1">{{ p[1] }}<span aria-hidden="true">→</span></a>
-        {% endif %}
-      {% endfor %}
-    </div>
-  </div>
-
-  <div class="sq-retail-shell sq-retail-block sq-retail-block--categories">
-    <div class="sq-retail-heading"><div><p class="sq-retail-eyebrow">Departments</p><h2>Shop by category</h2></div></div>
-    {% assign sq_departments = 'tactical-gear,uniforms,firearm-accessories,body-armor-ballistic-protection,apparel,flags-patriotic-decor,literature,outdoor-preparedness-gear,first-aid-medical-ifak,flashlights-lighting,knives-axes-cutlery,dive-scuba,armed-forces-gear,morale-patches-tactical-id,footwear-gloves-eyewear,accessories-gifts-collectibles,safety-rescue-climbing,airsoft-milsim,k9-dog-gear,patriotic-american-heritage,art,zippos-lighters-torches,watches,armored-vehicles,child-safety-shop,thin-line,sta-brite-insignia' | split: ',' %}
-    <div class="sq-retail-linkgrid sq-retail-linkgrid--departments">
-      {% for handle in sq_departments %}
-        {% assign c = collections[handle] %}
-        {% if handle == 'armored-vehicles' %}
-          <a href="/pages/armored-vehicles-purchase-inquiry">Armored Vehicles<span aria-hidden="true">→</span></a>
-        {% elsif c != blank %}
-          <a href="{{ c.url }}?filter.v.availability=1">{{ c.title }}<span aria-hidden="true">→</span></a>
-        {% endif %}
-      {% endfor %}
-    </div>
-  </div>
-
-  {% assign sq_featured = collections['all'] %}
-  {% if sq_featured != blank and sq_featured.products_count > 0 %}
-    <div class="sq-retail-shell sq-retail-block sq-retail-block--products">
-      <div class="sq-retail-heading"><div><p class="sq-retail-eyebrow">In stock now</p><h2>Featured products</h2></div><a href="/collections/all?filter.v.availability=1">Shop all</a></div>
-      <div class="sq-retail-products">
-        {% for product in sq_featured.products limit: 8 %}
-          <article class="sq-retail-product">
-            <a class="sq-retail-product__media" href="{{ product.url }}">
-              {% if product.featured_image != blank %}
-                {{ product.featured_image | image_url: width: 720 | image_tag: loading: 'lazy', widths: '240,360,540,720', sizes: '(min-width: 1100px) 25vw, (min-width: 750px) 33vw, 50vw', alt: product.featured_image.alt | default: product.title }}
-              {% endif %}
-            </a>
-            <div class="sq-retail-product__body">
-              <a href="{{ product.url }}">{{ product.title }}</a>
-              <span>{{ product.price | money }}</span>
-            </div>
-          </article>
-        {% endfor %}
-      </div>
-    </div>
+    </section>
   {% endif %}
 
-  <div class="sq-retail-custom">
-    <div class="sq-retail-shell sq-retail-custom__grid">
-      <div><p class="sq-retail-eyebrow">Made to order</p><h2>Custom unit gear</h2><p>Build recurring apparel, identification and organization-specific gear for your unit or agency.</p></div>
-      <a href="/pages/custom-unit-gear">Open the Custom Shop <span aria-hidden="true">→</span></a>
+  {% if sq_update_two != blank and sq_update_two.products_count > 0 %}
+    <section class="sq-sd-collection">
+      <div class="sq-sd-content">
+        <h2>State Guard &amp; State Defense Force Gear</h2>
+        <div class="sq-sd-products sq-sd-products--four">
+          {% for product in sq_update_two.products limit: 4 %}
+            <article class="sq-sd-card">
+              <a class="sq-sd-card__image" href="{{ product.url }}">{% if product.featured_image != blank %}{{ product.featured_image | image_url: width: 520 | image_tag: widths: '158,240,360,520', sizes: '(min-width: 750px) 158px, 43vw', loading: 'lazy', alt: product.title }}{% endif %}</a>
+              <a class="sq-sd-card__title" href="{{ product.url }}">{{ product.title }}</a>
+              <span>{{ product.price | money }}</span>
+            </article>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
+  {% assign sq_feature_one = sq_tactical.products.first %}
+  {% if sq_feature_one != blank %}
+    <section class="sq-sd-feature">
+      <div class="sq-sd-feature__inner">
+        <div class="sq-sd-feature__image">{% if sq_feature_one.featured_image != blank %}{{ sq_feature_one.featured_image | image_url: width: 1100 | image_tag: widths: '420,720,960,1100', sizes: '(min-width: 750px) 560px, 100vw', loading: 'lazy', alt: sq_feature_one.title }}{% endif %}</div>
+        <div class="sq-sd-feature__copy"><h2>{{ sq_feature_one.title }}</h2><strong>{{ sq_feature_one.price | money }}</strong><a class="sq-sd-buy" href="{{ sq_feature_one.url }}">VIEW PRODUCT</a><a class="sq-sd-alt" href="{{ sq_tactical.url }}?filter.v.availability=1">SHOP TACTICAL GEAR</a><p>Mission-focused tactical equipment from the Stateside Quartermaster catalog.</p></div>
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="sq-sd-image-text">
+    <div class="sq-sd-content sq-sd-image-text__inner">
+      <div class="sq-sd-image-text__copy"><h2>Custom Unit Gear</h2><p>Stateside Quartermaster supports recurring apparel, identification and organization-specific gear for units, organizations and agencies.</p><a href="/pages/custom-unit-gear">Open the Custom Shop</a></div>
+      <div class="sq-sd-image-text__media"><img src="https://cdn.shopify.com/s/files/1/0774/4602/1275/files/custom-shop-soldiers-uniform-green-final.png?v=1787807110" alt="Stateside Quartermaster custom unit gear" width="1200" height="850" loading="lazy"></div>
     </div>
-  </div>
+  </section>
+
+  {% assign sq_feature_two = sq_uniforms.products[4] %}
+  {% if sq_feature_two == blank %}{% assign sq_feature_two = sq_uniforms.products.first %}{% endif %}
+  {% if sq_feature_two != blank %}
+    <section class="sq-sd-feature sq-sd-feature--tall">
+      <div class="sq-sd-feature__inner">
+        <div class="sq-sd-feature__image">{% if sq_feature_two.featured_image != blank %}{{ sq_feature_two.featured_image | image_url: width: 1100 | image_tag: widths: '420,720,960,1100', sizes: '(min-width: 750px) 560px, 100vw', loading: 'lazy', alt: sq_feature_two.title }}{% endif %}</div>
+        <div class="sq-sd-feature__copy"><h2>{{ sq_feature_two.title }}</h2><strong>{{ sq_feature_two.price | money }}</strong><a class="sq-sd-buy" href="{{ sq_feature_two.url }}">VIEW PRODUCT</a><a class="sq-sd-alt" href="{{ sq_uniforms.url }}?filter.v.availability=1">SHOP UNIFORMS</a></div>
+      </div>
+    </section>
+  {% endif %}
+
+  {% if sq_outdoor != blank and sq_outdoor.products_count > 0 %}
+    <section class="sq-sd-cold">
+      <div class="sq-sd-content">
+        <h2>Outdoor, Survival &amp; Cold Weather Gear</h2>
+        <div class="sq-sd-products sq-sd-products--cold">
+          {% for product in sq_outdoor.products limit: 18 %}
+            <article class="sq-sd-card sq-sd-card--compact">
+              <a class="sq-sd-card__image" href="{{ product.url }}">{% if product.featured_image != blank %}{{ product.featured_image | image_url: width: 420 | image_tag: widths: '140,220,320,420', sizes: '(min-width: 750px) 140px, 43vw', loading: 'lazy', alt: product.title }}{% endif %}</a>
+              <a class="sq-sd-card__title" href="{{ product.url }}">{{ product.title }}</a><span>{{ product.price | money }}</span>
+            </article>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
+  {% assign sq_book = sq_literature.products.first %}
+  {% if sq_book != blank %}
+    <section class="sq-sd-feature sq-sd-feature--short">
+      <div class="sq-sd-feature__inner"><div class="sq-sd-feature__image">{% if sq_book.featured_image != blank %}{{ sq_book.featured_image | image_url: width: 1000 | image_tag: widths: '420,720,1000', sizes: '(min-width: 750px) 560px, 100vw', loading: 'lazy', alt: sq_book.title }}{% endif %}</div><div class="sq-sd-feature__copy"><h2>{{ sq_book.title }}</h2><strong>{{ sq_book.price | money }}</strong><a class="sq-sd-buy" href="{{ sq_book.url }}">VIEW PRODUCT</a><a class="sq-sd-alt" href="{{ sq_literature.url }}?filter.v.availability=1">SHOP BOOKS</a></div></div>
+    </section>
+  {% endif %}
+
+  {% assign sq_gift = sq_gifts.products.first %}
+  {% if sq_gift != blank %}
+    <section class="sq-sd-feature sq-sd-feature--gift">
+      <div class="sq-sd-feature__inner"><div class="sq-sd-feature__image">{% if sq_gift.featured_image != blank %}{{ sq_gift.featured_image | image_url: width: 1100 | image_tag: widths: '420,720,960,1100', sizes: '(min-width: 750px) 560px, 100vw', loading: 'lazy', alt: sq_gift.title }}{% endif %}</div><div class="sq-sd-feature__copy"><h2>{{ sq_gift.title }}</h2><strong>{{ sq_gift.price | money }}</strong><a class="sq-sd-buy" href="{{ sq_gift.url }}">VIEW PRODUCT</a><a class="sq-sd-alt" href="{{ sq_gifts.url }}?filter.v.availability=1">SHOP GIFTS &amp; COLLECTIBLES</a></div></div>
+    </section>
+  {% endif %}
+
+  <section id="sq-components" class="sq-sd-gridsection sq-sd-gridsection--components"><div class="sq-sd-content"><h2>Shop By Component</h2>{% assign sq_components = 'products-built-for-the-line-u-s-army|U.S. Army,products-built-for-the-line-u-s-navy|U.S. Navy,products-built-for-the-line-u-s-air-force|U.S. Air Force,products-built-for-the-line-u-s-marine-corps|U.S. Marine Corps,products-built-for-the-line-u-s-coast-guard|U.S. Coast Guard,products-built-for-the-line-u-s-space-force|U.S. Space Force,army-national-guard-series|Army National Guard,air-national-guard-series|Air National Guard,state-guard-series|State Guard,rotc-series|ROTC,jrotc-series|JROTC,military-schools-academies|Military Schools & Academies,law-enforcement-corrections|Law Enforcement & Corrections,firefighting-ems-search-rescue|Firefighting EMS SAR,stateside-quartermaster-logo-merch|Stateside QM Logo Merchandise' | split: ',' %}<div class="sq-sd-visualgrid">{% for item in sq_components %}{% assign parts = item | split: '|' %}{% assign c = collections[parts[0]] %}<a class="sq-sd-visualcard" href="/collections/{{ parts[0] }}?filter.v.availability=1"><span class="sq-sd-visualcard__image">{% if c.image != blank %}{{ c.image | image_url: width: 420 | image_tag: widths: '140,220,320,420', sizes: '(min-width:750px) 140px, 43vw', loading: 'lazy', alt: parts[1] }}{% elsif c.products.first.featured_image != blank %}{{ c.products.first.featured_image | image_url: width: 420 | image_tag: widths: '140,220,320,420', sizes: '(min-width:750px) 140px, 43vw', loading: 'lazy', alt: parts[1] }}{% endif %}</span><span>{{ parts[1] }}</span></a>{% endfor %}</div></div></section>
+
+  <section id="sq-categories" class="sq-sd-gridsection sq-sd-gridsection--categories"><div class="sq-sd-content"><h2>Categories</h2>{% assign sq_departments = 'tactical-gear|Tactical Gear,uniforms|Uniforms,firearm-accessories|Firearm Accessories,body-armor-ballistic-protection|Body Armor & Ballistic Protection,apparel|Apparel & Headwear,flags-patriotic-decor|Flags & Patriotic Decor,literature|Literature,outdoor-preparedness-gear|Outdoor & Survival,first-aid-medical-ifak|First Aid & IFAK,flashlights-lighting|Flashlights & Lighting,knives-axes-cutlery|Knives Axes & Cutlery,dive-scuba|Dive & Scuba,armed-forces-gear|Armed Forces Gear,morale-patches-tactical-id|Morale Patches & Tactical ID,footwear-gloves-eyewear|Footwear Gloves & Eyewear,accessories-gifts-collectibles|Accessories Gifts & Collectibles,safety-rescue-climbing|Safety Rescue & Climbing,airsoft-milsim|Airsoft & Milsim,k9-dog-gear|K9 & Dog Gear,patriotic-american-heritage|Patriotic & American Heritage,art|Art,zippos-lighters-torches|Lighters & Torches,watches|Watches,armored-vehicles|Armored Vehicles,child-safety-shop|Child Safety Shop,thin-line|Thin Line,sta-brite-insignia|Sta-Brite Insignia' | split: ',' %}<div class="sq-sd-visualgrid">{% for item in sq_departments %}{% assign parts = item | split: '|' %}{% assign c = collections[parts[0]] %}{% if parts[0] == 'armored-vehicles' %}{% assign target = '/pages/armored-vehicles-purchase-inquiry' %}{% else %}{% assign target = '/collections/' | append: parts[0] | append: '?filter.v.availability=1' %}{% endif %}<a class="sq-sd-visualcard" href="{{ target }}"><span class="sq-sd-visualcard__image">{% if c.image != blank %}{{ c.image | image_url: width: 420 | image_tag: widths: '140,220,320,420', sizes: '(min-width:750px) 140px, 43vw', loading: 'lazy', alt: parts[1] }}{% elsif c.products.first.featured_image != blank %}{{ c.products.first.featured_image | image_url: width: 420 | image_tag: widths: '140,220,320,420', sizes: '(min-width:750px) 140px, 43vw', loading: 'lazy', alt: parts[1] }}{% endif %}</span><span>{{ parts[1] }}</span></a>{% endfor %}</div></div></section>
 </section>
 
 {% stylesheet %}
-.sq-retail-home{--sq-navy:#082844;--sq-red:#b31942;--sq-cream:#f7f4ec;--sq-gold:#d5ab4b;--sq-ink:#101820;background:#fff;color:var(--sq-ink);font-family:Arial,Helvetica,sans-serif}.sq-retail-shell{width:min(1460px,calc(100% - 44px));margin:0 auto}.sq-retail-hero{background:var(--sq-navy);color:#fff;border-bottom:6px solid var(--sq-red)}.sq-retail-hero__grid{min-height:520px;display:grid;grid-template-columns:minmax(0,1.45fr) minmax(260px,.55fr);align-items:center;gap:54px;padding:64px 0}.sq-retail-eyebrow{margin:0 0 10px;color:var(--sq-red);font-weight:900;letter-spacing:.14em;text-transform:uppercase;font-size:.78rem}.sq-retail-hero .sq-retail-eyebrow{color:var(--sq-gold)}.sq-retail-hero h1{margin:0;font-family:Georgia,'Times New Roman',serif;font-size:clamp(3.2rem,6.5vw,6.6rem);line-height:.92;letter-spacing:-.035em;color:#fff}.sq-retail-hero p:not(.sq-retail-eyebrow){max-width:780px;margin:24px 0 0;font-size:clamp(1rem,1.4vw,1.25rem);line-height:1.6;color:#fff}.sq-retail-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}.sq-retail-actions a,.sq-retail-custom a{display:inline-flex;align-items:center;justify-content:center;min-height:50px;padding:14px 22px;background:var(--sq-red);border:2px solid var(--sq-red);color:#fff;text-decoration:none;text-transform:uppercase;font-weight:900;letter-spacing:.07em;font-size:.78rem}.sq-retail-actions a+a{background:transparent;border-color:#fff}.sq-retail-hero__mark{display:flex;align-items:center;justify-content:center}.sq-retail-hero__mark img{width:min(250px,100%);max-height:390px;object-fit:contain}.sq-retail-block{padding:58px 0}.sq-retail-block+.sq-retail-block{border-top:1px solid #e2e5e8}.sq-retail-heading{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:26px}.sq-retail-heading h2,.sq-retail-custom h2{margin:0;color:var(--sq-navy);font-family:Georgia,'Times New Roman',serif;font-size:clamp(2rem,3vw,3.5rem);line-height:1}.sq-retail-heading>a{color:var(--sq-navy);font-weight:900;text-transform:uppercase;letter-spacing:.08em;font-size:.75rem;text-underline-offset:4px}.sq-retail-linkgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid #cfd5d9;border-left:1px solid #cfd5d9}.sq-retail-linkgrid a{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:66px;padding:15px 18px;border-right:1px solid #cfd5d9;border-bottom:1px solid #cfd5d9;background:#fff;color:var(--sq-navy);text-decoration:none;font-weight:900;line-height:1.25}.sq-retail-linkgrid a:hover{background:var(--sq-cream);color:var(--sq-red)}.sq-retail-linkgrid a span{color:var(--sq-red);font-size:1.25rem}.sq-retail-products{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px}.sq-retail-product{min-width:0}.sq-retail-product__media{display:grid;place-items:center;aspect-ratio:1/1;background:#fff;border:1px solid #e0e3e6;overflow:hidden}.sq-retail-product__media img{width:100%;height:100%;object-fit:contain;padding:12px;background:#fff}.sq-retail-product__body{display:grid;gap:6px;padding-top:12px}.sq-retail-product__body a{color:var(--sq-ink);text-decoration:none;font-weight:800;line-height:1.35}.sq-retail-product__body a:hover{color:var(--sq-red)}.sq-retail-product__body span{color:#44515b;font-weight:700}.sq-retail-custom{margin-top:24px;background:var(--sq-cream);border-top:6px solid var(--sq-gold);border-bottom:6px solid var(--sq-red)}.sq-retail-custom__grid{display:grid;grid-template-columns:1fr auto;align-items:center;gap:36px;padding:46px 0}.sq-retail-custom p:not(.sq-retail-eyebrow){max-width:760px;margin:14px 0 0;line-height:1.6}.sq-retail-custom a{white-space:nowrap;background:var(--sq-navy);border-color:var(--sq-navy)}@media(max-width:989px){.sq-retail-hero__grid{grid-template-columns:1fr auto;min-height:430px}.sq-retail-hero__mark img{width:170px}.sq-retail-linkgrid{grid-template-columns:repeat(3,minmax(0,1fr))}.sq-retail-products{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:749px){.sq-retail-shell{width:calc(100% - 24px)}.sq-retail-hero__grid{grid-template-columns:1fr;min-height:0;padding:42px 0}.sq-retail-hero__mark{display:none}.sq-retail-hero h1{font-size:clamp(2.7rem,14vw,4.5rem)}.sq-retail-block{padding:40px 0}.sq-retail-heading{align-items:flex-start}.sq-retail-linkgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.sq-retail-linkgrid a{min-height:62px;padding:13px 12px;font-size:.88rem}.sq-retail-products{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.sq-retail-custom__grid{grid-template-columns:1fr;padding:34px 0}.sq-retail-custom a{white-space:normal;width:100%}}@media(max-width:420px){.sq-retail-linkgrid{grid-template-columns:1fr}}
+.sq-sd-home{background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}.sq-sd-home *{box-sizing:border-box}.sq-sd-content{width:min(1100px,calc(100% - 100px));margin:0 auto}.sq-sd-hero{position:relative;display:block;height:628px;overflow:hidden;text-decoration:none;color:#fff;background:#333}.sq-sd-hero__media,.sq-sd-hero__shade{position:absolute;inset:0}.sq-sd-hero__media img{width:100%;height:100%;object-fit:cover;object-position:center}.sq-sd-hero__shade{background:linear-gradient(90deg,rgba(0,0,0,.48),rgba(0,0,0,.08) 62%,rgba(0,0,0,0))}.sq-sd-hero__copy{position:absolute;left:40px;top:38px;display:flex;flex-direction:column;align-items:flex-start;max-width:560px;text-shadow:0 1px 2px rgba(0,0,0,.45)}.sq-sd-hero__copy strong{font-size:80px;line-height:1;font-weight:400;color:#fff}.sq-sd-hero__copy>span{margin-top:18px;font-size:26px;line-height:1.18;color:#fff}.sq-sd-hero__copy b{margin-top:26px;display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border:1px solid #fff;color:#fff;background:rgba(0,0,0,.32);font-size:12px;letter-spacing:.08em}.sq-sd-collection{height:510px;padding:48px 0 36px}.sq-sd-collection--first{height:539px}.sq-sd-collection h2,.sq-sd-cold h2,.sq-sd-gridsection h2{text-align:center;margin:0 0 45px;font-size:20px;font-weight:400}.sq-sd-products{display:grid}.sq-sd-products--four{grid-template-columns:repeat(4,158px);justify-content:space-between;gap:30px}.sq-sd-card{min-width:0}.sq-sd-card__image{display:flex;width:158px;height:158px;align-items:center;justify-content:center;background:#fff;overflow:hidden}.sq-sd-card__image img{width:100%;height:100%;object-fit:contain}.sq-sd-card__title{display:block;margin-top:18px;color:#111;text-decoration:none;font-size:12px;line-height:1.4}.sq-sd-card>span{display:block;margin-top:7px;font-size:11px}.sq-sd-feature{height:567px;padding:50px 0;background:#fff}.sq-sd-feature--tall{height:714px}.sq-sd-feature--short{height:413px}.sq-sd-feature--gift{height:771px}.sq-sd-feature__inner{width:min(1000px,calc(100% - 100px));height:100%;margin:0 auto;display:grid;grid-template-columns:560px 1fr;gap:44px;align-items:center}.sq-sd-feature__image{height:100%;max-height:470px;background:#eee;display:flex;align-items:center;justify-content:center;overflow:hidden}.sq-sd-feature--tall .sq-sd-feature__image,.sq-sd-feature--gift .sq-sd-feature__image{max-height:520px}.sq-sd-feature--short .sq-sd-feature__image{max-height:313px}.sq-sd-feature__image img{width:100%;height:100%;object-fit:contain}.sq-sd-feature__copy h2{margin:0 0 10px;font-size:22px;line-height:1.3;font-weight:400}.sq-sd-feature__copy strong{display:block;margin-bottom:22px;font-size:14px}.sq-sd-feature__copy a{display:flex;align-items:center;justify-content:center;min-height:42px;margin-bottom:7px;text-decoration:none;font-size:11px;font-weight:900;letter-spacing:.06em}.sq-sd-buy{background:#f6db00;color:#111}.sq-sd-alt{background:#5137ff;color:#fff}.sq-sd-feature__copy p{font-size:11px;line-height:1.7}.sq-sd-image-text{height:552px;padding:50px 0}.sq-sd-image-text__inner{height:452px;display:grid;grid-template-columns:1fr 1.3fr;background:#eee}.sq-sd-image-text__copy{padding:54px 44px;align-self:center}.sq-sd-image-text__copy h2{margin:0 0 18px;font-size:22px;font-weight:400}.sq-sd-image-text__copy p{font-size:12px;line-height:1.75}.sq-sd-image-text__copy a{display:inline-block;margin-top:16px;color:#3155d9;text-decoration:none;font-size:11px}.sq-sd-image-text__media{overflow:hidden}.sq-sd-image-text__media img{width:100%;height:100%;object-fit:cover}.sq-sd-cold{min-height:1269px;padding:50px 0 65px}.sq-sd-products--cold{grid-template-columns:repeat(6,140px);gap:72px 38px;justify-content:space-between}.sq-sd-card--compact .sq-sd-card__image{width:140px;height:140px}.sq-sd-card--compact .sq-sd-card__title{font-size:10px;margin-top:12px}.sq-sd-card--compact>span{font-size:10px}.sq-sd-gridsection{padding:50px 0}.sq-sd-gridsection--components{min-height:1010px}.sq-sd-gridsection--categories{min-height:652px;padding-bottom:75px}.sq-sd-visualgrid{display:grid;grid-template-columns:repeat(6,140px);gap:55px 38px;justify-content:space-between}.sq-sd-visualcard{display:block;color:#111;text-decoration:none;font-size:11px;line-height:1.35}.sq-sd-visualcard__image{display:flex;width:140px;height:140px;align-items:center;justify-content:center;margin-bottom:14px;background:#fff;overflow:hidden}.sq-sd-visualcard__image img{width:100%;height:100%;object-fit:contain}@media(max-width:989px){.sq-sd-products--cold,.sq-sd-visualgrid{grid-template-columns:repeat(4,140px)}}@media(max-width:749px){.sq-sd-content{width:calc(100% - 30px)}.sq-sd-hero{height:204px}.sq-sd-hero__copy{left:16px;top:20px;max-width:280px}.sq-sd-hero__copy strong{font-size:30px}.sq-sd-hero__copy>span{margin-top:8px;font-size:13px}.sq-sd-hero__copy b{margin-top:12px;min-height:30px;padding:0 10px;font-size:8px}.sq-sd-collection,.sq-sd-collection--first{height:auto;min-height:504px;padding:29px 0 35px}.sq-sd-collection h2,.sq-sd-cold h2,.sq-sd-gridsection h2{margin-bottom:24px;font-size:15px}.sq-sd-products--four{grid-template-columns:repeat(2,158px);justify-content:space-between;gap:34px 24px}.sq-sd-card__image{width:158px;height:158px}.sq-sd-card__title{margin-top:10px;font-size:10px}.sq-sd-card>span{font-size:9px}.sq-sd-feature,.sq-sd-feature--tall,.sq-sd-feature--short,.sq-sd-feature--gift{height:auto;min-height:810px;padding:26px 0}.sq-sd-feature__inner{width:calc(100% - 30px);height:auto;display:grid;grid-template-columns:1fr;gap:18px}.sq-sd-feature__image,.sq-sd-feature--tall .sq-sd-feature__image,.sq-sd-feature--gift .sq-sd-feature__image,.sq-sd-feature--short .sq-sd-feature__image{height:520px;max-height:none}.sq-sd-feature__copy h2{font-size:18px}.sq-sd-image-text{height:auto;padding:28px 0}.sq-sd-image-text__inner{height:auto;grid-template-columns:1fr}.sq-sd-image-text__copy{padding:32px 24px}.sq-sd-image-text__media{height:500px}.sq-sd-cold{min-height:1182px;padding:28px 0 44px}.sq-sd-products--cold{grid-template-columns:repeat(2,140px);gap:42px 42px;justify-content:space-around}.sq-sd-gridsection--components{min-height:2324px}.sq-sd-gridsection--categories{min-height:1183px}.sq-sd-visualgrid{grid-template-columns:repeat(2,140px);gap:42px 42px;justify-content:space-around}.sq-sd-visualcard{font-size:10px}}
 {% endstylesheet %}
-
-{% schema %}
-{"name":"Stateside retail home","settings":[],"presets":[{"name":"Stateside retail home"}]}
-{% endschema %}
+{% schema %}{"name":"Stateside retail home","settings":[],"presets":[{"name":"Stateside retail home"}]}{% endschema %}
