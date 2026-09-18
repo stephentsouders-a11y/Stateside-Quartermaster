@@ -1,0 +1,65 @@
+name: Diagnose Current Mobile Responsive State
+on:
+  push:
+    branches:
+      - rebuild/stateside-retail-sd-style
+    paths:
+      - '.github/workflows/diagnose-current-mobile-state.yml'
+  workflow_dispatch:
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Diagnose mobile routes
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          const browser=await chromium.launch({headless:true});
+          const routes=[
+            ['home','https://www.statesideqm.com/?preview_theme_id=158872600731&sq_mobile_diag=final2'],
+            ['accessories','https://www.statesideqm.com/collections/accessories-gifts-collectibles?filter.v.availability=1&preview_theme_id=158872600731&sq_mobile_diag=final2']
+          ];
+          for(const [name,url] of routes){
+            const page=await browser.newPage({viewport:{width:390,height:844}});
+            const res=await page.goto(url,{waitUntil:'load',timeout:120000});
+            await page.waitForTimeout(5000);
+            const data=await page.evaluate(()=>{
+              const info=(sel)=>{
+                const e=document.querySelector(sel);
+                if(!e)return null;
+                const s=getComputedStyle(e),r=e.getBoundingClientRect();
+                return {display:s.display,visibility:s.visibility,opacity:s.opacity,x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)};
+              };
+              return {
+                innerWidth,
+                outerWidth,
+                dpr:devicePixelRatio,
+                media749:matchMedia('(max-width:749px)').matches,
+                media750:matchMedia('(min-width:750px)').matches,
+                mobile:info('.sq-sd-mobilehead'),
+                rail:info('.sq-sd-rail'),
+                utility:info('.sq-sd-utility'),
+                legacy:info('.sqm-mobile-nav'),
+                hero:info('.sq-sd-hero'),
+                main:info('#MainContent'),
+                headerGroup:info('#header-group'),
+                bodyClass:document.body.className,
+                href:location.href
+              };
+            });
+            data.status=res?.status()??null;
+            console.log('ROUTE_'+name.toUpperCase());
+            console.log(JSON.stringify(data,null,2));
+            await page.close();
+          }
+          await browser.close();
+          NODE
