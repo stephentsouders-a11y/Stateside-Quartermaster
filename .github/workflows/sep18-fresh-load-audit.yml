@@ -1,0 +1,38 @@
+name: Sep18 fresh current-state load audit
+on:
+  push:
+    branches: [sep18-fresh-load-audit-158900125851]
+    paths:
+      - '.github/workflows/sep18-fresh-load-audit.yml'
+      - '.github/scripts/sep18-fresh-load-audit.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chromium-load-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      BASE_URL: https://www.statesideqm.com
+      THEME_ID: '158900125851'
+      STATE_GUARD_ROOT: /collections/state-guard-series
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Run fresh current-state audit
+        run: node .github/scripts/sep18-fresh-load-audit.mjs
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sep18-fresh-load-audit-${{ github.run_id }}
+          path: sep18-fresh-load-audit/
+          if-no-files-found: warn
+          retention-days: 14
