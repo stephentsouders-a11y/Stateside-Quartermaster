@@ -1,0 +1,200 @@
+{% doc %}
+Enhances the Custom Unit Gear collection links so they match the interactive homepage department-card pattern.
+{% enddoc %}
+{% assign sq_custom_handles = 'custom-personalized-products,custom-patches,custom-apparel,personalized-displays-memorials,custom-nameplates-tags-uniform-id,custom-flags-guidons,special-order-personalized-gear' | split: ',' %}
+<style>
+  .custom-unit-gear-page .custom-unit-grid:has(> .custom-unit-card){
+    display:grid !important;
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    gap:16px !important;
+    align-items:stretch;
+  }
+  .custom-unit-gear-page .custom-unit-card.sq-custom-home-card{
+    position:relative;
+    display:flex !important;
+    height:327px;
+    min-width:0;
+    padding:0 !important;
+    flex-direction:column;
+    overflow:hidden;
+    border:1px solid #aeb8be !important;
+    border-radius:14px !important;
+    background:#fff !important;
+    color:#fff !important;
+    text-decoration:none !important;
+    box-shadow:0 8px 22px rgba(0,0,0,.13) !important;
+    transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
+  }
+  .custom-unit-gear-page .custom-unit-card.sq-custom-home-card::after{
+    content:"";
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:0;
+    height:4px;
+    background:#a91827;
+    pointer-events:none;
+  }
+  .custom-unit-gear-page .custom-unit-card.sq-custom-home-card:hover,
+  .custom-unit-gear-page .custom-unit-card.sq-custom-home-card:focus-visible{
+    transform:translateY(-4px);
+    border-color:#a91827 !important;
+    box-shadow:0 14px 30px rgba(0,0,0,.25) !important;
+  }
+  .custom-unit-gear-page .custom-unit-card.sq-custom-home-card:focus-visible{
+    outline:3px solid #d5ab4b;
+    outline-offset:3px;
+  }
+  .sq-custom-home-card__media{
+    display:block;
+    height:220px;
+    flex:0 0 220px;
+    overflow:hidden;
+    background:#fff;
+    border-bottom:1px solid #d9dee1;
+  }
+  .sq-custom-home-card__media img{
+    display:block;
+    width:100%;
+    height:100%;
+    padding:10px;
+    box-sizing:border-box;
+    background:#fff;
+    object-fit:contain;
+    object-position:center;
+  }
+  .sq-custom-home-card__fallback{
+    display:flex;
+    width:100%;
+    height:100%;
+    align-items:center;
+    justify-content:center;
+    color:#071d2d;
+    font-size:46px;
+    font-weight:900;
+    letter-spacing:.04em;
+  }
+  .sq-custom-home-card__copy{
+    position:relative;
+    display:flex;
+    min-height:107px;
+    flex:1;
+    flex-direction:column;
+    padding:15px 42px 18px 15px;
+    background:#071d2d;
+  }
+  .sq-custom-home-card__title{
+    color:#fff;
+    font-size:15px;
+    font-weight:850;
+    line-height:1.23;
+  }
+  .sq-custom-home-card__desc{
+    margin-top:5px;
+    color:#e5e9ec;
+    font-size:12px;
+    line-height:1.35;
+  }
+  .sq-custom-home-card__count{
+    margin-top:auto;
+    color:#c7d0d6;
+    font-size:12px;
+    font-weight:650;
+  }
+  .sq-custom-home-card__arrow{
+    position:absolute;
+    right:15px;
+    bottom:17px;
+    color:#d5ab4b;
+    font-size:22px;
+    font-weight:900;
+  }
+  @media(max-width:900px){
+    .custom-unit-gear-page .custom-unit-grid:has(> .custom-unit-card){grid-template-columns:repeat(2,minmax(0,1fr)) !important;}
+  }
+  @media(max-width:649px){
+    .custom-unit-gear-page .custom-unit-grid:has(> .custom-unit-card){grid-template-columns:1fr !important;gap:14px !important;}
+    .custom-unit-gear-page .custom-unit-card.sq-custom-home-card{height:236px;}
+    .sq-custom-home-card__media{height:138px;flex-basis:138px;}
+    .sq-custom-home-card__copy{min-height:98px;padding:12px 34px 15px 12px;}
+    .sq-custom-home-card__title{font-size:14px;}
+    .sq-custom-home-card__desc{display:none;}
+    .sq-custom-home-card__arrow{right:11px;bottom:14px;}
+  }
+  @media(max-width:430px){
+    .custom-unit-gear-page .custom-unit-grid:has(> .custom-unit-card){grid-template-columns:1fr !important;}
+  }
+</style>
+<script>
+(function(){
+  if(window.__sqCustomUnitHomepageCards)return;
+  window.__sqCustomUnitHomepageCards=true;
+  var config={
+  {% for h in sq_custom_handles %}
+    {% assign c = collections[h] %}
+    {% assign p = c.products.first %}
+    {{ h | json }}:{
+      count:{{ c.products_count | default: 0 | json }},
+      image:{% if p != blank and p.featured_image != blank %}{{ p.featured_image | image_url: width: 900 | json }}{% else %}""{% endif %},
+      alt:{% if p != blank %}{{ p.title | append: ' — ' | append: c.title | json }}{% else %}{{ c.title | json }}{% endif %}
+    }{% unless forloop.last %},{% endunless %}
+  {% endfor %}
+  };
+  function enhance(){
+    var page=document.querySelector('.custom-unit-gear-page');
+    if(!page)return;
+    page.querySelectorAll('a.custom-unit-card[href*="/collections/"]').forEach(function(card){
+      if(card.dataset.sqHomepageCard==='1')return;
+      var url;
+      try{url=new URL(card.href,location.origin)}catch(e){return}
+      var handle=url.pathname.split('/').filter(Boolean).pop()||'';
+      var data=config[handle];
+      if(!data)return;
+      var titleNode=card.querySelector('strong');
+      var title=(titleNode?titleNode.textContent:'').trim();
+      var desc='';
+      card.childNodes.forEach(function(node){
+        if(node.nodeType===Node.TEXT_NODE)desc+=node.textContent+' ';
+      });
+      desc=desc.replace(/\s+/g,' ').trim();
+      var media=document.createElement('span');
+      media.className='sq-custom-home-card__media';
+      if(data.image){
+        var img=document.createElement('img');
+        img.src=data.image;
+        img.alt=data.alt||title;
+        img.width=900;
+        img.height=650;
+        img.loading='lazy';
+        img.decoding='async';
+        media.appendChild(img);
+      }else{
+        var fallback=document.createElement('span');
+        fallback.className='sq-custom-home-card__fallback';
+        fallback.textContent=(title||'SQ').split(/\s+/).slice(0,2).map(function(x){return x.charAt(0)}).join('').toUpperCase();
+        media.appendChild(fallback);
+      }
+      var copy=document.createElement('span');
+      copy.className='sq-custom-home-card__copy';
+      var t=document.createElement('span');
+      t.className='sq-custom-home-card__title';
+      t.textContent=title;
+       var count=document.createElement('span');
+      count.className='sq-custom-home-card__count';
+      count.textContent=String(data.count)+' '+(Number(data.count)===1?'item':'items');
+      var arrow=document.createElement('span');
+      arrow.className='sq-custom-home-card__arrow';
+      arrow.setAttribute('aria-hidden','true');
+      arrow.textContent='→';
+      copy.appendChild(t);
+       copy.appendChild(count);
+      copy.appendChild(arrow);
+      card.replaceChildren(media,copy);
+      card.classList.add('sq-custom-home-card');
+      card.dataset.sqHomepageCard='1';
+      card.setAttribute('aria-label','Shop '+title);
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',enhance,{once:true});else enhance();
+})();
+</script>
