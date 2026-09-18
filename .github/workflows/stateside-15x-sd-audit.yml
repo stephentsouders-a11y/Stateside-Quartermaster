@@ -1,0 +1,175 @@
+name: Stateside 15x SD Fidelity Audit
+on:
+  push:
+    branches:
+      - rebuild/stateside-retail-sd-style
+    paths:
+      - '.github/workflows/stateside-15x-sd-audit.yml'
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Run 15 independent fidelity passes
+        run: |
+          mkdir -p evidence
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+
+          const theme = '158872600731';
+          const base = 'https://www.statesideqm.com';
+          const passes = [];
+          const viewports = [
+            {name:'desktop',width:1440,height:1200},
+            {name:'mobile',width:390,height:844}
+          ];
+
+          const rect = async (page, selector) => page.locator(selector).first().evaluate(el => {
+            const r = el.getBoundingClientRect();
+            return {x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)};
+          });
+
+          const inspectStateside = async (page, route, viewport, pass) => {
+            const u = new URL(route, base);
+            u.searchParams.set('preview_theme_id',theme);
+            u.searchParams.set('sq_fidelity_pass',String(pass));
+            const response = await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:120000});
+            await page.waitForTimeout(3000);
+            if(viewport==='desktop') await page.waitForSelector('.sq-sd-rail',{state:'visible',timeout:30000});
+            else await page.waitForSelector('.sq-sd-mobilehead',{state:'visible',timeout:30000});
+            const data = await page.evaluate(() => {
+              const vis = el => {
+                if(!el) return false;
+                const s=getComputedStyle(el),r=el.getBoundingClientRect();
+                return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2;
+              };
+              const box = el => {
+                if(!el) return null;
+                const r=el.getBoundingClientRect();
+                return {x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)};
+              };
+              const hero=document.querySelector('.sq-sd-hero');
+              const rail=document.querySelector('.sq-sd-rail');
+              const util=document.querySelector('.sq-sd-utility');
+              const mobile=document.querySelector('.sq-sd-mobilehead');
+              const home=document.querySelector('.sq-sd-home');
+              const collections=[...document.querySelectorAll('.sq-sd-collection')];
+              const features=[...document.querySelectorAll('.sq-sd-feature')];
+              const cold=document.querySelector('.sq-sd-cold');
+              const components=document.querySelector('#sq-components');
+              const categories=document.querySelector('#sq-categories');
+              const productCards=[...document.querySelectorAll('product-card,.product-card,.product-grid__item,[data-product-id]')].filter(vis);
+              return {
+                hero:box(hero),rail:box(rail),utility:box(util),mobile:box(mobile),
+                home:box(home),
+                collectionHeights:collections.map(e=>box(e)?.h),
+                featureHeights:features.map(e=>box(e)?.h),
+                cold:box(cold),components:box(components),categories:box(categories),
+                fourRows:[...document.querySelectorAll('.sq-sd-products--four')].map(e=>e.querySelectorAll('.sq-sd-card').length),
+                coldCards:document.querySelectorAll('.sq-sd-products--cold .sq-sd-card').length,
+                componentCards:document.querySelectorAll('#sq-components .sq-sd-visualcard').length,
+                categoryCards:document.querySelectorAll('#sq-categories .sq-sd-visualcard').length,
+                categoryImages:[...document.querySelectorAll('#sq-categories .sq-sd-visualcard__image')].filter(vis).length,
+                componentImages:[...document.querySelectorAll('#sq-components .sq-sd-visualcard__image')].filter(vis).length,
+                oldHeader:!!document.querySelector('.sq-header'),
+                bodyButtons:[...document.querySelectorAll('#MainContent a')].filter(a=>vis(a)&&/sq-(subcategory|third-level|afg|ps-root)|vac-(service|category|series)/i.test(String(a.className||''))).length,
+                productCards:productCards.length,
+                scrollWidth:document.documentElement.scrollWidth,
+                innerWidth:innerWidth,
+                scrollHeight:document.documentElement.scrollHeight
+              };
+            });
+            data.status=response?.status()??null;
+            return data;
+          };
+
+          const inspectReference = async (page, viewport) => {
+            const response=await page.goto('https://sd-supply.com/?sq_ref='+Date.now(),{waitUntil:'domcontentloaded',timeout:120000});
+            await page.waitForTimeout(3000);
+            return await page.evaluate(() => {
+              const sections=[...document.querySelectorAll('main .shopify-section')].filter(el=>{
+                const r=el.getBoundingClientRect(); const s=getComputedStyle(el);
+                return r.width>2&&r.height>2&&s.display!=='none'&&s.visibility!=='hidden';
+              });
+              const b=el=>{if(!el)return null;const r=el.getBoundingClientRect();return{x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}};
+              return {status:document.readyState,sections:sections.slice(0,11).map(b),scrollHeight:document.documentElement.scrollHeight,scrollWidth:document.documentElement.scrollWidth,innerWidth};
+            });
+          };
+
+          const browser=await chromium.launch({headless:true});
+          try {
+            for(let pass=1;pass<=15;pass++){
+              const rec={pass,checks:[],ok:true};
+              for(const vp of viewports){
+                const refPage=await browser.newPage({viewport:{width:vp.width,height:vp.height}});
+                const ref=await inspectReference(refPage,vp.name);
+                await refPage.close();
+
+                const homePage=await browser.newPage({viewport:{width:vp.width,height:vp.height}});
+                const home=await inspectStateside(homePage,'/',vp.name,pass);
+                if(pass===1||pass===15) await homePage.screenshot({path:`evidence/pass-${pass}-${vp.name}-home.png`,fullPage:true});
+                await homePage.close();
+
+                const accPage=await browser.newPage({viewport:{width:vp.width,height:vp.height}});
+                const acc=await inspectStateside(accPage,'/collections/accessories-gifts-collectibles?filter.v.availability=1',vp.name,pass);
+                if(pass===1||pass===15) await accPage.screenshot({path:`evidence/pass-${pass}-${vp.name}-accessories.png`,fullPage:true});
+                await accPage.close();
+
+                const fail=(label,condition,detail)=>{rec.checks.push({viewport:vp.name,label,pass:!!condition,detail});if(!condition)rec.ok=false;};
+
+                fail('HTTP 200 home',home.status===200,home.status);
+                fail('HTTP 200 accessories',acc.status===200,acc.status);
+                fail('No legacy header',!home.oldHeader&&!acc.oldHeader,{home:home.oldHeader,accessories:acc.oldHeader});
+                fail('No horizontal overflow',home.scrollWidth<=home.innerWidth+2&&acc.scrollWidth<=acc.innerWidth+2,{home:[home.scrollWidth,home.innerWidth],accessories:[acc.scrollWidth,acc.innerWidth]});
+                fail('Accessories body buttons removed',acc.bodyButtons===0,acc.bodyButtons);
+                fail('Accessories products visible',acc.productCards>0,acc.productCards);
+
+                if(vp.name==='desktop'){
+                  fail('240px fixed rail',home.rail&&Math.abs(home.rail.w-240)<=1,home.rail);
+                  fail('39px utility bar',home.utility&&Math.abs(home.utility.h-39)<=1,home.utility);
+                  fail('Hero matches reference 628px',home.hero&&ref.sections[0]&&Math.abs(home.hero.h-ref.sections[0].h)<=2,{stateside:home.hero,reference:ref.sections[0]});
+                  fail('First featured row matches 539px reference',home.collectionHeights[0]&&ref.sections[1]&&Math.abs(home.collectionHeights[0]-ref.sections[1].h)<=4,{stateside:home.collectionHeights[0],reference:ref.sections[1].h});
+                  fail('Second featured row matches 510px reference',home.collectionHeights[1]&&ref.sections[2]&&Math.abs(home.collectionHeights[1]-ref.sections[2].h)<=4,{stateside:home.collectionHeights[1],reference:ref.sections[2].h});
+                  fail('Feature sequence present',home.featureHeights.length>=4,{features:home.featureHeights});
+                  fail('Cold weather block populated',home.coldCards>=12,{cards:home.coldCards,height:home.cold?.h});
+                  fail('Component visual grid populated',home.componentCards===15&&home.componentImages===15,{cards:home.componentCards,images:home.componentImages});
+                  fail('27 department visual grid',home.categoryCards===27&&home.categoryImages===27,{cards:home.categoryCards,images:home.categoryImages});
+                  fail('Reference-like long desktop rhythm',home.scrollHeight>=7800,{stateside:home.scrollHeight,reference:ref.scrollHeight});
+                } else {
+                  fail('Mobile header present',home.mobile&&home.mobile.h>=140&&home.mobile.h<=170,home.mobile);
+                  fail('Mobile hero matches reference',home.hero&&ref.sections[0]&&Math.abs(home.hero.h-ref.sections[0].h)<=2,{stateside:home.hero,reference:ref.sections[0]});
+                  fail('Mobile visual grids are two-column content',home.componentCards===15&&home.categoryCards===27,{components:home.componentCards,categories:home.categoryCards});
+                  fail('Reference-like long mobile rhythm',home.scrollHeight>=10000,{stateside:home.scrollHeight,reference:ref.scrollHeight});
+                }
+              }
+              passes.push(rec);
+              console.log(`PASS ${pass}: ${rec.ok?'SUCCESS':'FAILURE'}`);
+              if(!rec.ok){
+                console.log(JSON.stringify(rec,null,2));
+                throw new Error(`Verification pass ${pass} failed`);
+              }
+            }
+          } finally {
+            await browser.close();
+          }
+          fs.writeFileSync('evidence/15-pass-results.json',JSON.stringify(passes,null,2));
+          fs.writeFileSync('evidence/summary.json',JSON.stringify({passes:passes.length,passed:passes.filter(x=>x.ok).length,allPassed:passes.every(x=>x.ok)},null,2));
+          console.log(JSON.stringify({passes:passes.length,passed:passes.filter(x=>x.ok).length,allPassed:passes.every(x=>x.ok)},null,2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stateside-15x-sd-fidelity-audit
+          path: evidence/
+          retention-days: 14
