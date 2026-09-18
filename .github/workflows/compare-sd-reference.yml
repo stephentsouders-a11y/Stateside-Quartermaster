@@ -28,8 +28,8 @@ jobs:
           import fs from 'fs';
           const targets = [
             {key:'sd-home', url:'https://sd-supply.com/'},
-            {key:'sq-home', url:'https://www.statesideqm.com/?preview_theme_id=158872600731'},
-            {key:'sq-accessories', url:'https://www.statesideqm.com/collections/accessories-gifts-collectibles?filter.v.availability=1&preview_theme_id=158872600731'}
+            {key:'sq-home', url:'https://www.statesideqm.com/?preview_theme_id=158872600731&sq_rebuild_v=3'},
+            {key:'sq-accessories', url:'https://www.statesideqm.com/collections/accessories-gifts-collectibles?filter.v.availability=1&preview_theme_id=158872600731&sq_rebuild_v=3'}
           ];
           const viewports = [
             {name:'desktop',width:1440,height:1200},
@@ -44,6 +44,11 @@ jobs:
               try {
                 response = await page.goto(t.url,{waitUntil:'domcontentloaded',timeout:120000});
                 await page.waitForTimeout(8000);
+                if (t.key.startsWith('sq-')) {
+                  const expected = vp.name === 'desktop' ? '.sq-sd-rail' : '.sq-sd-mobilehead';
+                  await page.waitForSelector(expected,{state:'visible',timeout:30000});
+                  if (t.key === 'sq-home') await page.waitForSelector('.sq-sd-home',{state:'visible',timeout:30000});
+                }
               } catch (e) {
                 all.push({viewport:vp.name,key:t.key,error:String(e)});
                 await page.close();
@@ -87,7 +92,13 @@ jobs:
                   sections,
                   scrollHeight:document.documentElement.scrollHeight,
                   scrollWidth:document.documentElement.scrollWidth,
-                  innerWidth
+                  innerWidth,
+                  hasSdRail:!!document.querySelector('.sq-sd-rail'),
+                  hasSdUtility:!!document.querySelector('.sq-sd-utility'),
+                  hasSdMobileHead:!!document.querySelector('.sq-sd-mobilehead'),
+                  hasSdHome:!!document.querySelector('.sq-sd-home'),
+                  hasOldHeader:!!document.querySelector('.sq-header'),
+                  bodyButtons:[...document.querySelectorAll('#MainContent a')].filter(a=>{const cl=String(a.className||'');return vis(a)&&/sq-(subcategory|third-level|afg|ps-root)|vac-(service|category|series)/i.test(cl)}).length
                 };
               });
               data.status = response?.status() ?? null;
@@ -95,6 +106,14 @@ jobs:
               data.key = t.key;
               all.push(data);
               await page.screenshot({path:`evidence/${vp.name}-${t.key}.png`,fullPage:true});
+              if (t.key.startsWith('sq-')) {
+                if (data.hasOldHeader) throw new Error(`${vp.name} ${t.key}: legacy header still present`);
+                if (vp.name==='desktop' && (!data.hasSdRail || !data.hasSdUtility)) throw new Error(`${vp.name} ${t.key}: new desktop rail/utility missing`);
+                if (vp.name==='mobile' && !data.hasSdMobileHead) throw new Error(`${vp.name} ${t.key}: new mobile header missing`);
+                if (t.key==='sq-home' && !data.hasSdHome) throw new Error(`${vp.name} home: new reference-style homepage missing`);
+                if (t.key==='sq-accessories' && data.bodyButtons!==0) throw new Error(`${vp.name} accessories: old body nav buttons visible (${data.bodyButtons})`);
+                if (data.scrollWidth > data.innerWidth + 2) throw new Error(`${vp.name} ${t.key}: horizontal overflow ${data.scrollWidth}/${data.innerWidth}`);
+              }
               await page.close();
             }
           }
@@ -108,4 +127,4 @@ jobs:
           name: sd-reference-compare
           path: evidence/
           retention-days: 14
-# manual rerun trigger 2026-09-17
+# strict fresh rebuild verification v3
