@@ -1,0 +1,70 @@
+name: Sep18 final State Guard sidebar certification v3
+on:
+  push:
+    paths:
+      - '.github/workflows/sep18-sg-sidebar-cert-v3.yml'
+      - '.github/scripts/sep18-sg-sidebar-discover-v3.mjs'
+      - '.github/scripts/sep18-sg-sidebar-audit-v3.mjs'
+      - '.github/scripts/sep18-sg-sidebar-aggregate-v3.mjs'
+permissions: { contents: read }
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - id: discover
+        run: node .github/scripts/sep18-sg-sidebar-discover-v3.mjs
+  audit:
+    needs: discover
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KEY: ${{ matrix.key }}
+      LABEL: ${{ matrix.label }}
+      ROUTE: ${{ matrix.route }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - run: node .github/scripts/sep18-sg-sidebar-audit-v3.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep18-sg-sidebar-v3-${{ matrix.key }}-${{ github.run_id }}
+          path: sep18-sg-sidebar-audit-${{ matrix.key }}/
+          retention-days: 14
+  aggregate:
+    needs: [discover,audit]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sep18-sg-sidebar-v3-*-${{ github.run_id }}
+          path: sep18-sg-sidebar-v3-combined
+      - run: node .github/scripts/sep18-sg-sidebar-aggregate-v3.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep18-sg-sidebar-v3-final-${{ github.run_id }}
+          path: sep18-sg-sidebar-v3-final/
+          retention-days: 14
