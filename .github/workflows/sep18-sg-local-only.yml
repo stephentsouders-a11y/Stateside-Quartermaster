@@ -1,0 +1,38 @@
+name: Sep18 State Guard local-only root diagnostic
+on:
+  push:
+    paths:
+      - '.github/workflows/sep18-sg-local-only.yml'
+      - '.github/scripts/sep18-sg-local-only.mjs'
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  diagnose:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - { key: ohio, label: "Ohio State Guard", route: "/collections/state-guard-series-ohio" }
+          - { key: south-carolina, label: "South Carolina State Guard", route: "/collections/state-guard-series-south-carolina" }
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KEY: ${{ matrix.key }}
+      LABEL: ${{ matrix.label }}
+      ROUTE: ${{ matrix.route }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - run: node .github/scripts/sep18-sg-local-only.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep18-sg-local-only-${{ matrix.key }}-${{ github.run_id }}
+          path: sep18-sg-local-only-${{ matrix.key }}/
+          retention-days: 14
