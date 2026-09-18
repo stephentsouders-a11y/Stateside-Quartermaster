@@ -1,0 +1,32 @@
+{% render 'sq-state-guard-fetch-resilience-v1' %}
+{% if request.page_type == 'collection' %}
+<style data-sq-pbtl-fast-first-paint>html.sq-pbtl-loading #MainContent{visibility:visible!important;min-height:0!important}</style>
+<script data-sq-pbtl-image-performance-v10>
+(function(){
+if(window.__sqPbtlImagePerformanceV10)return;window.__sqPbtlImagePerformanceV10=true;
+var path=location.pathname;if(path.indexOf('/collections/')!==0)return;
+var nativeFetch=window.fetch.bind(window),cachePrefix='sq-pbtl-products-v10-',bucket=Math.floor(Date.now()/900000),cacheName=cachePrefix+bucket,active=0,waiters=[],MAX_ACTIVE=4,inflight=new Map();
+function requestUrl(input){try{return new URL(typeof input==='string'?input:(input&&input.url)||'',location.origin)}catch(e){return null}}
+function eligible(input,init){var u=requestUrl(input),method=String((init&&init.method)||(input&&input.method)||'GET').toUpperCase();return !!(u&&method==='GET'&&u.origin===location.origin&&/^\/collections\/[^/]+\/products\.json$/.test(u.pathname))}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}function retryable(s){return [403,408,425,429,500,502,503,504].indexOf(s)!==-1}
+async function slot(fn){if(active>=MAX_ACTIVE)await new Promise(function(r){waiters.push(r)});active++;try{return await fn()}finally{active--;var n=waiters.shift();if(n)n()}}
+async function net(input,init){var last,err;for(var a=0;a<4;a++){try{last=await nativeFetch(input,init);if(last&&(last.ok||!retryable(last.status)))return last}catch(e){err=e;if(a===3)throw e}if(a<3)await sleep(a===0?250:(a===1?700:1600))}if(last)return last;throw err||new Error('collection fetch failed')}
+if('caches'in window)caches.keys().then(function(keys){keys.forEach(function(k){if(k.indexOf(cachePrefix)===0&&k!==cacheName)caches.delete(k)})}).catch(function(){});
+async function transport(input,init){if(!eligible(input,init))return nativeFetch(input,init);var u=requestUrl(input),key=u.href;if(inflight.has(key)){try{return (await inflight.get(key)).clone()}catch(e){inflight.delete(key)}}var p=slot(async function(){var cache,req;if('caches'in window){try{cache=await caches.open(cacheName);req=new Request(key,{method:'GET',credentials:'same-origin'});var hit=await cache.match(req);if(hit)return hit}catch(e){cache=null}}var r=await net(input,init);if(cache&&req&&r&&r.ok)cache.put(req,r.clone()).catch(function(){});return r});inflight.set(key,p);try{return (await p).clone()}finally{inflight.delete(key)}}
+function sized(src){try{var u=new URL(src,location.origin);if(u.hostname!=='cdn.shopify.com')return src;if(!u.searchParams.has('width'))u.searchParams.set('width','640');return u.toString()}catch(e){return src}}
+function tune(p){if(!p)return p;if(Array.isArray(p.images))p.images=p.images.map(function(x){if(typeof x==='string')return sized(x);if(x&&x.src)x.src=sized(x.src);return x});if(p.image){if(typeof p.image==='string')p.image=sized(p.image);else if(p.image.src)p.image.src=sized(p.image.src)}return p}
+window.fetch=async function(input,init){var r=await transport(input,init),u=requestUrl(input);if(!u||!r||!r.ok||!/^\/collections\/[^/]+\/products\.json$/.test(u.pathname))return r;try{var j=await r.clone().json();if(!j||!Array.isArray(j.products))return r;j.products=j.products.map(tune);var h=new Headers(r.headers);h.set('content-type','application/json; charset=utf-8');return new Response(JSON.stringify(j),{status:r.status,statusText:r.statusText,headers:h})}catch(e){return r}};
+var handle={{ collection.handle | json }},sourceCount=parseInt({{ collection.all_products_count | default: collection.products_count | json }},10)||0,roots={'products-built-for-the-line-u-s-army':1,'products-built-for-the-line-u-s-navy':1,'products-built-for-the-line-u-s-air-force':1,'products-built-for-the-line-u-s-marine-corps':1,'products-built-for-the-line-u-s-coast-guard':1,'products-built-for-the-line-u-s-space-force':1,'army-national-guard-series':1,'air-national-guard-series':1,'rotc-series':1,'jrotc-series':1,'military-schools-academies':1,'stateside-quartermaster-logo-merch':1},armyFamily=handle==='products-built-for-the-line-u-s-army'||handle==='army-national-guard-series';
+if(roots[handle]&&sourceCount&&!armyFamily){var pages=Math.min(2,Math.max(1,Math.ceil(sourceCount/250))),base='/collections/'+encodeURIComponent(handle)+'/products.json?limit=250&sort_by=title-ascending&page=';Promise.resolve().then(function(){for(var p=1;p<=pages;p++)window.fetch(base+p,{credentials:'same-origin',headers:{'X-Requested-With':'XMLHttpRequest'}}).catch(function(){})})}
+})();
+</script>
+<script data-sq-pbtl-instant-handoff-v3>
+(function(){
+if(window.__sqPbtlInstantHandoffV3)return;window.__sqPbtlInstantHandoffV3=true;
+var roots={'products-built-for-the-line-u-s-army':1,'products-built-for-the-line-u-s-navy':1,'products-built-for-the-line-u-s-air-force':1,'products-built-for-the-line-u-s-marine-corps':1,'products-built-for-the-line-u-s-coast-guard':1,'products-built-for-the-line-u-s-space-force':1,'army-national-guard-series':1,'air-national-guard-series':1,'rotc-series':1,'jrotc-series':1,'military-schools-academies':1},m=location.pathname.match(/^\/collections\/([^/?#]+)/),h=m?decodeURIComponent(m[1]):'',armyFamily=h==='products-built-for-the-line-u-s-army'||h==='army-national-guard-series';
+if(!roots[h]||armyFamily||new URLSearchParams(location.search).get('sq_bfl_all')==='1'||!window.Element||!Element.prototype.replaceChildren)return;
+var nativeReplace=Element.prototype.replaceChildren;
+Element.prototype.replaceChildren=function(){var candidate=arguments[0];if(this&&this.id==='MainContent'&&candidate&&candidate.nodeType===1&&candidate.classList&&candidate.classList.contains('sqbfl')){Element.prototype.replaceChildren=nativeReplace;var main=this,done=false;candidate.style.display='none';candidate.setAttribute('data-sq-instant-hydrating','1');main.appendChild(candidate);var obs=new MutationObserver(finish);function finish(){if(done)return;var ready=candidate.querySelector('.sqbfl-grid,.sqbfl-products'),failed=candidate.querySelector('.sqbfl-empty');if(ready){done=true;obs.disconnect();candidate.style.display='';candidate.removeAttribute('data-sq-instant-hydrating');nativeReplace.call(main,candidate)}else if(failed){done=true;obs.disconnect();candidate.remove()}}obs.observe(candidate,{childList:true,subtree:true,characterData:true});setTimeout(finish,0);return}return nativeReplace.apply(this,arguments)};
+})();
+</script>
+{% endif %}
