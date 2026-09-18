@@ -44,6 +44,7 @@ jobs:
             const u = new URL(route, base);
             u.searchParams.set('preview_theme_id',theme);
             u.searchParams.set('sq_fidelity_pass',String(pass));
+            u.searchParams.set('sq_theme_revision','20260918_mobilefix_final');
             const response = await page.goto(u.toString(),{waitUntil:'domcontentloaded',timeout:120000});
             await page.waitForTimeout(3000);
             if(viewport==='desktop') await page.waitForSelector('.sq-sd-rail',{state:'visible',timeout:30000});
