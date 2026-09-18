@@ -108,3 +108,4 @@ jobs:
           name: sd-reference-compare
           path: evidence/
           retention-days: 14
+# manual rerun trigger 2026-09-17
