@@ -1,0 +1,33 @@
+name: Sep18 throttled current preview audit
+on:
+  push:
+    paths:
+      - '.github/workflows/sep18-throttled-current-preview-audit.yml'
+      - '.github/scripts/sep18-throttled-current-preview-audit.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  current-preview-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Run throttled current preview audit
+        run: node .github/scripts/sep18-throttled-current-preview-audit.mjs
+      - name: Upload current preview evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sep18-throttled-current-preview-audit-${{ github.run_id }}
+          path: sep18-throttled-current-preview-audit/
+          if-no-files-found: warn
+          retention-days: 14
