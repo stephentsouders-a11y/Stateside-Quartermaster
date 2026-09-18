@@ -174,3 +174,5 @@ fs.writeFileSync(`final-27-audit/batch-${batch}.json`,JSON.stringify(results,nul
 await browser.close();
 console.log('BATCH_SUMMARY',JSON.stringify(results.map(x=>({idx:x.idx,outcome:x.outcome,name:x.name,reasons:x.reasons}))));
 if(results.some(x=>x.outcome==='FAIL')) process.exitCode=1;
+
+// trigger final 27 department audit
