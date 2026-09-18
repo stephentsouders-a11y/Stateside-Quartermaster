@@ -1,0 +1,40 @@
+name: Sep18 zero State Guard root fetch verification
+on:
+  push:
+    paths:
+      - '.github/workflows/sep18-zero-root-fetch-verify.yml'
+      - '.github/scripts/sep18-zero-root-fetch-verify.mjs'
+permissions: { contents: read }
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        include:
+          - { key: ohio-root, label: "Ohio root", route: "/collections/state-guard-series-ohio", mode: "root" }
+          - { key: sc-root, label: "South Carolina root", route: "/collections/state-guard-series-south-carolina", mode: "root" }
+          - { key: ohio-uniforms, label: "Ohio uniforms", route: "/collections/state-guard-series-ohio?sg_category=uniforms", mode: "branch" }
+          - { key: ohio-tactical, label: "Ohio tactical", route: "/collections/state-guard-series-ohio?sg_category=tactical&filter.v.availability=1", mode: "branch" }
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KEY: ${{ matrix.key }}
+      LABEL: ${{ matrix.label }}
+      ROUTE: ${{ matrix.route }}
+      MODE: ${{ matrix.mode }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - run: node .github/scripts/sep18-zero-root-fetch-verify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep18-zero-root-fetch-${{ matrix.key }}-${{ github.run_id }}
+          path: sep18-zero-root-fetch-${{ matrix.key }}/
+          retention-days: 14
