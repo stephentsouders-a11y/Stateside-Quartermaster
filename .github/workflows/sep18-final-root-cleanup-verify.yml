@@ -1,0 +1,29 @@
+name: Sep18 final root cleanup verification
+on:
+  push:
+    paths:
+      - '.github/workflows/sep18-final-root-cleanup-verify.yml'
+      - '.github/scripts/sep18-final-root-cleanup-verify.mjs'
+permissions: { contents: read }
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: "Ohio", route: "/collections/state-guard-series-ohio" }
+          - { label: "South Carolina", route: "/collections/state-guard-series-south-carolina" }
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LABEL: ${{ matrix.label }}
+      ROUTE: ${{ matrix.route }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - run: node .github/scripts/sep18-final-root-cleanup-verify.mjs
