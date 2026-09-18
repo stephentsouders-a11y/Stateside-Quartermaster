@@ -1,0 +1,8 @@
+import { chromium } from 'playwright';
+const BASE='https://www.statesideqm.com',THEME='158900125851',label=process.env.LABEL,route=process.env.ROUTE;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const browser=await chromium.launch({headless:true});const ctx=await browser.newContext({viewport:{width:1440,height:1000}});const page=await ctx.newPage();page.setDefaultNavigationTimeout(70000);
+let response=null,error=null,attempt=0;
+for(attempt=1;attempt<=4;attempt++){const u=new URL(route,BASE);u.searchParams.set('preview_theme_id',THEME);try{response=await page.goto(u.href,{waitUntil:'domcontentloaded',timeout:70000});const s=response?.status()??0;if(s===429||s===503){await sleep(attempt*12000);continue}await page.waitForLoadState('load',{timeout:16000}).catch(()=>{});await sleep(1200);break}catch(e){error=String(e?.message||e);if(attempt<4)await sleep(attempt*10000)}}
+const row=await page.evaluate(({label,route,themeId})=>{const n=performance.getEntriesByType('navigation')[0],imgs=[...document.images];return{label,route,theme:{id:String(window.Shopify?.theme?.id||''),name:String(window.Shopify?.theme?.name||'')},ttfbMs:Math.round(n?.responseStart||0),loadMs:Math.round(n?.loadEventEnd||0),brokenImages:imgs.filter(i=>i.complete&&i.naturalWidth===0).length,h1:(document.querySelector('h1')?.textContent||'').replace(/\s+/g,' ').trim(),previewOk:String(window.Shopify?.theme?.id||'')===themeId}}, {label,route,themeId:THEME}).catch(()=>({label,route,previewOk:false}));
+row.http=response?.status()??null;row.attempts=attempt;row.error=error;console.log('INFRARETRY',JSON.stringify(row));if(row.http!==200||!row.previewOk||error||row.brokenImages)process.exitCode=2;await ctx.close();await browser.close();
