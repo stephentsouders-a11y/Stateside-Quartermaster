@@ -1,0 +1,41 @@
+name: Sep18 department-only lazy image verification
+on:
+  push:
+    paths:
+      - '.github/workflows/sep18-department-lazy-image-verify.yml'
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        include:
+          - { key: apparel2, label: "Apparel", route: "/collections/apparel", group: "homepage" }
+          - { key: k92, label: "K9 Working Dog Gear", route: "/collections/k9-dog-gear", group: "homepage" }
+          - { key: footwear2, label: "Footwear Gloves Eyewear", route: "/collections/footwear-gloves-eyewear", group: "homepage" }
+          - { key: accessories2, label: "Accessories", route: "/collections/accessories-gifts-collectibles", group: "homepage" }
+          - { key: ohio2, label: "Ohio State Guard", route: "/collections/state-guard-series-ohio", group: "state-guard-root" }
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KEY: ${{ matrix.key }}
+      LABEL: ${{ matrix.label }}
+      ROUTE: ${{ matrix.route }}
+      GROUP: ${{ matrix.group }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - run: node .github/scripts/sep18-image-loading-verify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sep18-department-lazy-${{ matrix.key }}-${{ github.run_id }}
+          path: sep18-image-loading-verify-${{ matrix.key }}/
+          retention-days: 14
