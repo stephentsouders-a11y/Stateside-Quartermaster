@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - tmp-case0109-loc-fetch-20260919
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
