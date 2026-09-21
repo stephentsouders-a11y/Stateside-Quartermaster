@@ -1,0 +1,39 @@
+name: Vietnam DCAS Data Process
+on:
+  push:
+    branches:
+      - chatgpt-vietnam-casualty-data-process
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download full DCAS Vietnam dataset
+        run: |
+          python - <<'PY'
+          import urllib.request
+          url='https://raw.githubusercontent.com/war-datasets/DCAS.VN.EXT08.DAT/master/sources/DCAS.VN.EXT08.DAT'
+          urllib.request.urlretrieve(url, 'DCAS.VN.EXT08.DAT')
+          PY
+          wc -l DCAS.VN.EXT08.DAT
+          ls -lh DCAS.VN.EXT08.DAT
+      - name: Validate record count and split
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('DCAS.VN.EXT08.DAT')
+          data=p.read_text(encoding='utf-8', errors='replace').splitlines()
+          print('records', len(data))
+          assert len(data) == 58220, len(data)
+          out=Path('dcas_chunks'); out.mkdir()
+          size=5000
+          for i in range(0,len(data),size):
+              (out/f'dcas_{i+1:05d}_{min(i+size,len(data)):05d}.txt').write_text('\n'.join(data[i:i+size])+'\n', encoding='utf-8')
+          PY
+      - name: Upload DCAS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vietnam-dcas-full
+          path: |
+            DCAS.VN.EXT08.DAT
+            dcas_chunks/
+          retention-days: 1
