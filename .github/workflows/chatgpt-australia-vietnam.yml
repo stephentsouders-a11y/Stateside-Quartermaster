@@ -9,6 +9,7 @@ jobs:
     steps:
       - name: Extract official DVA Roll names and inspect AWM search
         run: |
+          python -m pip install --quiet beautifulsoup4 requests
           python - <<'PY'
           import requests,re,csv,json
           from bs4 import BeautifulSoup
