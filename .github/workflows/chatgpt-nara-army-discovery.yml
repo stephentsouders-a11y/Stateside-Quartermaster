@@ -1,0 +1,43 @@
+name: Vietnam NARA Army Casualty Discovery
+on:
+  push:
+    branches:
+      - chatgpt-vietnam-casualty-data-process
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch NARA catalog/API metadata
+        run: |
+          python - <<'PY'
+          import requests, pathlib
+          urls={
+            'series_api':'https://catalog.archives.gov/api/v1/?naIds=641697',
+            'series_html':'https://catalog.archives.gov/id/641697',
+            'search_api':'https://catalog.archives.gov/api/v1/?q=641697',
+          }
+          for name,url in urls.items():
+              r=requests.get(url,timeout=60)
+              print(name,r.status_code,r.url,len(r.content))
+              pathlib.Path(name + ('.json' if 'api' in name else '.html')).write_bytes(r.content)
+          PY
+      - name: Extract candidate download URLs
+        run: |
+          python - <<'PY'
+          import re, pathlib
+          for fn in ['series_api.json','series_html.html','search_api.json']:
+              s=pathlib.Path(fn).read_text(errors='replace')
+              urls=sorted(set(re.findall(r'https?://[^"<> ]+',s)))
+              print('\n',fn)
+              for u in urls:
+                  if any(x in u.lower() for x in ['download','objects','files','641697','tagcen','casual']): print(u[:500])
+          PY
+      - name: Upload discovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: nara-army-casualty-discovery
+          path: |
+            series_api.json
+            series_html.html
+            search_api.json
+          retention-days: 1
