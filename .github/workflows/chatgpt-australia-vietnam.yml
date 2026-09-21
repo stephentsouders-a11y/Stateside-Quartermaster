@@ -7,46 +7,57 @@ jobs:
   process:
     runs-on: ubuntu-latest
     steps:
-      - name: Extract official DVA Roll names and inspect AWM search
+      - name: Extract official DVA Roll names
         run: |
           python -m pip install --quiet beautifulsoup4 requests
           python - <<'PY'
-          import requests,re,csv,json
+          import requests,re,csv,time,pathlib
           from bs4 import BeautifulSoup
           base='https://anzacportal.dva.gov.au/wars-and-missions/vietnam-war/commemoration/roll-of-honour-gallery'
-          names=[]
-          for page in range(9):
+          sess=requests.Session()
+          sess.headers.update({'User-Agent':'Mozilla/5.0 (compatible; historical-research/1.0)'})
+          names=[]; failures=[]
+          for page in range(18):
               u=base if page==0 else f'{base}?page={page}'
-              r=requests.get(u,timeout=60); print('DVA',page,r.status_code,len(r.text))
-              s=BeautifulSoup(r.text,'html.parser')
+              html=None
+              for attempt in range(6):
+                  try:
+                      r=sess.get(u,timeout=(20,180))
+                      print('DVA',page,'attempt',attempt+1,r.status_code,len(r.content))
+                      if r.ok and len(r.text)>10000:
+                          html=r.text; break
+                  except Exception as e:
+                      print('retry',page,attempt+1,repr(e))
+                  time.sleep(2+attempt)
+              if html is None:
+                  failures.append(page); continue
+              pathlib.Path(f'page_{page:02d}.html').write_text(html,encoding='utf-8')
+              s=BeautifulSoup(html,'html.parser')
+              # Names appear in the gallery content as surname, given names.
               for t in s.stripped_strings:
-                  if re.fullmatch(r"[A-Z][A-Za-zÀ-ÖØ-öø-ÿ' .-]+,\s*[A-Z][A-Za-zÀ-ÖØ-öø-ÿ' .-]+",t) and len(t)<80:
-                      names.append(t.strip())
+                  t=' '.join(t.split())
+                  if ',' in t and len(t)<90 and not any(x in t.lower() for x in ['department','gpo box','dva (','brisbane','search']):
+                      # require plausible personal-name format and exclude page prose
+                      if re.fullmatch(r"[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ' .-]+,\s*[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ' .\"()-]+",t):
+                          names.append(t)
           uniq=[]
           for n in names:
               if n not in uniq: uniq.append(n)
-          print('unique names',len(uniq))
+          print('failures',failures,'unique names',len(uniq))
           with open('australia_vietnam_roll_names.csv','w',newline='',encoding='utf-8') as f:
               w=csv.writer(f);w.writerow(['record_no','name_verbatim','source_url'])
-              for i,n in enumerate(uniq,1):w.writerow([i,n,base])
-          # inspect AWM search page forms/inputs for a reliable lookup endpoint
-          u='https://www.awm.gov.au/advanced-search/people'
-          r=requests.get(u,timeout=60); print('AWM search',r.status_code,len(r.text))
-          open('awm_people_search.html','w',encoding='utf-8').write(r.text)
-          s=BeautifulSoup(r.text,'html.parser')
-          forms=[]
-          for form in s.find_all('form'):
-              forms.append({'action':form.get('action'),'method':form.get('method'),'inputs':[(x.get('name'),x.get('value'),x.get('type')) for x in form.find_all(['input','select'])]})
-          open('awm_forms.json','w').write(json.dumps(forms,indent=2))
-          print(json.dumps(forms[:5],indent=2)[:10000])
+              for i,n in enumerate(uniq,1): w.writerow([i,n,base])
+          pathlib.Path('summary.txt').write_text(f'failures={failures}\nunique_names={len(uniq)}\n',encoding='utf-8')
+          assert not failures, failures
           assert len(uniq)==524, len(uniq)
           PY
       - name: Upload Australia artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: australia-vietnam-roll
           path: |
             australia_vietnam_roll_names.csv
-            awm_people_search.html
-            awm_forms.json
+            summary.txt
+            page_*.html
           retention-days: 1
