@@ -20,7 +20,7 @@ jobs:
               async with async_playwright() as p:
                   b=await p.chromium.launch()
                   page=await b.new_page()
-                  await page.goto('https://catalog.archives.gov/id/641697',wait_until='networkidle',timeout=120000)
+                  await page.goto('https://catalog.archives.gov/id/1888017',wait_until='networkidle',timeout=120000)
                   await page.wait_for_timeout(5000)
                   html=await page.content()
                   pathlib.Path('rendered.html').write_text(html,encoding='utf-8')
@@ -29,14 +29,14 @@ jobs:
                   print('title',await page.title(),'links',len(links))
                   for x in links:
                       t=(x.get('text') or '').lower(); h=(x.get('href') or '').lower()
-                      if any(k in t+h for k in ['download','file','casual','641697','tagcen']): print(x)
+                      if any(k in t+h for k in ['download','file','casual','1888017','tagcen']): print(x)
                   await b.close()
           asyncio.run(main())
           PY
       - name: Upload rendered discovery
         uses: actions/upload-artifact@v4
         with:
-          name: nara-army-browser-discovery
+          name: nara-army-fileunit-discovery
           path: |
             rendered.html
             links.json
