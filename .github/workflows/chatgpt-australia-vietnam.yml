@@ -1,0 +1,51 @@
+name: Australia Vietnam Roll Process
+on:
+  push:
+    branches:
+      - chatgpt-vietnam-casualty-data-process
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract official DVA Roll names and inspect AWM search
+        run: |
+          python - <<'PY'
+          import requests,re,csv,json
+          from bs4 import BeautifulSoup
+          base='https://anzacportal.dva.gov.au/wars-and-missions/vietnam-war/commemoration/roll-of-honour-gallery'
+          names=[]
+          for page in range(9):
+              u=base if page==0 else f'{base}?page={page}'
+              r=requests.get(u,timeout=60); print('DVA',page,r.status_code,len(r.text))
+              s=BeautifulSoup(r.text,'html.parser')
+              for t in s.stripped_strings:
+                  if re.fullmatch(r"[A-Z][A-Za-zÀ-ÖØ-öø-ÿ' .-]+,\s*[A-Z][A-Za-zÀ-ÖØ-öø-ÿ' .-]+",t) and len(t)<80:
+                      names.append(t.strip())
+          uniq=[]
+          for n in names:
+              if n not in uniq: uniq.append(n)
+          print('unique names',len(uniq))
+          with open('australia_vietnam_roll_names.csv','w',newline='',encoding='utf-8') as f:
+              w=csv.writer(f);w.writerow(['record_no','name_verbatim','source_url'])
+              for i,n in enumerate(uniq,1):w.writerow([i,n,base])
+          # inspect AWM search page forms/inputs for a reliable lookup endpoint
+          u='https://www.awm.gov.au/advanced-search/people'
+          r=requests.get(u,timeout=60); print('AWM search',r.status_code,len(r.text))
+          open('awm_people_search.html','w',encoding='utf-8').write(r.text)
+          s=BeautifulSoup(r.text,'html.parser')
+          forms=[]
+          for form in s.find_all('form'):
+              forms.append({'action':form.get('action'),'method':form.get('method'),'inputs':[(x.get('name'),x.get('value'),x.get('type')) for x in form.find_all(['input','select'])]})
+          open('awm_forms.json','w').write(json.dumps(forms,indent=2))
+          print(json.dumps(forms[:5],indent=2)[:10000])
+          assert len(uniq)==524, len(uniq)
+          PY
+      - name: Upload Australia artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: australia-vietnam-roll
+          path: |
+            australia_vietnam_roll_names.csv
+            awm_people_search.html
+            awm_forms.json
+          retention-days: 1
