@@ -1,0 +1,37 @@
+name: New Zealand Vietnam Casualty Process
+on:
+  push:
+    branches:
+      - chatgpt-vietnam-casualty-data-process
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download official-hosted NZ casualty honour roll
+        run: |
+          python - <<'PY'
+          import urllib.request
+          url='https://vietnamwar.govt.nz/sites/default/files/documents/nz-honour-roll-vietnam.pdf'
+          urllib.request.urlretrieve(url,'nz-honour-roll-vietnam.pdf')
+          PY
+      - name: Extract text
+        run: |
+          python -m pip install --quiet pypdf
+          python - <<'PY'
+          from pypdf import PdfReader
+          r=PdfReader('nz-honour-roll-vietnam.pdf')
+          print('pages',len(r.pages))
+          with open('nz-honour-roll-vietnam.txt','w',encoding='utf-8') as f:
+              for i,p in enumerate(r.pages,1):
+                  f.write(f'\n===== PAGE {i} =====\n')
+                  f.write(p.extract_text() or '')
+          PY
+          wc -l nz-honour-roll-vietnam.txt
+      - name: Upload NZ artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: new-zealand-vietnam-casualties
+          path: |
+            nz-honour-roll-vietnam.pdf
+            nz-honour-roll-vietnam.txt
+          retention-days: 1
