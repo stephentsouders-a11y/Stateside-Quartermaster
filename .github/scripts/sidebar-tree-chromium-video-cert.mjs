@@ -7,6 +7,7 @@ import path from 'path';
 // Certification trigger: controller observer feedback fix 2026-09-23.
 // Certification trigger: explicit category-open stabilization 2026-09-23.
 // Certification trigger: wait for loaded generic hierarchy 2026-09-23.
+// Certification trigger: hardened BFL loader retries 2026-09-23.
 // Certification trigger: wait for generic BFL hierarchy readiness 2026-09-23.
 
 const THEME='159040962715';
