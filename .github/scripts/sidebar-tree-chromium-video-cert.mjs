@@ -2,6 +2,8 @@ import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 
+// Certification trigger: current sidebar repair theme validated 2026-09-23.
+
 const THEME='159040962715';
 const ORIGIN='https://www.statesideqm.com';
 const OUT='audit-out/sidebar-tree';
