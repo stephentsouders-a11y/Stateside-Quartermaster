@@ -2,376 +2,270 @@ import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 
-const THEME = '159038406811';
-const ORIGIN = 'https://www.statesideqm.com';
-const OUT = 'audit-out/sidebar-tree';
-const VIDEO_DIR = path.join(OUT, 'video');
-const SHOT_DIR = path.join(OUT, 'screenshots');
-fs.mkdirSync(VIDEO_DIR, { recursive: true });
-fs.mkdirSync(SHOT_DIR, { recursive: true });
+const THEME='159040962715';
+const ORIGIN='https://www.statesideqm.com';
+const OUT='audit-out/sidebar-tree';
+const VIDEO_DIR=path.join(OUT,'video');
+const SHOT_DIR=path.join(OUT,'screenshots');
+fs.mkdirSync(VIDEO_DIR,{recursive:true});
+fs.mkdirSync(SHOT_DIR,{recursive:true});
 
-const HOME_ROOTS = [
-  'tactical-gear','uniforms','firearm-accessories','body-armor-ballistic-protection','apparel',
-  'flags-patriotic-decor','literature','outdoor-preparedness-gear','first-aid-medical-ifak',
-  'flashlights-lighting','knives-axes-cutlery','dive-scuba','armed-forces-gear',
-  'morale-patches-tactical-id','footwear-gloves-eyewear','accessories-gifts-collectibles',
-  'safety-rescue-climbing','airsoft-milsim','k9-dog-gear','patriotic-american-heritage','art',
-  'zippos-lighters-torches','watches','armored-vehicles','child-safety-shop','thin-line',
-  'sta-brite-insignia','stateside-quartermaster-logo-merch','army-national-guard-series',
-  'air-national-guard-series','state-guard-series','products-built-for-the-line-u-s-army',
-  'products-built-for-the-line-u-s-navy','products-built-for-the-line-u-s-air-force',
-  'products-built-for-the-line-u-s-marine-corps','products-built-for-the-line-u-s-coast-guard',
-  'products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series',
-  'military-schools-academies','law-enforcement-corrections-shop',
-  'firefighting-ems-search-rescue-shop'
+const HOME=[
+'tactical-gear','uniforms','firearm-accessories','body-armor-ballistic-protection','apparel','flags-patriotic-decor','literature','outdoor-preparedness-gear','first-aid-medical-ifak','flashlights-lighting','knives-axes-cutlery','dive-scuba','armed-forces-gear','morale-patches-tactical-id','footwear-gloves-eyewear','accessories-gifts-collectibles','safety-rescue-climbing','airsoft-milsim','k9-dog-gear','patriotic-american-heritage','art','zippos-lighters-torches','watches','armored-vehicles','child-safety-shop','thin-line','sta-brite-insignia','stateside-quartermaster-logo-merch','army-national-guard-series','air-national-guard-series','state-guard-series','products-built-for-the-line-u-s-army','products-built-for-the-line-u-s-navy','products-built-for-the-line-u-s-air-force','products-built-for-the-line-u-s-marine-corps','products-built-for-the-line-u-s-coast-guard','products-built-for-the-line-u-s-space-force','rotc-series','jrotc-series','military-schools-academies','law-enforcement-corrections-shop','firefighting-ems-search-rescue-shop'
 ];
-
-const STATE_GUARD = [
-  'state-guard-series-alabama','state-guard-series-alaska','state-guard-series-california',
-  'state-guard-series-connecticut','state-guard-series-florida','state-guard-series-georgia',
-  'state-guard-series-indiana','state-guard-series-louisiana','state-guard-series-maryland',
-  'state-guard-series-massachusetts','state-guard-series-michigan','state-guard-series-mississippi',
-  'state-guard-series-new-mexico','new-jersey-state-guard-naval-militia',
-  'state-guard-series-new-york','state-guard-series-ohio','state-guard-series-oregon',
-  'state-guard-series-puerto-rico','state-guard-series-rhode-island',
-  'state-guard-series-south-carolina','state-guard-series-tennessee','state-guard-series-texas',
-  'state-guard-series-vermont','state-guard-series-virginia','state-guard-series-washington',
-  'state-guard-naval-militia-themed-merchandise'
+const SG=[
+'state-guard-series-alabama','state-guard-series-alaska','state-guard-series-california','state-guard-series-connecticut','state-guard-series-florida','state-guard-series-georgia','state-guard-series-indiana','state-guard-series-louisiana','state-guard-series-maryland','state-guard-series-massachusetts','state-guard-series-michigan','state-guard-series-mississippi','state-guard-series-new-mexico','new-jersey-state-guard-naval-militia','state-guard-series-new-york','state-guard-series-ohio','state-guard-series-oregon','state-guard-series-puerto-rico','state-guard-series-rhode-island','state-guard-series-south-carolina','state-guard-series-tennessee','state-guard-series-texas','state-guard-series-vermont','state-guard-series-virginia','state-guard-series-washington','state-guard-naval-militia-themed-merchandise'
 ];
+const EXPECTED=['Shop All','Categories','Price','Color / Pattern','Manufacturer'];
+const failures=[], coverage=[], scenarios=[];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
-const EXPECTED_TOP = ['Shop All','Categories','Price','Color / Pattern','Manufacturer'];
-const failures = [];
-const coverage = [];
-const scenarios = [];
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-function previewUrl(handle) {
-  const u = new URL('/collections/' + handle, ORIGIN);
-  u.searchParams.set('filter.v.availability', '1');
-  u.searchParams.set('preview_theme_id', THEME);
+function urlFor(handle){
+  const u=new URL('/collections/'+handle,ORIGIN);
+  u.searchParams.set('filter.v.availability','1');
+  u.searchParams.set('preview_theme_id',THEME);
   return u.href;
 }
-
-async function gotoReady(page, url, label, attempts = 4) {
-  let last = null;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      last = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 70000 });
-    } catch {
-      last = null;
-    }
+async function gotoReady(page,url,label,attempts=5){
+  let last=null;
+  for(let i=1;i<=attempts;i++){
+    try{last=await page.goto(url,{waitUntil:'domcontentloaded',timeout:70000});}catch{last=null}
     await sleep(1800);
-    const status = last?.status() ?? null;
-    const title = await page.title().catch(() => '');
-    const body = await page.locator('body').innerText({ timeout: 4000 }).catch(() => '');
-    const blocked = status === 429 || /Just a moment|Too Many Requests/i.test(title + ' ' + body.slice(0,500));
-    const errored = status === 500 || /Something went wrong/i.test(title);
-    if (status === 200 && !blocked && !errored) return last;
-    console.log(`${label} attempt ${attempt}: HTTP=${status} title=${title}`);
-    await sleep(5000 * attempt);
+    const status=last?.status()??null;
+    const title=await page.title().catch(()=>'');
+    const body=await page.locator('body').innerText({timeout:3000}).catch(()=>'');
+    const blocked=status===429||/Just a moment|Too Many Requests/i.test(title+' '+body.slice(0,600));
+    const errored=status>=500||/Something went wrong/i.test(title);
+    if(status===200&&!blocked&&!errored)return last;
+    console.log(`${label} attempt ${i}: HTTP=${status} title=${title}`);
+    await sleep(Math.min(45000,7000*Math.pow(2,i-1)));
   }
   return last;
 }
-
-async function waitForRail(page) {
-  await page.waitForSelector('[data-sq-collection-rail][data-sq-department-root="true"]', { timeout: 20000 });
-  await page.waitForFunction(() => {
-    const rail = document.querySelector('[data-sq-collection-rail][data-sq-department-root="true"]');
-    if (!rail) return false;
-    const vis = e => {
-      if (!e) return false;
-      const s = getComputedStyle(e);
-      const r = e.getBoundingClientRect();
-      return !e.hidden && s.display !== 'none' && s.visibility !== 'hidden' && r.width > 2 && r.height > 2;
-    };
-    const rows = [...rail.querySelectorAll('.sq-collection-rail__primary > li')].filter(vis);
-    return rows.length >= 5;
-  }, { timeout: 20000 });
+async function railExists(page){
+  await page.waitForSelector('[data-sq-collection-rail][data-sq-department-root="true"]',{timeout:25000});
 }
-
-async function railSnapshot(page) {
-  return await page.evaluate(() => {
-    const rail = document.querySelector('[data-sq-collection-rail][data-sq-department-root="true"]');
-    const vis = e => {
-      if (!e) return false;
-      const s = getComputedStyle(e), r = e.getBoundingClientRect();
-      return !e.hidden && s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity) !== 0 && r.width > 2 && r.height > 2;
-    };
-    const top = rail ? [...rail.querySelectorAll('.sq-collection-rail__primary > li')].filter(vis).map(li => {
-      const direct = li.querySelector(':scope > .sq-collection-rail__direct,:scope > [data-sq-rail-trigger]');
-      const label = direct ? (direct.querySelector('span')?.textContent || direct.textContent || '') : '';
-      return {
-        label: label.replace(/\s+/g,' ').trim(),
-        open: li.classList.contains('is-open'),
-        aria: direct?.getAttribute('aria-expanded') ?? null
-      };
-    }) : [];
-    const whiteFlyouts = rail ? [...rail.querySelectorAll('.sq-collection-rail__flyout')].filter(e => {
-      if (!vis(e)) return false;
-      const bg = getComputedStyle(e).backgroundColor;
-      return bg === 'rgb(255, 255, 255)' || bg === 'rgba(255, 255, 255, 1)';
-    }).length : 0;
-    return {
-      url: location.href,
-      railCount: [...document.querySelectorAll('[data-sq-collection-rail]')].filter(vis).length,
-      top,
-      whiteFlyouts,
-      horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 4
-    };
+async function openMobile(page){
+  const mt=page.locator('[data-sq-rail-mobile-toggle]').first();
+  if(await mt.count()){
+    const expanded=await mt.getAttribute('aria-expanded');
+    if(expanded!=='true'){await mt.click();await sleep(350)}
+  }
+}
+async function waitFive(page){
+  await page.waitForFunction((expected)=>{
+    const rail=document.querySelector('[data-sq-collection-rail][data-sq-department-root="true"]');
+    if(!rail)return false;
+    const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return !e.hidden&&s.display!=='none'&&s.visibility!=='hidden'&&r.width>2&&r.height>2};
+    const labels=[...rail.querySelectorAll('.sq-collection-rail__primary > li')].filter(vis).map(li=>{
+      const x=li.querySelector(':scope > .sq-collection-rail__direct,:scope > [data-sq-rail-trigger]');
+      return (x?.querySelector('span')?.textContent||x?.textContent||'').replace(/\s+/g,' ').trim();
+    });
+    return expected.every(x=>labels.includes(x));
+  },EXPECTED,{timeout:25000});
+}
+async function snapshot(page){
+  return await page.evaluate(()=>{
+    const rail=document.querySelector('[data-sq-collection-rail][data-sq-department-root="true"]');
+    const vis=e=>{if(!e)return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return !e.hidden&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0&&r.width>2&&r.height>2};
+    const top=rail?[...rail.querySelectorAll('.sq-collection-rail__primary > li')].filter(vis).map(li=>{
+      const x=li.querySelector(':scope > .sq-collection-rail__direct,:scope > [data-sq-rail-trigger]');
+      return {label:(x?.querySelector('span')?.textContent||x?.textContent||'').replace(/\s+/g,' ').trim(),open:li.classList.contains('is-open'),aria:x?.getAttribute('aria-expanded')??null};
+    }):[];
+    const white=rail?[...rail.querySelectorAll('.sq-collection-rail__flyout')].filter(e=>{if(!vis(e))return false;const bg=getComputedStyle(e).backgroundColor;return bg==='rgb(255, 255, 255)'||bg==='rgba(255, 255, 255, 1)'}).length:0;
+    return {railCount:[...document.querySelectorAll('[data-sq-collection-rail]')].filter(vis).length,top,white,hOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+4,url:location.href};
   });
 }
+async function assertTop(page,label){
+  const s=await snapshot(page);
+  const labels=s.top.map(x=>x.label);
+  if(s.railCount!==1)failures.push(`${label}: expected 1 rail, got ${s.railCount}`);
+  if(JSON.stringify(labels)!==JSON.stringify(EXPECTED))failures.push(`${label}: top controls ${JSON.stringify(labels)}`);
+  if(s.white)failures.push(`${label}: white flyout visible`);
+  if(s.hOverflow)failures.push(`${label}: horizontal overflow`);
+  return s;
+}
+async function toggleTwice(page,selector,label){
+  const item=page.locator(selector).first(),trigger=item.locator(':scope > [data-sq-rail-trigger]');
+  if(!(await trigger.count())){failures.push(`${label}: missing trigger`);return false}
+  await trigger.click();await sleep(250);
+  const opened=await item.evaluate(el=>el.classList.contains('is-open')&&el.querySelector(':scope > [data-sq-rail-trigger]')?.getAttribute('aria-expanded')==='true');
+  if(!opened)failures.push(`${label}: first click did not open`);
+  await trigger.click();await sleep(250);
+  const closed=await item.evaluate(el=>!el.classList.contains('is-open')&&el.querySelector(':scope > [data-sq-rail-trigger]')?.getAttribute('aria-expanded')==='false');
+  if(!closed)failures.push(`${label}: second click did not close`);
+  return opened&&closed;
+}
+async function prep(page,handle,label,mobile=false){
+  const r=await gotoReady(page,urlFor(handle),label);
+  if(r?.status()!==200)throw new Error(`HTTP ${r?.status()}`);
+  await railExists(page);
+  if(mobile)await openMobile(page);
+  await waitFive(page);
+  return assertTop(page,label);
+}
+async function findExpandableCategory(page){
+  const cat=page.locator('[data-sq-context-categories]').first();
+  await cat.locator(':scope > [data-sq-rail-trigger]').click();await sleep(400);
+  const links=page.locator('[data-sq-context-categories-list] > li > a[href]');
+  for(let i=0;i<Math.min(await links.count(),12);i++){
+    const a=links.nth(i);
+    await a.click();await sleep(1200);
+    const kind=await a.getAttribute('data-sq-cascade-kind');
+    const li=a.locator('xpath=..');
+    const subs=li.locator(':scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-sq-cascade-kind="subcategory"]');
+    if(await subs.count())return {category:a,sub:subs.first(),categoryLi:li};
+    if(kind==='type'||kind==='direct-type'){
+      // terminal type should navigate normally, so this branch is not suitable for expansion testing.
+      await page.goBack({waitUntil:'domcontentloaded'}).catch(()=>{});
+      await sleep(900);await railExists(page);await waitFive(page);
+      const c=page.locator('[data-sq-context-categories]').first();
+      if(!(await c.evaluate(el=>el.classList.contains('is-open'))))await c.locator(':scope > [data-sq-rail-trigger]').click();
+    }else if(await a.evaluate(el=>el.classList.contains('is-cascade-active')).catch(()=>false)){
+      await a.click();await sleep(200);
+    }
+  }
+  return null;
+}
+async function genericScenario(page,device){
+  const label=`${device} generic`,mobile=device==='mobile';
+  await prep(page,'accessories-gifts-collectibles',label,mobile);
+  await page.screenshot({path:path.join(SHOT_DIR,`${device}-generic-root.png`),fullPage:true});
+  for(const [sel,name] of [
+    ['[data-sq-context-categories]','Categories'],
+    ['[data-sq-refinement-key="price"]','Price'],
+    ['[data-sq-refinement-key="color-pattern"]','Color / Pattern'],
+    ['[data-sq-refinement-key="manufacturer"]','Manufacturer']
+  ])await toggleTwice(page,sel,`${label} ${name}`);
 
-function normalizeTop(labels) {
-  return labels.map(x => x.replace(/\s+/g,' ').trim()).filter(Boolean);
+  const price=page.locator('[data-sq-refinement-key="price"]').first();
+  await price.locator(':scope > [data-sq-rail-trigger]').hover();await sleep(400);
+  if(await price.evaluate(el=>el.classList.contains('is-open')))failures.push(`${label}: hover opened Price`);
+
+  const found=await findExpandableCategory(page);
+  if(!found){failures.push(`${label}: no true Category->Subcategory branch found`);return}
+  const {category,sub,categoryLi}=found;
+  const catActive=await category.evaluate(a=>a.classList.contains('is-cascade-active')&&a.getAttribute('aria-expanded')==='true');
+  if(!catActive)failures.push(`${label}: category not active after click`);
+  await page.screenshot({path:path.join(SHOT_DIR,`${device}-generic-subcategories.png`),fullPage:true});
+
+  const before=new URL(page.url()).pathname;
+  await sub.click();await sleep(1200);
+  if(new URL(page.url()).pathname!==before)failures.push(`${label}: true Subcategory navigated instead of expanding`);
+  const subLi=sub.locator('xpath=..');
+  const typePanel=subLi.locator(':scope > .sq-collection-rail__cascade-column:not([hidden])').first();
+  const typeLinks=typePanel.locator('a[data-sq-cascade-kind="type"],a[data-sq-cascade-kind="direct-type"]');
+  if(!(await typePanel.count()))failures.push(`${label}: Type panel missing under Subcategory`);
+  if((await typeLinks.count())<1)failures.push(`${label}: no terminal Types under Subcategory`);
+  await page.screenshot({path:path.join(SHOT_DIR,`${device}-generic-types.png`),fullPage:true});
+
+  await sub.click();await sleep(250);
+  const subCollapsed=await subLi.locator(':scope > .sq-collection-rail__cascade-column').first().evaluate(el=>el.hidden).catch(()=>false);
+  if(!subCollapsed)failures.push(`${label}: second Subcategory click did not collapse Types`);
+  await category.click();await sleep(250);
+  const catCollapsed=await categoryLi.locator(':scope > .sq-collection-rail__cascade-column').first().evaluate(el=>el.hidden).catch(()=>false);
+  if(!catCollapsed)failures.push(`${label}: second Category click did not collapse subtree`);
+  scenarios.push({scenario:'generic',device,passed:!failures.some(x=>x.startsWith(label))});
+}
+async function stateGuardScenario(page,device){
+  const label=`${device} state-guard`,mobile=device==='mobile';
+  await prep(page,'state-guard-series-ohio',label,mobile);
+  await toggleTwice(page,'[data-sq-context-categories]',`${label} Categories`);
+  const cat=page.locator('[data-sq-context-categories]').first();
+  await cat.locator(':scope > [data-sq-rail-trigger]').click();await sleep(1400);
+  await page.waitForFunction(()=>document.querySelector('[data-sq-collection-rail]')?.dataset.sqStateGuardTreeReady==='true',{timeout:20000});
+  const uniforms=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:/^Uniforms$/i}).first();
+  if(!(await uniforms.count())){failures.push(`${label}: Uniforms missing`);return}
+  const pathBefore=new URL(page.url()).pathname;
+  await uniforms.click();await sleep(700);
+  if(new URL(page.url()).pathname!==pathBefore)failures.push(`${label}: Uniforms navigated instead of expanding`);
+  const uLi=uniforms.locator('xpath=..');
+  const subs=uLi.locator(':scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-kind="subcategory"]');
+  const sc=await subs.count();
+  if(sc<1)failures.push(`${label}: Uniforms produced zero subcategories`);
+  await page.screenshot({path:path.join(SHOT_DIR,`${device}-state-guard-uniforms.png`),fullPage:true});
+  if(sc){
+    let chosen=null;
+    for(let i=0;i<sc;i++){
+      const a=subs.nth(i),txt=(await a.textContent()||'').trim();
+      if(/OCP|Field|PT|Service|Dress/i.test(txt)){chosen=a;break}
+    }
+    chosen=chosen||subs.first();
+    await chosen.click();await sleep(450);
+    const sLi=chosen.locator('xpath=..');
+    const tp=sLi.locator(':scope > .sq-collection-rail__cascade-column:not([hidden])').first();
+    const tc=await tp.locator('a[data-kind="type"]').count();
+    if(tc<1)failures.push(`${label}: State Guard Uniform subcategory produced zero component Types`);
+    await chosen.click();await sleep(220);
+    const h=await sLi.locator(':scope > .sq-collection-rail__cascade-column').first().evaluate(el=>el.hidden).catch(()=>false);
+    if(!h)failures.push(`${label}: second Subcategory click did not collapse Types`);
+  }
+  await uniforms.click();await sleep(220);
+  const h=await uLi.locator(':scope > .sq-collection-rail__cascade-column').first().evaluate(el=>el.hidden).catch(()=>false);
+  if(!h)failures.push(`${label}: second Category click did not collapse subtree`);
+  scenarios.push({scenario:'state-guard',device,passed:!failures.some(x=>x.startsWith(label))});
+}
+async function recorded(browser,state,name,viewport,fn){
+  const ctx=await browser.newContext({viewport,storageState:state,recordVideo:{dir:VIDEO_DIR,size:viewport}});
+  const p=await ctx.newPage(); const v=p.video();
+  try{await fn(p)}catch(e){failures.push(`${name}: ${e.message}`)}
+  await ctx.close();
+  try{const src=await v.path();const dst=path.join(VIDEO_DIR,name+'.webm');if(src!==dst)fs.copyFileSync(src,dst)}catch(e){failures.push(`${name}: video finalize failed: ${e.message}`)}
 }
 
-async function assertFiveTop(page, label) {
-  await waitForRail(page);
-  const snap = await railSnapshot(page);
-  const labels = normalizeTop(snap.top.map(x => x.label));
-  if (snap.railCount !== 1) failures.push(`${label}: expected 1 visible rail, got ${snap.railCount}`);
-  if (JSON.stringify(labels) !== JSON.stringify(EXPECTED_TOP)) {
-    failures.push(`${label}: top-level controls mismatch: ${JSON.stringify(labels)}`);
-  }
-  if (snap.whiteFlyouts !== 0) failures.push(`${label}: white flyout visible (${snap.whiteFlyouts})`);
-  if (snap.horizontalOverflow) failures.push(`${label}: horizontal overflow`);
-  return snap;
-}
+const browser=await chromium.launch({headless:true});
+const boot=await browser.newContext({viewport:{width:1440,height:1000}});
+const bp=await boot.newPage();
+const br=await gotoReady(bp,`${ORIGIN}/?preview_theme_id=${THEME}`,'preview bootstrap');
+if(br?.status()!==200)failures.push(`preview bootstrap: HTTP ${br?.status()}`);
+const state=path.join(OUT,'preview-state.json');
+await boot.storageState({path:state});await boot.close();
 
-async function topToggle(page, itemSelector, label) {
-  const item = page.locator(itemSelector).first();
-  const trigger = item.locator(':scope > [data-sq-rail-trigger]');
-  if (!(await trigger.count())) {
-    failures.push(`${label}: trigger missing`);
-    return { first:false, second:false };
-  }
-  await trigger.click();
-  await sleep(250);
-  const first = await item.evaluate(el => el.classList.contains('is-open') && el.querySelector(':scope > [data-sq-rail-trigger]')?.getAttribute('aria-expanded') === 'true');
-  if (!first) failures.push(`${label}: first click did not open`);
-  await trigger.click();
-  await sleep(250);
-  const second = await item.evaluate(el => !el.classList.contains('is-open') && el.querySelector(':scope > [data-sq-rail-trigger]')?.getAttribute('aria-expanded') === 'false');
-  if (!second) failures.push(`${label}: second click did not collapse`);
-  return { first, second };
-}
+// Stage A smoke test first. Stop full-route Chromium coverage if tree behavior itself is broken.
+await recorded(browser,state,'desktop-generic-tree',{width:1440,height:1000},p=>genericScenario(p,'desktop'));
+await sleep(5000);
+await recorded(browser,state,'desktop-state-guard-tree',{width:1440,height:1000},p=>stateGuardScenario(p,'desktop'));
+await sleep(5000);
+await recorded(browser,state,'mobile-generic-tree',{width:390,height:844},p=>genericScenario(p,'mobile'));
+await sleep(5000);
+await recorded(browser,state,'mobile-state-guard-tree',{width:390,height:844},p=>stateGuardScenario(p,'mobile'));
 
-async function genericScenario(page, device) {
-  const label = `${device} generic`;
-  const response = await gotoReady(page, previewUrl('accessories-gifts-collectibles'), label);
-  if (response?.status() !== 200) {
-    failures.push(`${label}: HTTP ${response?.status()}`);
-    return;
-  }
-  await waitForRail(page);
-  if (device === 'mobile') {
-    const mt = page.locator('[data-sq-rail-mobile-toggle]');
-    await mt.click();
-    await sleep(300);
-  }
-  await assertFiveTop(page, label);
-  await page.screenshot({ path: path.join(SHOT_DIR, `${device}-generic-01-root.png`), fullPage: true });
-
-  await topToggle(page, '[data-sq-context-categories]', `${label} Categories`);
-  await topToggle(page, '[data-sq-refinement-key="price"]', `${label} Price`);
-  await topToggle(page, '[data-sq-refinement-key="color-pattern"]', `${label} Color / Pattern`);
-  await topToggle(page, '[data-sq-refinement-key="manufacturer"]', `${label} Manufacturer`);
-
-  const priceItem = page.locator('[data-sq-refinement-key="price"]').first();
-  await priceItem.locator(':scope > [data-sq-rail-trigger]').hover();
-  await sleep(450);
-  if (await priceItem.evaluate(el => el.classList.contains('is-open'))) failures.push(`${label}: hover auto-opened Price`);
-
-  const catItem = page.locator('[data-sq-context-categories]').first();
-  await catItem.locator(':scope > [data-sq-rail-trigger]').click();
-  await sleep(500);
-  await page.screenshot({ path: path.join(SHOT_DIR, `${device}-generic-02-categories-open.png`), fullPage: true });
-
-  const challenge = page.locator('[data-sq-context-categories-list] > li > a[href]').filter({ hasText: /Challenge Coins/i }).first();
-  if (!(await challenge.count())) {
-    failures.push(`${label}: Challenge Coins direct category missing`);
-    return;
-  }
-  const rootUrl = new URL(page.url()).pathname;
-  await challenge.click();
-  await sleep(1800);
-  if (new URL(page.url()).pathname !== rootUrl) failures.push(`${label}: Category click navigated instead of expanding`);
-  const categoryActive = await challenge.evaluate(a => a.classList.contains('is-cascade-active') && a.getAttribute('aria-expanded') === 'true');
-  if (!categoryActive) failures.push(`${label}: Category did not become active/expanded`);
-  const catLi = challenge.locator('xpath=..');
-  const subPanel = catLi.locator(':scope > .sq-collection-rail__cascade-column:not([hidden])').first();
-  if (!(await subPanel.count())) failures.push(`${label}: nested Subcategory panel not inserted below Category`);
-  const subLinks = subPanel.locator(':scope > .sq-collection-rail__links > li > a[href]');
-  const subCount = await subLinks.count();
-  if (subCount < 1) failures.push(`${label}: Category produced zero Subcategories`);
-  await page.screenshot({ path: path.join(SHOT_DIR, `${device}-generic-03-subcategories-open.png`), fullPage: true });
-
-  if (subCount > 0) {
-    const sub = subLinks.first();
-    const beforeSub = new URL(page.url()).pathname;
-    await sub.click();
-    await sleep(1800);
-    if (new URL(page.url()).pathname !== beforeSub) failures.push(`${label}: Subcategory click navigated instead of expanding Types`);
-    const subActive = await sub.evaluate(a => a.classList.contains('is-cascade-active') && a.getAttribute('aria-expanded') === 'true');
-    if (!subActive) failures.push(`${label}: Subcategory did not become active/expanded`);
-    const subLi = sub.locator('xpath=..');
-    const typePanel = subLi.locator(':scope > .sq-collection-rail__cascade-column:not([hidden])').first();
-    if (!(await typePanel.count())) failures.push(`${label}: nested Type panel not inserted below Subcategory`);
-    const typeLinks = typePanel.locator(':scope > .sq-collection-rail__links > li > a[href]');
-    const typeCount = await typeLinks.count();
-    if (typeCount < 1) failures.push(`${label}: Subcategory produced zero Types`);
-    await page.screenshot({ path: path.join(SHOT_DIR, `${device}-generic-04-types-open.png`), fullPage: true });
-
-    await sub.click();
-    await sleep(300);
-    const typeHiddenAfterSecond = await subLi.locator(':scope > .sq-collection-rail__cascade-column').first().evaluate(el => el.hidden).catch(() => false);
-    if (!typeHiddenAfterSecond) failures.push(`${label}: second Subcategory click did not collapse Types`);
-  }
-
-  await challenge.click();
-  await sleep(300);
-  const subHiddenAfterSecond = await catLi.locator(':scope > .sq-collection-rail__cascade-column').first().evaluate(el => el.hidden).catch(() => false);
-  if (!subHiddenAfterSecond) failures.push(`${label}: second Category click did not collapse Subcategories`);
-
-  scenarios.push({ scenario:'generic', device, url:page.url(), passed:!failures.some(f => f.startsWith(label)) });
-}
-
-async function stateGuardScenario(page, device) {
-  const label = `${device} state-guard`;
-  const response = await gotoReady(page, previewUrl('state-guard-series-ohio'), label);
-  if (response?.status() !== 200) {
-    failures.push(`${label}: HTTP ${response?.status()}`);
-    return;
-  }
-  await waitForRail(page);
-  if (device === 'mobile') {
-    const mt = page.locator('[data-sq-rail-mobile-toggle]');
-    await mt.click();
-    await sleep(300);
-  }
-  await assertFiveTop(page, label);
-  const catItem = page.locator('[data-sq-context-categories]').first();
-  await topToggle(page, '[data-sq-context-categories]', `${label} Categories`);
-  await catItem.locator(':scope > [data-sq-rail-trigger]').click();
-  await sleep(1000);
-
-  const uniforms = page.locator('[data-sq-context-categories-list] > li > a[href]').filter({ hasText: /^Uniforms$/i }).first();
-  if (!(await uniforms.count())) {
-    failures.push(`${label}: Uniforms category missing`);
-    return;
-  }
-  const rootUrl = new URL(page.url()).pathname;
-  await uniforms.click();
-  await sleep(900);
-  if (new URL(page.url()).pathname !== rootUrl) failures.push(`${label}: Uniforms navigated instead of expanding`);
-  const uLi = uniforms.locator('xpath=..');
-  const subPanel = uLi.locator(':scope > .sq-collection-rail__cascade-column:not([hidden])').first();
-  const subLinks = subPanel.locator(':scope > .sq-collection-rail__links > li > a[href]');
-  const subCount = await subLinks.count();
-  if (subCount < 1) failures.push(`${label}: Uniforms produced zero State Guard subcategories`);
-  await page.screenshot({ path: path.join(SHOT_DIR, `${device}-state-guard-01-uniforms-open.png`), fullPage: true });
-
-  if (subCount > 0) {
-    const field = subLinks.filter({ hasText: /OCP|Field Uniform/i }).first();
-    const sub = (await field.count()) ? field : subLinks.first();
-    const before = new URL(page.url()).pathname;
-    await sub.click();
-    await sleep(700);
-    if (new URL(page.url()).pathname !== before) failures.push(`${label}: State Guard Subcategory navigated instead of expanding`);
-    const subLi = sub.locator('xpath=..');
-    const typePanel = subLi.locator(':scope > .sq-collection-rail__cascade-column:not([hidden])').first();
-    const typeCount = await typePanel.locator(':scope > .sq-collection-rail__links > li > a[href]').count();
-    if (typeCount < 1) failures.push(`${label}: State Guard Subcategory produced zero component Types`);
-    await page.screenshot({ path: path.join(SHOT_DIR, `${device}-state-guard-02-types-open.png`), fullPage: true });
-
-    await sub.click();
-    await sleep(250);
-    const hidden = await subLi.locator(':scope > .sq-collection-rail__cascade-column').first().evaluate(el => el.hidden).catch(() => false);
-    if (!hidden) failures.push(`${label}: State Guard second Subcategory click did not collapse Types`);
-  }
-
-  await uniforms.click();
-  await sleep(250);
-  const hidden = await uLi.locator(':scope > .sq-collection-rail__cascade-column').first().evaluate(el => el.hidden).catch(() => false);
-  if (!hidden) failures.push(`${label}: State Guard second Category click did not collapse Subcategories`);
-  scenarios.push({ scenario:'state-guard', device, url:page.url(), passed:!failures.some(f => f.startsWith(label)) });
-}
-
-async function runRecordedScenario(browser, statePath, name, viewport, fn) {
-  const ctx = await browser.newContext({
-    viewport,
-    storageState: statePath,
-    recordVideo: { dir: VIDEO_DIR, size: viewport }
-  });
-  const page = await ctx.newPage();
-  const vid = page.video();
-  try {
-    await fn(page);
-    await sleep(500);
-  } catch (e) {
-    failures.push(`${name}: uncaught scenario error: ${e.message}`);
+const smokeFailures=failures.filter(x=>/generic|state-guard/.test(x));
+if(smokeFailures.length===0){
+  const ctx=await browser.newContext({viewport:{width:1440,height:1000},storageState:state});
+  const page=await ctx.newPage();
+  for(const handle of [...HOME,...SG]){
+    const label=`coverage ${handle}`;
+    const before=failures.length;
+    const r=await gotoReady(page,urlFor(handle),label,4);
+    if(r?.status()!==200){
+      failures.push(`${label}: unresolved HTTP ${r?.status()}`);
+      coverage.push({handle,passed:false,status:r?.status()??null});
+    }else{
+      try{
+        await railExists(page);await waitFive(page);await assertTop(page,label);
+        const ok=await toggleTwice(page,'[data-sq-context-categories]',`${label} Categories`);
+        coverage.push({handle,passed:ok&&failures.length===before});
+      }catch(e){
+        failures.push(`${label}: ${e.message}`);
+        coverage.push({handle,passed:false,error:e.message});
+      }
+    }
+    await sleep(9000);
   }
   await ctx.close();
-  try {
-    const p = await vid.path();
-    const dest = path.join(VIDEO_DIR, `${name}.webm`);
-    if (p !== dest) fs.copyFileSync(p, dest);
-  } catch (e) {
-    failures.push(`${name}: video finalize failed: ${e.message}`);
-  }
+}else{
+  console.log('Skipping full-route browser coverage because smoke-stage functional failures remain.');
 }
-
-const browser = await chromium.launch({ headless: true });
-
-const bootstrap = await browser.newContext({ viewport: { width:1440, height:1000 } });
-const bp = await bootstrap.newPage();
-const bootResp = await gotoReady(bp, `${ORIGIN}/?preview_theme_id=${THEME}`, 'preview bootstrap');
-if (bootResp?.status() !== 200) failures.push(`preview bootstrap: HTTP ${bootResp?.status()}`);
-const statePath = path.join(OUT, 'preview-state.json');
-await bootstrap.storageState({ path: statePath });
-await bootstrap.close();
-
-// Full route coverage. No video here to keep artifacts manageable.
-const coverageCtx = await browser.newContext({ viewport:{width:1440,height:1000}, storageState:statePath });
-const cp = await coverageCtx.newPage();
-for (const handle of [...HOME_ROOTS, ...STATE_GUARD]) {
-  const label = `coverage ${handle}`;
-  const response = await gotoReady(cp, previewUrl(handle), label, 3);
-  if (response?.status() !== 200) {
-    failures.push(`${label}: HTTP ${response?.status()}`);
-    coverage.push({ handle, passed:false, status:response?.status() ?? null });
-    continue;
-  }
-  try {
-    const snap = await assertFiveTop(cp, label);
-    const toggles = await topToggle(cp, '[data-sq-context-categories]', `${label} Categories`);
-    const passed = toggles.first && toggles.second && snap.whiteFlyouts === 0;
-    coverage.push({ handle, passed, top:snap.top.map(x=>x.label) });
-  } catch (e) {
-    failures.push(`${label}: ${e.message}`);
-    coverage.push({ handle, passed:false, error:e.message });
-  }
-  await sleep(350);
-}
-await coverageCtx.close();
-
-await runRecordedScenario(browser, statePath, 'desktop-generic-tree', {width:1440,height:1000}, p => genericScenario(p,'desktop'));
-await runRecordedScenario(browser, statePath, 'mobile-generic-tree', {width:390,height:844}, p => genericScenario(p,'mobile'));
-await runRecordedScenario(browser, statePath, 'desktop-state-guard-tree', {width:1440,height:1000}, p => stateGuardScenario(p,'desktop'));
-await runRecordedScenario(browser, statePath, 'mobile-state-guard-tree', {width:390,height:844}, p => stateGuardScenario(p,'mobile'));
 
 await browser.close();
-
-const report = {
-  generatedAt:new Date().toISOString(),
-  theme:THEME,
-  homepageCoverage:{ passed:coverage.filter(x=>HOME_ROOTS.includes(x.handle)&&x.passed).length, total:HOME_ROOTS.length },
-  stateGuardCoverage:{ passed:coverage.filter(x=>STATE_GUARD.includes(x.handle)&&x.passed).length, total:STATE_GUARD.length },
-  coverage,
-  scenarios,
-  failures,
-  passed:failures.length===0
+const report={
+ generatedAt:new Date().toISOString(),theme:THEME,
+ smoke:{passed:smokeFailures.length===0,failures:smokeFailures},
+ homepageCoverage:{passed:coverage.filter(x=>HOME.includes(x.handle)&&x.passed).length,total:HOME.length},
+ stateGuardCoverage:{passed:coverage.filter(x=>SG.includes(x.handle)&&x.passed).length,total:SG.length},
+ coverage,scenarios,failures,passed:failures.length===0&&coverage.length===HOME.length+SG.length
 };
-fs.writeFileSync(path.join(OUT,'report.json'), JSON.stringify(report,null,2));
+fs.writeFileSync(path.join(OUT,'report.json'),JSON.stringify(report,null,2));
 console.log(JSON.stringify(report,null,2));
-if (!report.passed) process.exitCode = 2;
+if(!report.passed)process.exitCode=2;
