@@ -1,0 +1,36 @@
+{% layout none %}
+{
+  "handle": {{ collection.handle | json }},
+  "vendors": [
+    {%- for sq_vendor in collection.all_vendors -%}
+      {{ sq_vendor | json }}{% unless forloop.last %},{% endunless %}
+    {%- endfor -%}
+  ],
+  "colors": [
+    {%- assign sq_color_first = true -%}
+    {%- for sq_tag in collection.all_tags -%}
+      {%- assign sq_color_prefix = sq_tag | slice: 0, 17 -%}
+      {%- if sq_color_prefix == 'SQ Color/Pattern:' -%}
+        {%- unless sq_color_first -%},{%- endunless -%}
+        {"label":{{ sq_tag | remove_first: 'SQ Color/Pattern:' | strip | json }},"tag":{{ sq_tag | json }},"handle":{{ sq_tag | handleize | json }}}
+        {%- assign sq_color_first = false -%}
+      {%- endif -%}
+    {%- endfor -%}
+  ],
+  "types": [
+    {%- for sq_type in collection.all_types -%}
+      {{ sq_type | json }}{% unless forloop.last %},{% endunless %}
+    {%- endfor -%}
+  ],
+  "typeTags": [
+    {%- assign sq_type_first = true -%}
+    {%- for sq_tag in collection.all_tags -%}
+      {%- assign sq_type_prefix = sq_tag | slice: 0, 8 -%}
+      {%- if sq_type_prefix == 'SQ Type:' -%}
+        {%- unless sq_type_first -%},{%- endunless -%}
+        {"label":{{ sq_tag | remove_first: 'SQ Type:' | strip | json }},"tag":{{ sq_tag | json }},"handle":{{ sq_tag | handleize | json }}}
+        {%- assign sq_type_first = false -%}
+      {%- endif -%}
+    {%- endfor -%}
+  ]
+}
