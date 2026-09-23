@@ -5,6 +5,7 @@ import path from 'path';
 // Certification trigger: current sidebar repair theme validated 2026-09-23.
 // Certification trigger: observer-loop fix 2026-09-23.
 // Certification trigger: controller observer feedback fix 2026-09-23.
+// Certification trigger: explicit category-open stabilization 2026-09-23.
 
 const THEME='159040962715';
 const ORIGIN='https://www.statesideqm.com';
@@ -116,7 +117,18 @@ function currentRoute(page){
 async function branchClick(page,locator){
   await locator.scrollIntoViewIfNeeded().catch(()=>{});
   const box=await locator.boundingBox();
-  if(!box)throw new Error('Expandable branch has no clickable bounding box');
+  if(!box){
+    const diag=await locator.evaluate(el=>{
+      const chain=[];let n=el;
+      while(n&&chain.length<8){
+        const s=getComputedStyle(n),r=n.getBoundingClientRect();
+        chain.push({tag:n.tagName,class:n.className||'',hidden:!!n.hidden,display:s.display,visibility:s.visibility,opacity:s.opacity,width:r.width,height:r.height,ariaExpanded:n.getAttribute&&n.getAttribute('aria-expanded')});
+        n=n.parentElement;
+      }
+      return {text:(el.textContent||'').replace(/\s+/g,' ').trim(),chain};
+    }).catch(()=>null);
+    throw new Error('Expandable branch has no clickable bounding box '+JSON.stringify(diag));
+  }
   await page.mouse.click(box.x+box.width/2,box.y+box.height/2);
 }
 async function findExpandableCategory(page){
