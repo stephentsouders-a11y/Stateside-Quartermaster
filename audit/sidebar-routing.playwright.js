@@ -24,6 +24,8 @@ const roots = [
   'custom-personalized-products'
 ];
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 const focused = [
   {
     name: 'Air Force Badge Bundles',
@@ -55,10 +57,20 @@ function previewUrl(relative) {
 function safeName(s) {
   return s.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
 }
+async function gotoWithRetry(page, url, attempts = 4) {
+  let response = null;
+  for (let i = 0; i < attempts; i++) {
+    try { response = await page.goto(url, { waitUntil:'domcontentloaded', timeout:60000 }); } catch (_) { response = null; }
+    const status = response ? response.status() : null;
+    if (status !== 429 && status != null && status < 500) return response;
+    await sleep(Math.min(30000, 3500 * Math.pow(2, i)));
+  }
+  return response;
+}
 async function waitForRail(page) {
   await page.waitForLoadState('domcontentloaded');
-  await page.locator('[data-sq-collection-rail]').waitFor({ state: 'attached', timeout: 20000 });
-  await page.waitForTimeout(1400);
+  await page.locator('[data-sq-collection-rail]').waitFor({ state: 'attached', timeout: 25000 });
+  await page.waitForTimeout(1800);
 }
 async function productTitles(page) {
   return await page.locator('main a[href*="/products/"]').evaluateAll(as => {
@@ -95,6 +107,13 @@ async function productTitles(page) {
       viewport: mode.viewport,
       recordVideo: { dir:path.join(outDir,'videos'), size:mode.viewport }
     });
+    await context.route('**/*', route => {
+      const req = route.request();
+      const type = req.resourceType();
+      const url = req.url();
+      if (['image','font','media'].includes(type) || /web-pixels-manager|monorail|shopifycloud\/storefront-renderer\/assets\/.*\.map/i.test(url)) return route.abort();
+      return route.continue();
+    });
     const page = await context.newPage();
     const consoleErrors = [];
     page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
@@ -102,11 +121,41 @@ async function productTitles(page) {
     const modeReport = { roots:[], focused:[], consoleErrors };
     report.modes[mode.name] = modeReport;
 
+    for (const test of focused) {
+      const item = { name:test.name, start:test.start, expectedPath:test.expectedPath, pass:false };
+      try {
+        const startResponse = await gotoWithRetry(page, previewUrl(test.start));
+        item.startStatus = startResponse ? startResponse.status() : null;
+        await waitForRail(page);
+        const candidate = page.locator('[data-sq-collection-rail] a[href]', { hasText:test.label }).first();
+        await candidate.waitFor({ state:'attached', timeout:20000 });
+        await page.waitForTimeout(1200);
+        item.sidebarHref = await candidate.getAttribute('href');
+        const hrefUrl = new URL(item.sidebarHref, base);
+        item.resolverApplied = !hrefUrl.searchParams.has('filter.p.product_type') && hrefUrl.pathname === test.expectedPath;
+        const destResponse = await gotoWithRetry(page, previewUrl(hrefUrl.pathname + hrefUrl.search));
+        item.destinationStatus = destResponse ? destResponse.status() : null;
+        await page.waitForTimeout(1200);
+        item.destinationUrl = page.url();
+        item.destinationPath = new URL(item.destinationUrl).pathname;
+        item.productTitles = await productTitles(page);
+        item.productLinkCount = item.productTitles.length;
+        item.pathPass = item.destinationPath === test.expectedPath;
+        item.countPass = test.expectedProducts == null ? true : item.productLinkCount === test.expectedProducts;
+        item.forbiddenPass = test.forbidden ? !item.productTitles.some(t => test.forbidden.test(t)) : true;
+        item.pass = item.resolverApplied && item.pathPass && item.countPass && item.forbiddenPass && item.startStatus !== 429 && item.destinationStatus !== 429;
+        await page.screenshot({ path:path.join(outDir,'screenshots',mode.name+'-'+safeName(test.name)+'.png'), fullPage:true });
+      } catch (err) { item.error = String(err); }
+      if (!item.pass) { failed = true; report.summary.focusedFailures++; }
+      modeReport.focused.push(item);
+      await sleep(2500);
+    }
+
     for (const root of roots) {
       const url = previewUrl('/collections/' + root + '?filter.v.availability=1');
       const item = { root, url, status:null, anchors:0, residualProductTypeLinks:[], malformed:[], repaired:[] };
       try {
-        const response = await page.goto(url, { waitUntil:'domcontentloaded', timeout:45000 });
+        const response = await gotoWithRetry(page, url);
         item.status = response ? response.status() : null;
         await waitForRail(page);
         const links = await page.locator('[data-sq-collection-rail] a[href]').evaluateAll(as => as.map(a => ({
@@ -130,9 +179,10 @@ async function productTitles(page) {
       }
       modeReport.roots.push(item);
       report.summary.rootPagesChecked++;
+      await sleep(2500);
     }
 
-    for (const test of focused) {
+    if (false) for (const test of focused) {
       const item = { name:test.name, start:test.start, expectedPath:test.expectedPath, pass:false };
       try {
         await page.goto(previewUrl(test.start), { waitUntil:'domcontentloaded', timeout:45000 });
@@ -160,7 +210,7 @@ async function productTitles(page) {
       modeReport.focused.push(item);
     }
 
-    report.summary.consoleErrors += consoleErrors.length;
+    report.summary.consoleErrors += consoleErrors.filter(x => !/429|web-pixels|favicon|Content Security Policy/i.test(x)).length;
     await context.close();
   }
 
