@@ -10,10 +10,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: sidebar-routing-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   chromium:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
