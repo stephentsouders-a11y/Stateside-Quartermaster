@@ -107,6 +107,14 @@ async function prep(page,handle,label,mobile=false){
   await waitFive(page);
   return assertTop(page,label);
 }
+function currentRoute(page){
+  const u=new URL(page.url());
+  u.searchParams.delete('preview_theme_id');
+  return u.pathname+(u.searchParams.toString()?'?'+u.searchParams.toString():'');
+}
+async function branchClick(locator){
+  await locator.click({noWaitAfter:true});
+}
 async function findExpandableCategory(page){
   const cat=page.locator('[data-sq-context-categories]').first();
   if(!(await cat.evaluate(el=>el.classList.contains('is-open')))){
@@ -116,7 +124,7 @@ async function findExpandableCategory(page){
   const preferred=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:/^Apparel & Headwear$/i}).first();
   if(!(await preferred.count()))return null;
   await preferred.scrollIntoViewIfNeeded().catch(()=>{});
-  await preferred.click();
+  await branchClick(preferred);
   await sleep(900);
   const category=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:/^Apparel & Headwear$/i}).first();
   const li=category.locator('xpath=..');
@@ -150,9 +158,9 @@ async function genericScenario(page,device){
   if(!catActive)failures.push(`${label}: category not active after click`);
   await page.screenshot({path:path.join(SHOT_DIR,`${device}-generic-subcategories.png`),fullPage:true});
 
-  const before=new URL(page.url()).pathname;
-  await sub.click();await sleep(1200);
-  if(new URL(page.url()).pathname!==before)failures.push(`${label}: true Subcategory navigated instead of expanding`);
+  const before=currentRoute(page);
+  await branchClick(sub);await sleep(1200);
+  if(currentRoute(page)!==before)failures.push(`${label}: true Subcategory navigated instead of expanding`);
   const subLi=sub.locator('xpath=..');
   const typePanel=subLi.locator(':scope > .sq-collection-rail__cascade-column:not([hidden])').first();
   const typeLinks=typePanel.locator('a[data-sq-cascade-kind="type"],a[data-sq-cascade-kind="direct-type"]');
@@ -160,10 +168,10 @@ async function genericScenario(page,device){
   if((await typeLinks.count())<1)failures.push(`${label}: no terminal Types under Subcategory`);
   await page.screenshot({path:path.join(SHOT_DIR,`${device}-generic-types.png`),fullPage:true});
 
-  await sub.click();await sleep(250);
+  await branchClick(sub);await sleep(250);
   const subCollapsed=await subLi.locator(':scope > .sq-collection-rail__cascade-column').first().evaluate(el=>el.hidden).catch(()=>false);
   if(!subCollapsed)failures.push(`${label}: second Subcategory click did not collapse Types`);
-  await category.click();await sleep(250);
+  await branchClick(category);await sleep(250);
   const catCollapsed=await categoryLi.locator(':scope > .sq-collection-rail__cascade-column').first().evaluate(el=>el.hidden).catch(()=>false);
   if(!catCollapsed)failures.push(`${label}: second Category click did not collapse subtree`);
   scenarios.push({scenario:'generic',device,passed:!failures.some(x=>x.startsWith(label))});
@@ -177,9 +185,9 @@ async function stateGuardScenario(page,device){
   await page.waitForFunction(()=>document.querySelector('[data-sq-collection-rail]')?.dataset.sqStateGuardTreeReady==='true',{timeout:20000});
   const uniforms=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:/^Uniforms$/i}).first();
   if(!(await uniforms.count())){failures.push(`${label}: Uniforms missing`);return}
-  const pathBefore=new URL(page.url()).pathname;
-  await uniforms.click();await sleep(700);
-  if(new URL(page.url()).pathname!==pathBefore)failures.push(`${label}: Uniforms navigated instead of expanding`);
+  const pathBefore=currentRoute(page);
+  await branchClick(uniforms);await sleep(700);
+  if(currentRoute(page)!==pathBefore)failures.push(`${label}: Uniforms navigated instead of expanding`);
   const uLi=uniforms.locator('xpath=..');
   const subs=uLi.locator(':scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-kind="subcategory"]');
   const sc=await subs.count();
@@ -192,16 +200,16 @@ async function stateGuardScenario(page,device){
       if(/OCP|Field|PT|Service|Dress/i.test(txt)){chosen=a;break}
     }
     chosen=chosen||subs.first();
-    await chosen.click();await sleep(450);
+    await branchClick(chosen);await sleep(450);
     const sLi=chosen.locator('xpath=..');
     const tp=sLi.locator(':scope > .sq-collection-rail__cascade-column:not([hidden])').first();
     const tc=await tp.locator('a[data-kind="type"]').count();
     if(tc<1)failures.push(`${label}: State Guard Uniform subcategory produced zero component Types`);
-    await chosen.click();await sleep(220);
+    await branchClick(chosen);await sleep(220);
     const h=await sLi.locator(':scope > .sq-collection-rail__cascade-column').first().evaluate(el=>el.hidden).catch(()=>false);
     if(!h)failures.push(`${label}: second Subcategory click did not collapse Types`);
   }
-  await uniforms.click();await sleep(220);
+  await branchClick(uniforms);await sleep(220);
   const h=await uLi.locator(':scope > .sq-collection-rail__cascade-column').first().evaluate(el=>el.hidden).catch(()=>false);
   if(!h)failures.push(`${label}: second Category click did not collapse subtree`);
   scenarios.push({scenario:'state-guard',device,passed:!failures.some(x=>x.startsWith(label))});
