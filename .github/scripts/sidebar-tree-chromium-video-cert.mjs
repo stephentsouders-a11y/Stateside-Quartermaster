@@ -108,27 +108,21 @@ async function findExpandableCategory(page){
   const cat=page.locator('[data-sq-context-categories]').first();
   if(!(await cat.evaluate(el=>el.classList.contains('is-open')))){
     await cat.locator(':scope > [data-sq-rail-trigger]').click();
-    await sleep(400);
+    await sleep(350);
   }
-  const candidates=await page.locator('[data-sq-context-categories-list] > li > a[href]').evaluateAll(as=>as.map(a=>({href:a.href,text:(a.textContent||'').replace(/\\s+/g,' ').trim()})));
-  for(const cand of candidates.slice(0,16)){
-    let a=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:cand.text}).first();
-    if(!(await a.count()))continue;
-    await a.click();await sleep(1200);
-    a=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:cand.text}).first();
-    if(!(await a.count()))continue;
-    const li=a.locator('xpath=..');
-    const subs=li.locator(':scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-sq-cascade-kind="subcategory"]');
-    if(await subs.count())return {category:a,sub:subs.first(),categoryLi:li};
-    const leaves=li.locator(':scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-sq-cascade-kind="type"],:scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-sq-cascade-kind="direct-type"]');
-    if(await leaves.count()){
-      // Direct terminal Types are valid under a Category. Collapse and continue looking for a true nested branch.
-      if(await a.evaluate(el=>el.classList.contains('is-cascade-active')).catch(()=>false)){await a.click();await sleep(180)}
-      continue;
-    }
-    if(await a.evaluate(el=>el.classList.contains('is-cascade-active')).catch(()=>false)){await a.click();await sleep(180)}
-  }
-  return null;
+  const preferred=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:/^Apparel & Headwear$/i}).first();
+  if(!(await preferred.count()))return null;
+  await preferred.scrollIntoViewIfNeeded().catch(()=>{});
+  await preferred.click();
+  await sleep(900);
+  const category=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:/^Apparel & Headwear$/i}).first();
+  const li=category.locator('xpath=..');
+  const sub=li.locator(':scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-sq-cascade-kind="subcategory"]').first();
+  if(!(await sub.count()))return null;
+  await sub.scrollIntoViewIfNeeded().catch(()=>{});
+  const visible=await sub.isVisible().catch(()=>false);
+  if(!visible)return {category,sub,categoryLi:li,subVisible:false};
+  return {category,sub,categoryLi:li,subVisible:true};
 }
 async function genericScenario(page,device){
   const label=`${device} generic`,mobile=device==='mobile';
@@ -147,7 +141,8 @@ async function genericScenario(page,device){
 
   const found=await findExpandableCategory(page);
   if(!found){failures.push(`${label}: no true Category->Subcategory branch found`);return}
-  const {category,sub,categoryLi}=found;
+  const {category,sub,categoryLi,subVisible}=found;
+  if(!subVisible){failures.push(`${label}: nested Subcategory exists but is not visible`);return}
   const catActive=await category.evaluate(a=>a.classList.contains('is-cascade-active')&&a.getAttribute('aria-expanded')==='true');
   if(!catActive)failures.push(`${label}: category not active after click`);
   await page.screenshot({path:path.join(SHOT_DIR,`${device}-generic-subcategories.png`),fullPage:true});
