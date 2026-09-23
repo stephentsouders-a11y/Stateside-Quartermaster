@@ -6,6 +6,7 @@ import path from 'path';
 // Certification trigger: observer-loop fix 2026-09-23.
 // Certification trigger: controller observer feedback fix 2026-09-23.
 // Certification trigger: explicit category-open stabilization 2026-09-23.
+// Certification trigger: wait for loaded generic hierarchy 2026-09-23.
 // Certification trigger: wait for generic BFL hierarchy readiness 2026-09-23.
 
 const THEME='159040962715';
@@ -138,23 +139,47 @@ async function findExpandableCategory(page){
     await cat.locator(':scope > [data-sq-rail-trigger]').click();
     await sleep(350);
   }
-  await page.waitForFunction(()=>{
+  await page.waitForFunction(()=>window.__sqSidebarTreeDataApis?.generic,{timeout:20000});
+  await page.waitForFunction(()=>window.__sqBflSidebarApi?.ready,{timeout:20000}).catch(()=>{});
+  const candidate=await page.evaluate(async()=>{
     const api=window.__sqBflSidebarApi;
-    return !!(api&&typeof api.categories==='function'&&api.categories().length);
-  },null,{timeout:30000}).catch(()=>{});
-  const preferred=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:/^Apparel & Headwear$/i}).first();
-  if(!(await preferred.count()))return null;
+    if(api?.ready){
+      try{
+        await Promise.race([api.ready,new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),20000))]);
+        const rows=api.categories?.()||[];
+        for(const row of rows){
+          const d=api.hierarchy?.(row.label,'')||{};
+          if((d.subcategories||[]).length)return row.label;
+        }
+      }catch(_){}
+    }
+    const links=[...document.querySelectorAll('[data-sq-context-categories-list] > li > a[href]')];
+    return links.find(a=>/^Apparel & Headwear$/i.test((a.textContent||'').trim()))?.textContent?.trim()||links[0]?.textContent?.trim()||'';
+  });
+  if(!candidate)return null;
+  const links=page.locator('[data-sq-context-categories-list] > li > a[href]');
+  let preferred=null;
+  for(let i=0;i<await links.count();i++){
+    const a=links.nth(i),txt=(await a.textContent()||'').replace(/\s+/g,' ').trim();
+    if(txt===candidate){preferred=a;break}
+  }
+  if(!preferred)return null;
   await preferred.scrollIntoViewIfNeeded().catch(()=>{});
   await branchClick(page,preferred);
-  await page.waitForFunction(()=>{
+  await page.waitForFunction((label)=>{
     const links=[...document.querySelectorAll('[data-sq-context-categories-list] > li > a[href]')];
-    const a=links.find(x=>/^Apparel & Headwear$/i.test((x.textContent||'').replace(/\s+/g,' ').trim()));
+    const a=links.find(x=>(x.textContent||'').replace(/\s+/g,' ').trim()===label);
     if(!a)return false;
     const li=a.closest('li');
-    const panel=li&&li.querySelector(':scope > .sq-collection-rail__cascade-column:not([hidden])');
-    return !!(panel&&panel.querySelector('a[data-sq-cascade-kind="subcategory"]'));
-  },null,{timeout:30000}).catch(()=>{});
-  const category=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:/^Apparel & Headwear$/i}).first();
+    return !!li?.querySelector(':scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-sq-cascade-kind="subcategory"]');
+  },candidate,{timeout:25000}).catch(()=>{});
+  const categoryLinks=page.locator('[data-sq-context-categories-list] > li > a[href]');
+  let category=null;
+  for(let i=0;i<await categoryLinks.count();i++){
+    const a=categoryLinks.nth(i),txt=(await a.textContent()||'').replace(/\s+/g,' ').trim();
+    if(txt===candidate){category=a;break}
+  }
+  if(!category)return null;
   const li=category.locator('xpath=..');
   const sub=li.locator(':scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-sq-cascade-kind="subcategory"]').first();
   if(!(await sub.count()))return null;
