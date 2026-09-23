@@ -106,30 +106,33 @@ async function prep(page,handle,label,mobile=false){
 }
 async function findExpandableCategory(page){
   const cat=page.locator('[data-sq-context-categories]').first();
-  await cat.locator(':scope > [data-sq-rail-trigger]').click();await sleep(400);
-  const links=page.locator('[data-sq-context-categories-list] > li > a[href]');
-  for(let i=0;i<Math.min(await links.count(),12);i++){
-    const a=links.nth(i);
+  if(!(await cat.evaluate(el=>el.classList.contains('is-open')))){
+    await cat.locator(':scope > [data-sq-rail-trigger]').click();
+    await sleep(400);
+  }
+  const candidates=await page.locator('[data-sq-context-categories-list] > li > a[href]').evaluateAll(as=>as.map(a=>({href:a.href,text:(a.textContent||'').replace(/\\s+/g,' ').trim()})));
+  for(const cand of candidates.slice(0,16)){
+    let a=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:cand.text}).first();
+    if(!(await a.count()))continue;
     await a.click();await sleep(1200);
-    const kind=await a.getAttribute('data-sq-cascade-kind');
+    a=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:cand.text}).first();
+    if(!(await a.count()))continue;
     const li=a.locator('xpath=..');
     const subs=li.locator(':scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-sq-cascade-kind="subcategory"]');
     if(await subs.count())return {category:a,sub:subs.first(),categoryLi:li};
-    if(kind==='type'||kind==='direct-type'){
-      // terminal type should navigate normally, so this branch is not suitable for expansion testing.
-      await page.goBack({waitUntil:'domcontentloaded'}).catch(()=>{});
-      await sleep(900);await railExists(page);await waitFive(page);
-      const c=page.locator('[data-sq-context-categories]').first();
-      if(!(await c.evaluate(el=>el.classList.contains('is-open'))))await c.locator(':scope > [data-sq-rail-trigger]').click();
-    }else if(await a.evaluate(el=>el.classList.contains('is-cascade-active')).catch(()=>false)){
-      await a.click();await sleep(200);
+    const leaves=li.locator(':scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-sq-cascade-kind="type"],:scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-sq-cascade-kind="direct-type"]');
+    if(await leaves.count()){
+      // Direct terminal Types are valid under a Category. Collapse and continue looking for a true nested branch.
+      if(await a.evaluate(el=>el.classList.contains('is-cascade-active')).catch(()=>false)){await a.click();await sleep(180)}
+      continue;
     }
+    if(await a.evaluate(el=>el.classList.contains('is-cascade-active')).catch(()=>false)){await a.click();await sleep(180)}
   }
   return null;
 }
 async function genericScenario(page,device){
   const label=`${device} generic`,mobile=device==='mobile';
-  await prep(page,'accessories-gifts-collectibles',label,mobile);
+  await prep(page,'products-built-for-the-line-u-s-army',label,mobile);
   await page.screenshot({path:path.join(SHOT_DIR,`${device}-generic-root.png`),fullPage:true});
   for(const [sel,name] of [
     ['[data-sq-context-categories]','Categories'],
