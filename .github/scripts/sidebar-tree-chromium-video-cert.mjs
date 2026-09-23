@@ -6,6 +6,7 @@ import path from 'path';
 // Certification trigger: observer-loop fix 2026-09-23.
 // Certification trigger: controller observer feedback fix 2026-09-23.
 // Certification trigger: explicit category-open stabilization 2026-09-23.
+// Certification trigger: wait for generic BFL hierarchy readiness 2026-09-23.
 
 const THEME='159040962715';
 const ORIGIN='https://www.statesideqm.com';
@@ -137,11 +138,22 @@ async function findExpandableCategory(page){
     await cat.locator(':scope > [data-sq-rail-trigger]').click();
     await sleep(350);
   }
+  await page.waitForFunction(()=>{
+    const api=window.__sqBflSidebarApi;
+    return !!(api&&typeof api.categories==='function'&&api.categories().length);
+  },null,{timeout:30000}).catch(()=>{});
   const preferred=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:/^Apparel & Headwear$/i}).first();
   if(!(await preferred.count()))return null;
   await preferred.scrollIntoViewIfNeeded().catch(()=>{});
   await branchClick(page,preferred);
-  await sleep(900);
+  await page.waitForFunction(()=>{
+    const links=[...document.querySelectorAll('[data-sq-context-categories-list] > li > a[href]')];
+    const a=links.find(x=>/^Apparel & Headwear$/i.test((x.textContent||'').replace(/\s+/g,' ').trim()));
+    if(!a)return false;
+    const li=a.closest('li');
+    const panel=li&&li.querySelector(':scope > .sq-collection-rail__cascade-column:not([hidden])');
+    return !!(panel&&panel.querySelector('a[data-sq-cascade-kind="subcategory"]'));
+  },null,{timeout:30000}).catch(()=>{});
   const category=page.locator('[data-sq-context-categories-list] > li > a[href]').filter({hasText:/^Apparel & Headwear$/i}).first();
   const li=category.locator('xpath=..');
   const sub=li.locator(':scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-sq-cascade-kind="subcategory"]').first();
