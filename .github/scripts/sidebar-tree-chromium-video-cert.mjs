@@ -4,6 +4,7 @@ import path from 'path';
 
 // Certification trigger: current sidebar repair theme validated 2026-09-23.
 // Certification trigger: observer-loop fix 2026-09-23.
+// Certification trigger: controller observer feedback fix 2026-09-23.
 
 const THEME='159040962715';
 const ORIGIN='https://www.statesideqm.com';
