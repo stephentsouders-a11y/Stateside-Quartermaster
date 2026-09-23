@@ -8,6 +8,7 @@ import path from 'path';
 // Certification trigger: explicit category-open stabilization 2026-09-23.
 // Certification trigger: wait for loaded generic hierarchy 2026-09-23.
 // Certification trigger: hardened BFL loader retries 2026-09-23.
+// Certification trigger: generic hierarchy diagnostics plus mobile visibility CSS 2026-09-23.
 // Certification trigger: wait for generic BFL hierarchy readiness 2026-09-23.
 
 const THEME='159040962715';
@@ -142,21 +143,26 @@ async function findExpandableCategory(page){
   }
   await page.waitForFunction(()=>window.__sqSidebarTreeDataApis?.generic,{timeout:20000});
   await page.waitForFunction(()=>window.__sqBflSidebarApi?.ready,{timeout:20000}).catch(()=>{});
-  const candidate=await page.evaluate(async()=>{
+  const diag=await page.evaluate(async()=>{
     const api=window.__sqBflSidebarApi;
+    const domLabels=[...document.querySelectorAll('[data-sq-context-categories-list] > li > a[href]')].map(a=>(a.textContent||'').replace(/\s+/g,' ').trim());
+    const out={apiPresent:!!api,domLabels,rows:[],candidate:''};
     if(api?.ready){
       try{
         await Promise.race([api.ready,new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),20000))]);
         const rows=api.categories?.()||[];
-        for(const row of rows){
+        out.rows=rows.map(row=>{
           const d=api.hierarchy?.(row.label,'')||{};
-          if((d.subcategories||[]).length)return row.label;
-        }
-      }catch(_){}
+          return {label:row.label,subcategories:(d.subcategories||[]).length,types:(d.types||[]).length};
+        });
+        const hit=out.rows.find(row=>row.subcategories>0);
+        out.candidate=hit?.label||'';
+      }catch(e){out.error=String(e&&e.message||e)}
     }
-    const links=[...document.querySelectorAll('[data-sq-context-categories-list] > li > a[href]')];
-    return links.find(a=>/^Apparel & Headwear$/i.test((a.textContent||'').trim()))?.textContent?.trim()||links[0]?.textContent?.trim()||'';
+    return out;
   });
+  console.log('generic hierarchy diagnostic '+JSON.stringify(diag));
+  const candidate=diag.candidate;
   if(!candidate)return null;
   const links=page.locator('[data-sq-context-categories-list] > li > a[href]');
   let preferred=null;
@@ -164,7 +170,7 @@ async function findExpandableCategory(page){
     const a=links.nth(i),txt=(await a.textContent()||'').replace(/\s+/g,' ').trim();
     if(txt===candidate){preferred=a;break}
   }
-  if(!preferred)return null;
+  if(!preferred){console.log('generic candidate absent from DOM '+candidate);return null}
   await preferred.scrollIntoViewIfNeeded().catch(()=>{});
   await branchClick(page,preferred);
   await page.waitForFunction((label)=>{
@@ -183,7 +189,16 @@ async function findExpandableCategory(page){
   if(!category)return null;
   const li=category.locator('xpath=..');
   const sub=li.locator(':scope > .sq-collection-rail__cascade-column:not([hidden]) a[data-sq-cascade-kind="subcategory"]').first();
-  if(!(await sub.count()))return null;
+  if(!(await sub.count())){
+    const post=await page.evaluate((label)=>{
+      const links=[...document.querySelectorAll('[data-sq-context-categories-list] > li > a[href]')];
+      const a=links.find(x=>(x.textContent||'').replace(/\s+/g,' ').trim()===label);
+      const li=a&&a.closest('li'),panel=li&&li.querySelector(':scope > .sq-collection-rail__cascade-column');
+      return {active:!!a?.classList.contains('is-cascade-active'),aria:a?.getAttribute('aria-expanded')||null,panelHidden:panel?.hidden??null,panelText:(panel?.textContent||'').replace(/\s+/g,' ').trim().slice(0,500)};
+    },candidate).catch(()=>null);
+    console.log('generic branch post-click '+JSON.stringify(post));
+    return null;
+  }
   await sub.scrollIntoViewIfNeeded().catch(()=>{});
   const visible=await sub.isVisible().catch(()=>false);
   if(!visible)return {category,sub,categoryLi:li,subVisible:false};
