@@ -1,6 +1,6 @@
 (function(){
   function handleize(value){
-    return String(value||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+    return String(value||'').toLowerCase().trim().replace(/['’‘]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
   }
   function repair(){
     var rail=document.querySelector('[data-sq-collection-rail]');
