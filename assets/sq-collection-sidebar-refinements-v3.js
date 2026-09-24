@@ -106,7 +106,7 @@
       rows.sort(function(a,b){return a.label.localeCompare(b.label)});return rows;
     }
 
-    function handleize(text){return String(text||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')}
+    function handleize(text){return String(text||'').toLowerCase().trim().replace(/['’‘]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')}
     function vendorHref(label){
       var u=new URL(location.href),vals=u.searchParams.getAll('filter.p.vendor'),active=vals.indexOf(label)!==-1;
       u.searchParams.delete('filter.p.vendor');vals.filter(function(v){return v!==label}).forEach(function(v){u.searchParams.append('filter.p.vendor',v)});if(!active)u.searchParams.append('filter.p.vendor',label);u.searchParams.delete('page');
