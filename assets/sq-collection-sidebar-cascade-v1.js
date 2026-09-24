@@ -81,7 +81,7 @@
           var bits=u.pathname.replace(/^\/+|\/+$/g,'').split('/'),head=bits.slice(0,2),tail=bits.slice(2).join('/');
           var tags=tail?tail.split('+').filter(Boolean):[];
           tags=tags.filter(function(x){return !/^sq-type-/i.test(x)});
-          var typeHandle=String('SQ Type: '+input.value).toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+          var typeHandle=String('SQ Type: '+input.value).toLowerCase().trim().replace(/['’‘]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
           if(tags.indexOf(typeHandle)===-1)tags.push(typeHandle);
           u.pathname='/'+head.concat(tags.length?[tags.join('+')]:[]).join('/');
           u.searchParams.delete('filter.p.product_type');u.searchParams.delete('page');
