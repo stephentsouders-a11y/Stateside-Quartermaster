@@ -72,8 +72,9 @@
   {{ 'sq-sidebar-accordion-visual-v1.css' | asset_url | stylesheet_tag }}
   <script src="{{ 'sq-sidebar-tree-controller-v2.js' | asset_url }}" defer></script>
 <script src="{{ 'sq-sidebar-route-resolver-v2.js' | asset_url }}" defer></script>
+<script src="{{ 'sq-opera-sidebar-audit-v1.js' | asset_url }}" defer></script>
 
-  <aside class="sq-collection-rail" data-sq-collection-rail{% if sq_department_root %} data-sq-department-root="true"{% endif %}{% if sq_state_guard_component_root %} data-sq-state-guard-component-root="true"{% endif %} data-current-path="{{ request.path | escape }}"{% if sq_service_root %} data-sq-service-root-seeded="true"{% endif %} aria-label="Collection navigation">
+  <aside class="sq-collection-rail" data-sq-collection-rail{% if sq_department_root %} data-sq-department-root="true"{% endif %}{% if sq_state_guard_component_root %} data-sq-state-guard-component-root="true"{% endif %} data-current-path="{{ request.path | escape }}" data-collection-handle="{{ collection.handle | escape }}" data-collection-title="{{ collection.title | escape }}" data-collection-count="{{ collection.all_products_count | default: collection.products_count }}"{% if sq_service_root %} data-sq-service-root-seeded="true"{% endif %} aria-label="Collection navigation">
     <button class="sq-collection-rail__mobile-toggle" type="button" aria-expanded="false" data-sq-rail-mobile-toggle>
       <span class="sq-collection-rail__mobile-icon" aria-hidden="true">☰</span>
       <span class="sq-collection-rail__mobile-title">{{ collection.title }}</span>
