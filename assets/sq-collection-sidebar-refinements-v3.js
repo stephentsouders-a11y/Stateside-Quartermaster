@@ -118,7 +118,15 @@
         if(tags.indexOf(tag.handle)===-1)tags.push(tag.handle);
         u.pathname='/'+head.concat(tags.length?[tags.join('+')]:[]).join('/');
         u.searchParams.delete('filter.p.product_type');
-      }else u.searchParams.set('filter.p.product_type',label);
+      }else{
+        var bits=u.pathname.replace(/^\/+|\/+$/g,'').split('/'),head=bits.slice(0,2),tail=bits.slice(2).join('/');
+        var tags=tail?tail.split('+').filter(Boolean):[];
+        tags=tags.filter(function(x){return !/^sq-type-/i.test(x)});
+        var typeHandle=handleize('SQ Type: '+label);
+        if(tags.indexOf(typeHandle)===-1)tags.push(typeHandle);
+        u.pathname='/'+head.concat(tags.length?[tags.join('+')]:[]).join('/');
+        u.searchParams.delete('filter.p.product_type');
+      }
       u.searchParams.delete('page');
       if(!u.searchParams.has('filter.v.availability'))u.searchParams.set('filter.v.availability','1');
       return u.pathname+'?'+u.searchParams.toString();
