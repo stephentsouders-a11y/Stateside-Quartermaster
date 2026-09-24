@@ -48,8 +48,9 @@
       return n?String(n.textContent||'').replace(/\s+/g,' ').trim():'';
     }
     function row(a){
-      var href=a.getAttribute('href')||'';var label=cleanLabel(a);if(!href||!label)return null;
-      try{var u=new URL(href,location.origin);return {href:u.pathname+u.search,label:label,count:countText(a)}}catch(_){return null}
+      var href=a.getAttribute('href')||'';var label=cleanLabel(a),count=countText(a);if(!href||!label)return null;
+      if(/^\s*0\s*(?:items?|products?)?\s*$/i.test(count)||/\b0\s+(?:items?|products?)\b/i.test(count))return null;
+      try{var u=new URL(href,location.origin);return {href:u.pathname+u.search,label:label,count:count}}catch(_){return null}
     }
     function unique(rows){
       var seen={};return rows.filter(function(r){if(!r)return false;var k=r.href+'|'+r.label;if(seen[k])return false;seen[k]=1;return true});
