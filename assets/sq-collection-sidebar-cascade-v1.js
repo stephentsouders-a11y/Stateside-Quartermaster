@@ -68,11 +68,14 @@
         }catch(_e){}
       });
       doc.querySelectorAll('input[name="filter.p.product_type"]').forEach(function(input){
+        if(input.disabled)return;
         var label='',linked=null;
         if(input.id){try{linked=doc.querySelector('label[for="'+CSS.escape(input.id)+'"]')}catch(_e){}}
         if(linked)label=linked.textContent||'';
         if(!label){var wrapped=input.closest&&input.closest('label');if(wrapped)label=wrapped.textContent||''}
-        label=String(label||input.value||'').replace(/\b\d+\s*items?\b/ig,'').replace(/\s+/g,' ').trim();
+        var rawLabel=String(label||input.value||'');
+        if(/\(\s*0\s*\)|\b0\s+(?:items?|products?)\b/i.test(rawLabel))return;
+        label=rawLabel.replace(/\b\d+\s*(?:items?|products?)\b/ig,'').replace(/\s+/g,' ').trim();
         if(label&&input.value){
           var u=new URL(doc.location&&doc.location.href?doc.location.href:location.href,location.origin);
           var bits=u.pathname.replace(/^\/+|\/+$/g,'').split('/'),head=bits.slice(0,2),tail=bits.slice(2).join('/');
