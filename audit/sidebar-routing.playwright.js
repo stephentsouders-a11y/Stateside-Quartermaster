@@ -6,7 +6,6 @@ const base = process.env.SQ_BASE_URL || 'https://www.statesideqm.com';
 const previewThemeId = process.env.SQ_PREVIEW_THEME_ID || '159040962715';
 const outDir = path.resolve('artifacts');
 fs.mkdirSync(path.join(outDir, 'screenshots'), { recursive: true });
-fs.mkdirSync(path.join(outDir, 'videos'), { recursive: true });
 
 const roots = [
   'tactical-gear','uniforms','firearm-accessories','body-armor-ballistic-protection','apparel',
@@ -46,19 +45,19 @@ function lastRouteLabel(url) {
     u.searchParams.get('sg_type') || u.searchParams.get('sq_bfl_subcategory') ||
     u.searchParams.get('sg_category') || u.searchParams.get('sq_bfl_category') || '';
 }
-async function gotoWithRetry(page, url, attempts = 5) {
+async function gotoWithRetry(page, url, attempts = 3) {
   let response = null;
   let lastError = null;
   for (let i = 0; i < attempts; i++) {
     try {
-      response = await page.goto(url, { waitUntil:'domcontentloaded', timeout:75000 });
+      response = await page.goto(url, { waitUntil:'domcontentloaded', timeout:30000 });
       const status = response ? response.status() : null;
       if (status !== 429 && status != null && status < 500) return response;
     } catch (err) {
       lastError = err;
       response = null;
     }
-    await sleep(Math.min(30000, 2500 * Math.pow(2, i)));
+    await sleep(Math.min(10000, 1500 * Math.pow(2, i)));
   }
   if (!response && lastError) throw lastError;
   return response;
@@ -169,13 +168,13 @@ async function validateDestination(page, row) {
   const isSqTypeTag = /\/sq-type-[^/?#]+/i.test(u.pathname);
 
   if (isBfl) {
-    try { await page.locator('main .sqbfl').waitFor({ state:'visible', timeout:90000 }); } catch (_) {}
+    try { await page.locator('main .sqbfl').waitFor({ state:'visible', timeout:20000 }); } catch (_) {}
   }
   if (isState) {
-    try { await page.locator('main [data-sq-sg-route-surface]').waitFor({ state:'visible', timeout:90000 }); } catch (_) {}
+    try { await page.locator('main [data-sq-sg-route-surface]').waitFor({ state:'visible', timeout:20000 }); } catch (_) {}
   }
   if (isSqTypeTag) {
-    try { await page.locator('main a[href*="/products/"]').first().waitFor({ state:'attached', timeout:25000 }); } catch (_) {}
+    try { await page.locator('main a[href*="/products/"]').first().waitFor({ state:'attached', timeout:8000 }); } catch (_) {}
   }
   await page.waitForTimeout(250);
 
@@ -211,8 +210,7 @@ async function validateDestination(page, row) {
 (async() => {
   const browser = await chromium.launch({ headless:true });
   const context = await browser.newContext({
-    viewport:{ width:1440, height:1000 },
-    recordVideo:{ dir:path.join(outDir,'videos'), size:{ width:1440, height:1000 } }
+    viewport:{ width:1440, height:1000 }
   });
   await context.route('**/*', route => {
     const req = route.request();
@@ -265,22 +263,38 @@ async function validateDestination(page, row) {
   report.summary.inventoryLinks = report.inventory.length;
   report.summary.uniqueDestinations = deduped.length;
 
-  for (let i = 0; i < deduped.length; i++) {
-    const row = deduped[i];
-    const result = await validateDestination(page, row);
-    report.destinations.push(result);
-    if (result.pass) report.summary.passed++;
-    else {
-      report.summary.failed++;
-      if (report.summary.failed <= 20) {
-        await page.screenshot({ path:path.join(outDir,'screenshots','failure-'+String(report.summary.failed).padStart(3,'0')+'-'+safeName(row.root+'-'+row.label)+'.png'), fullPage:true }).catch(() => {});
+  const workerCount = Math.min(6, Math.max(1, deduped.length));
+  const workers = [];
+  let nextIndex = 0;
+  let completed = 0;
+
+  async function runWorker(workerId) {
+    const workerPage = await context.newPage();
+    workerPage.setDefaultTimeout(20000);
+    while (true) {
+      const i = nextIndex++;
+      if (i >= deduped.length) break;
+      const row = deduped[i];
+      const result = await validateDestination(workerPage, row);
+      result.worker = workerId;
+      report.destinations.push(result);
+      if (result.pass) report.summary.passed++;
+      else {
+        report.summary.failed++;
+        if (report.summary.failed <= 20) {
+          await workerPage.screenshot({ path:path.join(outDir,'screenshots','failure-'+String(report.summary.failed).padStart(3,'0')+'-'+safeName(row.root+'-'+row.label)+'.png'), fullPage:true }).catch(() => {});
+        }
+      }
+      completed++;
+      if (completed % 25 === 0 || completed === deduped.length) {
+        fs.writeFileSync(path.join(outDir,'sidebar-audit-progress.json'), JSON.stringify({ completed, total:deduped.length, summary:report.summary }, null, 2));
       }
     }
-    if ((i + 1) % 25 === 0) {
-      fs.writeFileSync(path.join(outDir,'sidebar-audit-progress.json'), JSON.stringify({ completed:i+1, total:deduped.length, summary:report.summary }, null, 2));
-    }
-    await sleep(450);
+    await workerPage.close();
   }
+
+  for (let i = 0; i < workerCount; i++) workers.push(runWorker(i + 1));
+  await Promise.all(workers);
 
   report.summary.consoleErrors = consoleErrors.length;
   report.consoleErrors = consoleErrors.slice(0, 250);
