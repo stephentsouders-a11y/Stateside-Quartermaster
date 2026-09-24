@@ -39,6 +39,9 @@ function stripAuditParams(raw) {
 function safeName(s) {
   return String(s || 'route').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 140);
 }
+function shopifyTagHandle(s) {
+  return String(s || '').toLowerCase().trim().replace(/['’‘]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
 function lastRouteLabel(url) {
   const u = new URL(url, base);
   return u.searchParams.get('sg_component') || u.searchParams.get('sq_bfl_type') ||
@@ -195,7 +198,7 @@ async function validateDestination(page, row) {
   } else if (isSqTypeTag) {
     if (!item.productCount) { item.reason = 'tag-destination-has-zero-products'; return item; }
     const slug = u.pathname.split('/').filter(Boolean).pop() || '';
-    const expectedSlug = 'sq-type-' + row.label.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+    const expectedSlug = shopifyTagHandle('SQ Type: ' + row.label);
     if (slug !== expectedSlug) { item.reason = 'sq-type-label-route-mismatch'; return item; }
   } else {
     const mainText = await page.locator('main').innerText().catch(() => '');
