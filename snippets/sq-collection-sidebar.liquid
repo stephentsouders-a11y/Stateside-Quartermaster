@@ -1,0 +1,225 @@
+{% doc %}
+  Renders the Stateside Quartermaster collection navigation rail on collection pages.
+  Existing page navigation remains the source of truth. Airsoft family categories are
+  server-seeded so the parent category hierarchy persists on Airsoft child collections.
+  Accessories root Types are server-seeded from the actual child collections' SQ Type tags.
+  Service-series roots are server-seeded from the same canonical SQ service Category tags
+  used by the existing Products Built for the Line category cards. State Guard is included in the persistent 42-root navigation system.
+{% enddoc %}
+{% if request.page_type == 'collection' %}
+  {% assign sq_department_root_handles = 'tactical-gear,uniforms,firearm-accessories,body-armor-ballistic-protection,apparel,flags-patriotic-decor,literature,outdoor-preparedness-gear,first-aid-medical-ifak,flashlights-lighting,knives-axes-cutlery,dive-scuba,armed-forces-gear,morale-patches-tactical-id,footwear-gloves-eyewear,accessories-gifts-collectibles,safety-rescue-climbing,airsoft-milsim,k9-dog-gear,patriotic-american-heritage,art,zippos-lighters-torches,watches,armored-vehicles,child-safety-shop,thin-line,sta-brite-insignia,products-built-for-the-line-u-s-army,army-national-guard-series,products-built-for-the-line-u-s-air-force,air-national-guard-series,products-built-for-the-line-u-s-navy,products-built-for-the-line-u-s-marine-corps,products-built-for-the-line-u-s-coast-guard,products-built-for-the-line-u-s-space-force,rotc-series,jrotc-series,military-schools-academies,stateside-quartermaster-logo-merch,law-enforcement-corrections-shop,firefighting-ems-search-rescue-shop,state-guard-series,custom-personalized-products' | split: ',' %}
+  {% assign sq_department_root = false %}
+  {% if sq_department_root_handles contains collection.handle %}{% assign sq_department_root = true %}{% endif %}
+  {% assign sq_state_guard_component_handles = 'state-guard-series-alabama,state-guard-series-alaska,state-guard-series-california,state-guard-series-connecticut,state-guard-series-florida,state-guard-series-georgia,state-guard-series-indiana,state-guard-series-louisiana,state-guard-series-maryland,state-guard-series-massachusetts,state-guard-series-michigan,state-guard-series-mississippi,state-guard-series-new-mexico,new-jersey-state-guard-naval-militia,state-guard-series-new-york,state-guard-series-ohio,state-guard-series-oregon,state-guard-series-puerto-rico,state-guard-series-rhode-island,state-guard-series-south-carolina,state-guard-series-tennessee,state-guard-series-texas,state-guard-series-vermont,state-guard-series-virginia,state-guard-series-washington' | split: ',' %}
+  {% assign sq_state_guard_component_root = false %}
+  {% if sq_state_guard_component_handles contains collection.handle %}
+    {% assign sq_state_guard_component_root = true %}
+    {% assign sq_department_root = true %}
+  {% endif %}
+  {% if collection.handle == 'state-guard-naval-militia-themed-merchandise' %}
+    {% assign sq_department_root = true %}
+  {% endif %}
+  {% assign sq_airsoft_family = false %}
+  {% if collection.handle == 'airsoft-milsim' or collection.handle contains 'airsoft-milsim-' %}
+    {% assign sq_airsoft_family = true %}
+  {% endif %}
+  {% assign sq_custom_shop_root = false %}
+  {% if collection.handle == 'custom-personalized-products' %}
+    {% assign sq_custom_shop_root = true %}
+  {% endif %}
+  {% assign sq_accessories_root = false %}
+  {% if collection.handle == 'accessories-gifts-collectibles' %}
+    {% assign sq_accessories_root = true %}
+    {% assign sq_accessories_child_handles = 'challenge-coins-display-holders,collectibles-cards,drinkware-gifts,keychains-lanyards,personalized-displays-memorials,military-surplus-field-gear-collectibles,pins-buttons-small-insignia,sword-knife-display-cases,wallets-pocket-gifts' | split: ',' %}
+  {% endif %}
+  {% assign sq_program_root = false %}
+  {% case collection.handle %}
+    {% when 'rotc-series' %}{% assign sq_program_root = true %}
+    {% when 'jrotc-series' %}{% assign sq_program_root = true %}
+    {% when 'military-schools-academies' %}{% assign sq_program_root = true %}
+  {% endcase %}
+  {% assign sq_service_root = false %}
+  {% unless collection.handle contains 'state-guard' %}
+    {% case collection.handle %}
+      {% when 'products-built-for-the-line-u-s-army' %}{% assign sq_service_root = true %}
+      {% when 'army-national-guard-series' %}{% assign sq_service_root = true %}
+      {% when 'products-built-for-the-line-u-s-air-force' %}{% assign sq_service_root = true %}
+      {% when 'air-national-guard-series' %}{% assign sq_service_root = true %}
+      {% when 'products-built-for-the-line-u-s-navy' %}{% assign sq_service_root = true %}
+      {% when 'products-built-for-the-line-u-s-marine-corps' %}{% assign sq_service_root = true %}
+      {% when 'products-built-for-the-line-u-s-coast-guard' %}{% assign sq_service_root = true %}
+      {% when 'products-built-for-the-line-u-s-space-force' %}{% assign sq_service_root = true %}
+    {% endcase %}
+  {% endunless %}
+
+  {{ 'sq-collection-sidebar.css' | asset_url | stylesheet_tag }}
+  {{ 'sq-collection-sidebar-layout-v2.css' | asset_url | stylesheet_tag }}
+  {{ 'sq-collection-sidebar-refinements-v3.css' | asset_url | stylesheet_tag }}
+  <script src="{{ 'sq-collection-sidebar.js' | asset_url }}" defer></script>
+  <script src="{{ 'sq-collection-sidebar-top-lock.js' | asset_url }}" defer></script>
+  <script src="{{ 'sq-persistent-root-sidebar-v3.js' | asset_url }}" defer></script>
+  <script src="{{ 'sq-collection-products-only.js' | asset_url }}" defer></script>
+  <script src="{{ 'sq-collection-sidebar-refinements-v3.js' | asset_url }}" defer></script>
+  {{ 'sq-collection-sidebar-cascade-v1.css' | asset_url | stylesheet_tag }}
+  {% if sq_state_guard_component_root %}
+    <script src="{{ 'sq-state-guard-sidebar-cascade-v1.js' | asset_url }}" defer></script>
+  {% else %}
+    <script src="{{ 'sq-collection-sidebar-cascade-v1.js' | asset_url }}" defer></script>
+  {% endif %}
+  {% if sq_airsoft_family %}
+    <script src="{{ 'sq-airsoft-draft-cleanup.js' | asset_url }}" defer></script>
+  {% endif %}
+  {{ 'sq-sidebar-accordion-visual-v1.css' | asset_url | stylesheet_tag }}
+  <script src="{{ 'sq-sidebar-tree-controller-v2.js' | asset_url }}" defer></script>
+<script src="{{ 'sq-sidebar-route-resolver-v2.js' | asset_url }}" defer></script>
+<script src="{{ 'sq-opera-sidebar-audit-v1.js' | asset_url }}" defer></script>
+
+  <aside class="sq-collection-rail" data-sq-collection-rail{% if sq_department_root %} data-sq-department-root="true"{% endif %}{% if sq_state_guard_component_root %} data-sq-state-guard-component-root="true"{% endif %} data-current-path="{{ request.path | escape }}" data-collection-handle="{{ collection.handle | escape }}" data-collection-title="{{ collection.title | escape }}" data-collection-count="{{ collection.all_products_count | default: collection.products_count }}"{% if sq_service_root %} data-sq-service-root-seeded="true"{% endif %} aria-label="Collection navigation">
+    <button class="sq-collection-rail__mobile-toggle" type="button" aria-expanded="false" data-sq-rail-mobile-toggle>
+      <span class="sq-collection-rail__mobile-icon" aria-hidden="true">☰</span>
+      <span class="sq-collection-rail__mobile-title">{{ collection.title }}</span>
+    </button>
+
+    <div class="sq-collection-rail__body" data-sq-rail-body>
+
+      <nav class="sq-collection-rail__nav" aria-label="Browse this collection">
+        <ul class="sq-collection-rail__primary" role="list">
+          <li class="sq-collection-rail__item">
+            <a class="sq-collection-rail__direct" href="{{ collection.url }}?filter.v.availability=1">
+              <span>Shop All</span><span class="sq-collection-rail__chevron" aria-hidden="true">›</span>
+            </a>
+          </li>
+
+          <li class="sq-collection-rail__item sq-collection-rail__item--menu" data-sq-rail-menu-item data-sq-context-categories{% if sq_airsoft_family == false and sq_service_root == false and sq_program_root == false and sq_state_guard_component_root == false and sq_custom_shop_root == false %} hidden{% endif %}>
+            <button class="sq-collection-rail__trigger" type="button" aria-expanded="false" aria-controls="sq-rail-categories" data-sq-rail-trigger>
+              <span>Categories</span><span class="sq-collection-rail__chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="sq-collection-rail__flyout" id="sq-rail-categories" data-sq-rail-flyout>
+              <div class="sq-collection-rail__flyout-inner">
+                <h2>Categories</h2>
+                <ul class="sq-collection-rail__links" role="list" data-sq-context-categories-list>
+                  {% if sq_state_guard_component_root %}
+                    {% assign sq_sg_cat_keys = 'uniforms,insignia,awards,headwear,patches,footwear,apparel,equipment,reference' | split: ',' %}
+                    {% assign sq_sg_cat_labels = 'Uniforms|Insignia & Identification|Awards & Decorations|Headwear|Patches & Flags|Footwear & Uniform Accessories|Apparel & Merchandise|Equipment & Field Gear|Reference & Training' | split: '|' %}
+                    {% for sq_sg_key in sq_sg_cat_keys %}
+                      <li data-sq-seed-row="categories" data-sq-state-guard-category-seed="true">
+                        <a href="{{ collection.url }}?sg_category={{ sq_sg_key | url_encode }}&filter.v.availability=1">
+                          <span class="sq-collection-rail__link-label">{{ sq_sg_cat_labels[forloop.index0] }}</span>
+                        </a>
+                      </li>
+                    {% endfor %}
+                  {% endif %}
+                  {% if sq_custom_shop_root %}
+                    {% assign sq_custom_handles = 'custom-patches,custom-apparel,personalized-displays-memorials,custom-nameplates-tags-uniform-id,custom-flags-guidons,special-order-personalized-gear' | split: ',' %}
+                    {% assign sq_custom_labels = 'Custom Patches|Custom Apparel|Personalized Displays & Memorials|Nameplates, Tags & Uniform ID|Custom Flags & Guidons|Special-Order Gear' | split: '|' %}
+                    {% for sq_custom_handle in sq_custom_handles %}
+                      {% assign sq_custom_child = collections[sq_custom_handle] %}
+                      {% if sq_custom_child != blank %}
+                        <li data-sq-seed-row="categories" data-sq-custom-shop-seed="true">
+                          <a href="{{ sq_custom_child.url }}?filter.v.availability=1&sq_root=custom-personalized-products">
+                            <span class="sq-collection-rail__link-label">{{ sq_custom_labels[forloop.index0] }}</span>
+                            {% if sq_custom_child.products_count > 0 %}<small class="sq-collection-rail__link-count">{{ sq_custom_child.products_count }} items</small>{% endif %}
+                          </a>
+                        </li>
+                      {% endif %}
+                    {% endfor %}
+                  {% endif %}
+                  {% if sq_airsoft_family %}
+                    {% assign sq_airsoft_handles = 'airsoft-milsim-airsoft-accessories,airsoft-milsim-airsoft-ammo-magazines,airsoft-milsim-batteries-chargers,airsoft-milsim-field-gear-training,airsoft-milsim-internal-parts-electronics,airsoft-milsim-protection-apparel,airsoft-milsim-airsoft-replicas-launchers,airsoft-milsim-rifles-pistols,airsoft-milsim-starter-kits-bundles' | split: ',' %}
+                    {% assign sq_airsoft_labels = 'Airsoft Accessories|Ammo & Magazines|Batteries & Chargers|Field Gear & Training|Internal Parts & Electronics|Protection & Apparel|Replicas & Launchers|Rifles & Pistols|Starter Kits & Bundles' | split: '|' %}
+                    {% for sq_handle in sq_airsoft_handles %}
+                      {% assign sq_child = collections[sq_handle] %}
+                      {% if sq_child != blank and sq_child.products_count > 0 %}
+                        <li data-sq-seed-row="categories">
+                          <a href="{{ sq_child.url }}?filter.v.availability=1"{% if collection.handle == sq_handle %} aria-current="page"{% endif %}>
+                            <span class="sq-collection-rail__link-label">{{ sq_airsoft_labels[forloop.index0] }}</span>
+                            <small class="sq-collection-rail__link-count">{{ sq_child.products_count }} items</small>
+                          </a>
+                        </li>
+                      {% endif %}
+                    {% endfor %}
+                  {% endif %}
+                  {% render 'sq-service-root-rail-categories' %}
+                  {% if sq_program_root %}
+                    {% assign sq_program_handles = '' %}
+                    {% assign sq_program_labels = '' %}
+                    {% case collection.handle %}
+                      {% when 'rotc-series' %}
+                        {% assign sq_program_handles = 'rotc-dress-uniforms,rotc-pt-training-gear,rotc-rank-insignia-awards-patches' | split: ',' %}
+                        {% assign sq_program_labels = 'Dress Uniforms|PT & Training Gear|Rank, Insignia, Awards & Patches' | split: '|' %}
+                      {% when 'jrotc-series' %}
+                        {% assign sq_program_handles = 'jrotc-dress-uniforms,jrotc-insignia-rank-patches,jrotc-pt-uniforms' | split: ',' %}
+                        {% assign sq_program_labels = 'Dress Uniforms|Insignia, Rank & Patches|PT Uniforms' | split: '|' %}
+                      {% when 'military-schools-academies' %}
+                        {% assign sq_program_handles = 'military-schools-academies-apparel,military-schools-academies-books-history,military-schools-academies-flags-displays,military-schools-academies-gifts-collectibles,military-schools-academies-insignia,military-schools-academies-stickers-decals-vehicle-accessories,jrotc-dress-uniforms,jrotc-insignia-rank-patches,jrotc-pt-uniforms,rotc-dress-uniforms,rotc-pt-training-gear,rotc-rank-insignia-awards-patches' | split: ',' %}
+                        {% assign sq_program_labels = 'Academy Apparel & Headwear|Academy Books & History|Academy Flags, Displays & Memorials|Academy Gifts & Collectibles|Academy Insignia & Identification|Academy Stickers, Decals & Vehicle Accessories|JROTC Dress Uniforms|JROTC Insignia, Rank & Patches|JROTC PT Uniforms|ROTC Dress Uniforms|ROTC PT & Training Gear|ROTC Rank, Insignia, Awards & Patches' | split: '|' %}
+                    {% endcase %}
+                    {% for sq_program_handle in sq_program_handles %}
+                      {% assign sq_program_child = collections[sq_program_handle] %}
+                      {% if sq_program_child != blank and sq_program_child.products_count > 0 %}
+                        <li data-sq-seed-row="categories" data-sq-program-seed="true">
+                          <a href="{{ sq_program_child.url }}?filter.v.availability=1">
+                            <span class="sq-collection-rail__link-label">{{ sq_program_labels[forloop.index0] }}</span>
+                          </a>
+                        </li>
+                      {% endif %}
+                    {% endfor %}
+                  {% endif %}
+                </ul>
+              </div>
+            </div>
+          </li>
+
+          <li class="sq-collection-rail__item sq-collection-rail__item--menu" data-sq-rail-menu-item data-sq-context-subcategories hidden>
+            <button class="sq-collection-rail__trigger" type="button" aria-expanded="false" aria-controls="sq-rail-subcategories" data-sq-rail-trigger>
+              <span>Subcategories</span><span class="sq-collection-rail__chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="sq-collection-rail__flyout" id="sq-rail-subcategories" data-sq-rail-flyout><div class="sq-collection-rail__flyout-inner"><h2>Subcategories</h2><ul class="sq-collection-rail__links" role="list" data-sq-context-subcategories-list></ul></div></div>
+          </li>
+
+          <li class="sq-collection-rail__item sq-collection-rail__item--menu" data-sq-rail-menu-item data-sq-context-types hidden>
+            <button class="sq-collection-rail__trigger" type="button" aria-expanded="false" aria-controls="sq-rail-types" data-sq-rail-trigger>
+              <span>Types</span><span class="sq-collection-rail__chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="sq-collection-rail__flyout" id="sq-rail-types" data-sq-rail-flyout>
+              <div class="sq-collection-rail__flyout-inner">
+                <h2>Types</h2>
+                <ul class="sq-collection-rail__links" role="list" data-sq-context-types-list>
+                  {% if sq_accessories_root %}
+                    {% for sq_child_handle in sq_accessories_child_handles %}
+                      {% assign sq_child = collections[sq_child_handle] %}
+                      {% if sq_child != blank %}
+                        {% for sq_tag in sq_child.tags %}
+                          {% assign sq_tag_prefix = sq_tag | slice: 0, 8 %}
+                          {% if sq_tag_prefix == 'SQ Type:' %}
+                            {% assign sq_type_label = sq_tag | remove_first: 'SQ Type:' | strip %}
+                            {% if sq_type_label != blank %}
+                              {% assign sq_type_handle = sq_tag | handleize %}
+                              <li data-sq-seed-row="types" data-sq-seed-parent="{{ sq_child.handle | escape }}">
+                                <a href="{{ sq_child.url }}/{{ sq_type_handle }}?filter.v.availability=1">
+                                  <span class="sq-collection-rail__link-label">{{ sq_type_label }}</span>
+                                </a>
+                              </li>
+                            {% endif %}
+                          {% endif %}
+                        {% endfor %}
+                      {% endif %}
+                    {% endfor %}
+                  {% endif %}
+                </ul>
+              </div>
+            </div>
+          </li>
+
+          <li class="sq-collection-rail__item sq-collection-rail__item--menu" data-sq-rail-menu-item data-sq-context-organizations hidden>
+            <button class="sq-collection-rail__trigger" type="button" aria-expanded="false" aria-controls="sq-rail-organizations" data-sq-rail-trigger>
+              <span>Organizations</span><span class="sq-collection-rail__chevron" aria-hidden="true">›</span>
+            </button>
+            <div class="sq-collection-rail__flyout" id="sq-rail-organizations" data-sq-rail-flyout><div class="sq-collection-rail__flyout-inner"><h2>Organizations</h2><ul class="sq-collection-rail__links" role="list" data-sq-context-organizations-list></ul></div></div>
+          </li>
+        </ul>
+      </nav>
+    </div>
+    <button class="sq-collection-rail__overlay" type="button" data-sq-rail-overlay aria-label="Close navigation" hidden></button>
+  </aside>
+{% endif %}
