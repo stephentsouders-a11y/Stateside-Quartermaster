@@ -1,0 +1,21 @@
+{% if request.page_type == 'collection' %}
+{% if collection.handle == 'products-built-for-the-line-u-s-army' or collection.handle == 'army-national-guard-series' %}
+<script data-sq-army-uniform-final-authority-v1>
+(function(){
+if(window.__sqArmyUniformFinalAuthorityV1)return;window.__sqArmyUniformFinalAuthorityV1=true;
+function n(x){return String(x||'').replace(/[\u200b\u200c\u200d\ufeff]/g,'').toLowerCase().replace(/\s+/g,' ').trim()}
+function tags(p){return Array.isArray(p&&p.tags)?p.tags:[]}
+function has(p,t){var z=n(t);return tags(p).some(function(x){return n(x)===z})}
+function tv(p,prefix){var a=tags(p);for(var i=0;i<a.length;i++){var x=String(a[i]||'').trim();if(x.indexOf(prefix)===0)return x.slice(prefix.length).trim()}return''}
+function isCold(p){var pt=n((p&&p.product_type)||(p&&p.productType)||'');return pt==='cold weather & ecwcs'||has(p,'SQ Army Uniform System: Cold Weather')||n(tv(p,'SQ Type:'))==='cold weather & ecwcs'}
+function install(){
+  var cat=window.__sqArmyCategoryOverride;
+  if(!cat||!cat.__sqArmyUniformFinalAuthorityV1){var prevCat=cat,catWrap=function(p){if(isCold(p))return'Uniforms & Uniform Accessories';return prevCat?prevCat(p):''};catWrap.__sqArmyUniformFinalAuthorityV1=true;window.__sqArmyCategoryOverride=catWrap}
+  var sub=window.__sqArmySubOverride;
+  if(!sub||!sub.__sqArmyUniformFinalAuthorityV1){var prevSub=sub,subWrap=function(p,catName){if(isCold(p))return'Cold Weather & Outerwear';return prevSub?prevSub(p,catName):''};subWrap.__sqArmyUniformFinalAuthorityV1=true;window.__sqArmySubOverride=subWrap}
+}
+install();[0,25,100,350,900,1800,3500,7000].forEach(function(ms){setTimeout(install,ms)});
+})();
+</script>
+{% endif %}
+{% endif %}
