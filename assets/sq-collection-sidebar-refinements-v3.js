@@ -89,11 +89,16 @@
     function rowsFor(kind){
       var rows=[],seen={};
       nativeInputs().forEach(function(input){
+        if(input.disabled)return;
         var name=String(input.name||''),heading=facetHeading(input),match=false;
         if(kind==='manufacturer')match=name==='filter.p.vendor'||/manufacturer|vendor|brand/.test(heading);
         if(kind==='color')match=/color|colour|pattern|camo|camouflage/.test(heading)||/color|colour|pattern|camo|camouflage/i.test(name);
         if(kind==='productType')match=name==='filter.p.product_type'||/product\s*type|item\s*type/.test(heading);
         if(!match||/price/i.test(name))return;
+        var rawLabel='',linked=null;
+        if(input.id){try{linked=main.querySelector('label[for="'+CSS.escape(input.id)+'"]');if(linked)rawLabel=linked.textContent||''}catch(_e){}}
+        if(!rawLabel){var wrapped=input.closest&&input.closest('label');if(wrapped)rawLabel=wrapped.textContent||''}
+        if(/\(\s*0\s*\)|\b0\s+(?:items?|products?)\b/i.test(String(rawLabel||'')))return;
         var label=labelForInput(input);if(!label)return;
         var key=name+'\u0000'+input.value;if(seen[key])return;seen[key]=1;
         rows.push({href:toggleHref(input),label:label,active:input.checked===true});
